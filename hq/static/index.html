@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent HQ</title>
+<style>
+  :root { --bg:#14110f; --panel:#1f1a17; --line:#3a302a; --text:#f2ebe4; --muted:#a8998c; --accent:#f0a33a; --good:#5cb85c; --bad:#d9534f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; gap:12px; align-items:center; padding:14px 20px; border-bottom:2px solid var(--accent); flex-wrap:wrap; }
+  header h1 { font-size:20px; margin:0 12px 0 0; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 12px; }
+  .stat b { display:block; font-size:18px; }
+  .stat span { color:var(--muted); font-size:12px; }
+  main { display:grid; grid-template-columns: 380px 1fr; gap:16px; padding:16px 20px; }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px; }
+  h2 { font-size:15px; margin:0 0 10px; color:var(--accent); text-transform:uppercase; letter-spacing:.05em; }
+  .agent { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .agent:last-child { border:0; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--muted); margin-top:6px; flex:none; }
+  .dot.on { background:var(--good); box-shadow:0 0 8px var(--good); }
+  .muted { color:var(--muted); font-size:13px; }
+  #chatlog { height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+  .msg { padding:8px 10px; border-radius:8px; white-space:pre-wrap; max-width:92%; }
+  .msg.user { background:#3b2c1c; align-self:flex-end; }
+  .msg.assistant { background:#28221e; border:1px solid var(--line); }
+  form { display:flex; gap:8px; }
+  input, textarea { flex:1; background:#120f0d; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px; font:inherit; }
+  button { background:var(--accent); color:#1a1209; border:0; border-radius:6px; padding:8px 14px; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  button.bad { background:var(--bad); color:white; }
+  .clips { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:14px; }
+  .clip { background:#171310; border:1px solid var(--line); border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:6px; }
+  .clip video { width:100%; aspect-ratio:9/16; background:black; border-radius:6px; }
+  .clip textarea { min-height:60px; font-size:13px; }
+  .row { display:flex; gap:6px; }
+  .row button { flex:1; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td { padding:5px 4px; border-bottom:1px solid var(--line); vertical-align:top; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Agent HQ</h1>
+  <div class="stat"><b id="c-pending">0</b><span>Waiting for you</span></div>
+  <div class="stat"><b id="c-approved">0</b><span>Approved</span></div>
+  <div class="stat"><b id="c-posted">0</b><span>Posted</span></div>
+  <div class="stat"><b id="c-failed">0</b><span>Failed</span></div>
+</header>
+<main>
+  <div>
+    <section>
+      <h2>Team</h2>
+      <div id="agents"></div>
+    </section>
+    <section>
+      <h2>Talk to the Boss</h2>
+      <div id="chatlog"></div>
+      <form id="chatform">
+        <input id="chatinput" placeholder="Tell the Boss what you want…" autocomplete="off">
+        <button>Send</button>
+      </form>
+      <p><button class="ghost" id="newconv">New conversation</button></p>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>Clips waiting for approval</h2>
+      <div class="clips" id="pending"><p class="muted">Nothing waiting.</p></div>
+    </section>
+    <section>
+      <h2>Activity</h2>
+      <table id="activity"></table>
+    </section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fileName = p => p.split(/[\\/]/).pop();
+let shownPending = "";
+
+async function refresh() {
+  const s = await (await fetch("/api/state")).json();
+  for (const k of ["approved", "posted", "failed"]) $("c-" + k).textContent = s.counts[k] || 0;
+  $("c-pending").textContent = s.counts.pending_approval || 0;
+  $("agents").innerHTML = s.agents.map(a => `
+    <div class="agent"><div class="dot ${a.doing ? "on" : ""}"></div>
+    <div><b>${esc(a.name)}</b> <span class="muted">${a.doing ? "· " + esc(a.doing) : ""}</span>
+    <div class="muted">${esc(a.role)}</div></div></div>`).join("");
+  $("activity").innerHTML = s.activity.map(a => `<tr><td class="muted">${esc(a.created_at.slice(5,16).replace("T"," "))}</td>
+    <td><b>${esc(a.agent)}</b></td><td>${esc(a.message)}</td></tr>`).join("");
+  renderChat(s.chat);
+  const key = s.pending.map(c => c.id).join(",");
+  if (key !== shownPending) {   // don't re-render while someone may be editing a caption
+    shownPending = key;
+    $("pending").innerHTML = s.pending.length ? s.pending.map(c => `
+      <div class="clip" data-id="${c.id}">
+        <video src="/clips/${esc(fileName(c.path))}" controls preload="metadata"></video>
+        <div class="muted">#${c.id} · ${esc(c.creator)} · score ${c.score ?? "?"}</div>
+        <input class="title" value="${esc(c.title)}">
+        <textarea class="caption">${esc(c.caption)}</textarea>
+        <div class="muted">${esc(c.reason)}</div>
+        <div class="row"><button onclick="decide(${c.id}, 'approve')">Approve</button>
+        <button class="bad" onclick="decide(${c.id}, 'reject')">Reject</button></div>
+      </div>`).join("") : '<p class="muted">Nothing waiting.</p>';
+  }
+}
+
+function renderChat(msgs) {
+  const log = $("chatlog");
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  log.innerHTML = msgs.map(m => {
+    const text = m.content.filter(b => b.type === "text").map(b => b.text)
+      .filter(t => !t.startsWith("<vision")).join("\n");
+    return text ? `<div class="msg ${m.role}">${esc(text)}</div>` : "";
+  }).join("");
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+async function decide(id, decision) {
+  const card = document.querySelector(`.clip[data-id="${id}"]`);
+  if (decision === "approve") {
+    await fetch(`/api/clips/${id}`, {method: "PATCH", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({title: card.querySelector(".title").value, caption: card.querySelector(".caption").value})});
+  }
+  await fetch(`/api/clips/${id}/${decision}`, {method: "POST"});
+  shownPending = ""; refresh();
+}
+
+$("chatform").onsubmit = async e => {
+  e.preventDefault();
+  const text = $("chatinput").value.trim();
+  if (!text) return;
+  $("chatinput").value = "";
+  $("chatlog").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div><div class="msg assistant muted" id="thinking">Thinking…</div>`);
+  $("chatlog").scrollTop = $("chatlog").scrollHeight;
+  const r = await (await fetch("/api/chat", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})})).json();
+  $("thinking")?.remove();
+  $("chatlog").insertAdjacentHTML("beforeend", `<div class="msg assistant">${esc(r.reply)}</div>`);
+  refresh();
+};
+$("newconv").onclick = async () => { await fetch("/api/conversation/new", {method: "POST"}); refresh(); };
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

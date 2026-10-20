@@ -1,0 +1,10 @@
+# Permission to clip Twitch/Kick streamers, by channel login (lowercase).
+#
+# Chad only clips a streamer once you've written how you're allowed to clip them here:
+# an official clipping program or campaign, written OK from the streamer or their team, etc.
+# Many top streamers have clipping programs; check each streamer's socials or Discord.
+# Leave a login out (or blank) and Chad skips it.
+
+permissions:
+  # kaicenat: "clipping program, joined 2026-10-20"
+  # xqc: ""
