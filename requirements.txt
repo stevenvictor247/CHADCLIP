@@ -1,0 +1,12 @@
+anthropic>=1.17
+fastapi
+uvicorn
+python-dotenv
+pyyaml
+requests
+yt-dlp
+faster-whisper
+google-api-python-client
+google-auth-oauthlib
+pytest
+httpx

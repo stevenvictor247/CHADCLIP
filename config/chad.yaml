@@ -1,0 +1,8 @@
+# Chad's settings.
+clips_per_video: 3
+min_clip_seconds: 15
+max_clip_seconds: 59        # keep under 60 s so YouTube treats it as a Short
+run_every_hours: 6          # how often Chad checks creators for new videos (0 = only when asked)
+captions: true              # burn word-by-word captions into the clip
+caption_font_size: 64
+layout: blur                # blur = full frame over blurred background; crop = fill 9:16 by cropping the center

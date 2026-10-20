@@ -1,0 +1,31 @@
+# Clipping accounts Chad posts to. Secrets stay in .env; this file only names them.
+#
+# TikTok:     Content Posting API. Until TikTok audits your app, "inbox" mode sends
+#             the clip to the account's TikTok inbox and you tap Post in the app.
+#             "direct" mode posts publicly but needs an audited app.
+# YouTube:    YouTube Data API v3. Uploads under 60 s with #Shorts become Shorts.
+#             Default API quota allows about 6 uploads a day per Google project.
+# Instagram:  Instagram Graph API (Business or Creator account linked to a Facebook
+#             page). Instagram downloads the video from a public URL, so set
+#             HQ_PUBLIC_BASE_URL in .env.
+
+accounts:
+  - name: tiktok_main
+    platform: tiktok
+    enabled: false
+    access_token_env: TIKTOK_ACCESS_TOKEN_MAIN
+    mode: inbox            # inbox or direct
+    privacy: PUBLIC_TO_EVERYONE
+
+  - name: youtube_main
+    platform: youtube
+    enabled: false
+    client_secrets_file: config/secrets/youtube_client_secret.json
+    token_file: config/secrets/youtube_main_token.json
+    privacy: public        # public, unlisted or private
+
+  - name: instagram_main
+    platform: instagram
+    enabled: false
+    ig_user_id_env: IG_USER_ID_MAIN
+    access_token_env: IG_ACCESS_TOKEN_MAIN

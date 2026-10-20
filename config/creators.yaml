@@ -1,0 +1,21 @@
+# Creators Chad clips.
+#
+# Only list creators who allow clipping: a creator's clipping program/campaign,
+# written permission, or your own content. Chad skips any creator without a
+# `permission` value, because reposting other people's videos without it gets
+# accounts struck or banned.
+
+creators:
+  - name: Example Creator
+    # YouTube channel or playlist URLs (anything yt-dlp can read). Chad pulls the newest videos.
+    sources:
+      - https://www.youtube.com/@ExampleCreator/videos
+    # How you're allowed to clip them, e.g. "clipping program on Whop", "written permission 2026-10-20".
+    permission: ""
+    # What makes a good clip for this creator. Chad passes this to Claude when picking moments.
+    notes: "Funny reactions, strong opinions, and quotable one-liners."
+    # Credit line added to every caption.
+    credit: "@ExampleCreator"
+    max_videos_per_run: 1
+    # Which clipping accounts (from accounts.yaml) post this creator's clips. Empty = all.
+    accounts: []
