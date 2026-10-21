@@ -239,6 +239,11 @@
       </div>
       <div id="campaigns"></div>
     </section>
+    <section id="creatorsection" style="display:none">
+      <h2>Creators to clip <span class="count" id="creatorcount"></span></h2>
+      <div class="meta" style="margin-bottom:6px">Scout's suggestions from Twitch. Chad only clips a creator once you record how you're allowed to (a clipping program or campaign, or their OK).</div>
+      <div id="creators"></div>
+    </section>
     <section id="leadsection" style="display:none">
       <h2>Leads</h2>
       <div class="camp" id="leads"></div>
@@ -402,6 +407,7 @@ async function refresh() {
   renderApprovals(s.approvals || []);
   renderCampaigns(s.campaigns || []);
   renderInbox(s.scout_inbox || []);
+  renderCreators(s.creator_picks || []);
   renderLeads(s.leads || []);
   renderAgents(s.agents);
   renderActivity(s.activity);
@@ -527,6 +533,31 @@ async function setLead(id, status) {
   shownLeads = null; refresh();
 }
 
+let shownCreators = null;
+function renderCreators(list) {
+  $("creatorsection").style.display = list.length ? "" : "none";
+  $("creatorcount").textContent = list.length || "";
+  const key = JSON.stringify(list);
+  if (key === shownCreators) return;
+  shownCreators = key;
+  $("creators").innerHTML = list.map(c => `<div class="camp"><h3><a href="https://twitch.tv/${esc(c.login)}" target="_blank" rel="noopener">${esc(c.name)}</a>
+      <span class="tag">${c.viewers.toLocaleString()} watching</span>${(c.signals || []).map(x => `<span class="tag">${esc(x)}</span>`).join("")}</h3>
+    <div class="meta">${c.top_clip ? `Top clip today: "${esc(c.top_clip)}" (${c.clip_views.toLocaleString()} views)` : "No clips today"}</div>
+    <div class="meta">${esc((c.bio || "").slice(0, 200))}</div>
+    <div class="row"><button onclick="permitCreator(${c.id})">I can clip them</button><button class="ghost" onclick="skipCreator(${c.id})">Skip</button></div></div>`).join("");
+}
+async function permitCreator(id) {
+  const how = prompt("How are you allowed to clip them? For example: clipping program, joined today");
+  if (!how) return;
+  const res = await fetch(`/api/creators/${id}/permit`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({how})});
+  const r = await res.json();
+  toast(esc(r.message || r.detail || "Done"));
+  shownCreators = null; refresh();
+}
+async function skipCreator(id) {
+  await fetch(`/api/creators/${id}/skip`, {method: "POST"});
+  shownCreators = null; refresh();
+}
 function renderInbox(items) {
   const open = items.filter(i => i.status === "needs_text" || i.status === "queued");
   $("inboxnotes").innerHTML = open.map(i => `<div class="meta">${i.status === "queued" ? "⏳ waiting for Scout: " : "✋ "}${esc(i.url || (i.text || "").slice(0, 60))}${i.note ? " — " + esc(i.note) : ""}</div>`).join("");

@@ -86,6 +86,18 @@ CREATE TABLE IF NOT EXISTS scout_inbox (
     note TEXT,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS creator_picks (
+    id INTEGER PRIMARY KEY,
+    login TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    viewers INTEGER NOT NULL DEFAULT 0,
+    clip_views INTEGER NOT NULL DEFAULT 0,       -- views of their top clip in the last day
+    top_clip TEXT,
+    bio TEXT,
+    signals TEXT NOT NULL DEFAULT '[]',          -- JSON list
+    status TEXT NOT NULL DEFAULT 'new',          -- new, skipped, permitted
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS scout_seen (
     key TEXT PRIMARY KEY,                        -- hash of a link or pasted text Scout already rated
     created_at TEXT NOT NULL

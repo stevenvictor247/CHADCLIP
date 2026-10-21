@@ -1,0 +1,81 @@
+"""Creators Scout suggests clipping. Suggestions only: Chad clips nobody until you record how you're allowed to.
+
+Candidates come from the Twitch API (public data, your own Twitch app keys). Scout reads each channel's bio for signs
+that clippers are welcome, with plain rules and no Claude call, so finding creators costs nothing.
+"""
+
+import json
+import re
+
+import yaml
+
+from . import db
+from .config import CONFIG_DIR
+
+# Words in a bio or panel text that suggest a clipping program or a team that welcomes clippers.
+SIGNALS = (
+    (re.compile(r"clipping (program|campaign|team|discord)|clippers?\b|clip (program|farm|team)", re.I), "mentions clippers"),
+    (re.compile(r"business|inquir|sponsor|collab", re.I), "has a business contact"),
+    (re.compile(r"discord\.(gg|com)", re.I), "has a Discord"),
+)
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def signals_for(bio: str) -> list[str]:
+    out = [label for rx, label in SIGNALS if rx.search(bio or "")]
+    if EMAIL.search(bio or "") and "has a business contact" not in out:
+        out.append("has a business contact")
+    return out
+
+
+def rank(c: dict) -> float:
+    """Bigger recent clip views and clipper-friendly signals first."""
+    return c["clip_views"] / 1000 + 50 * ("mentions clippers" in c["signals"]) + 10 * len(c["signals"])
+
+
+def known(login: str) -> bool:
+    return bool(db.rows("SELECT 1 FROM creator_picks WHERE login = ?", login.lower()))
+
+
+def add(c: dict) -> int:
+    return db.execute(
+        "INSERT INTO creator_picks (login, name, viewers, clip_views, top_clip, bio, signals, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", c["login"].lower(), c["name"], c["viewers"], c["clip_views"],
+        c.get("top_clip"), (c.get("bio") or "")[:400], json.dumps(c["signals"]), db.now())
+
+
+def pending() -> list[dict]:
+    out = db.rows("SELECT * FROM creator_picks WHERE status = 'new'")
+    for r in out:
+        r["signals"] = json.loads(r["signals"])
+    return sorted(out, key=lambda c: -rank({"clip_views": c["clip_views"], "signals": c["signals"]}))
+
+
+def skip(pick_id: int) -> str:
+    rows = db.rows("SELECT * FROM creator_picks WHERE id = ?", pick_id)
+    if not rows:
+        raise ValueError(f"No creator suggestion #{pick_id}")
+    db.execute("UPDATE creator_picks SET status = 'skipped' WHERE id = ?", pick_id)
+    return f"Skipped {rows[0]['name']}."
+
+
+def permit(pick_id: int, how: str) -> str:
+    """Steven says how he's allowed to clip this creator. It goes into config/streamers.yaml, which Chad reads."""
+    how = " ".join((how or "").split())
+    rows = db.rows("SELECT * FROM creator_picks WHERE id = ?", pick_id)
+    if not rows:
+        raise ValueError(f"No creator suggestion #{pick_id}")
+    if len(how) < 5:
+        raise ValueError("Say how you're allowed to clip them, for example \"clipping program, joined today\"")
+    login = rows[0]["login"]
+    path = CONFIG_DIR / "streamers.yaml"
+    original = path.read_text(encoding="utf-8") if path.exists() else "permissions:\n"
+    updated = original.rstrip("\n") + f"\n  {login}: {json.dumps(how)}\n"
+    if "permissions" not in (yaml.safe_load(original) or {}):
+        raise ValueError("config/streamers.yaml has no permissions: section")
+    if (yaml.safe_load(updated)["permissions"] or {}).get(login) != how:
+        raise ValueError("Couldn't save that into config/streamers.yaml")
+    path.write_text(updated, encoding="utf-8")
+    db.execute("UPDATE creator_picks SET status = 'permitted' WHERE id = ?", pick_id)
+    db.log("Steven", f"Permission recorded for {rows[0]['name']}: {how}")
+    return f"Saved. Chad can now clip {rows[0]['name']}."

@@ -131,6 +131,14 @@ What it will not do: Whop's terms forbid automated access, and Discord forbids i
 opens those sites. For a Whop campaign, open it in your browser and paste the page text into the inbox. Everywhere else
 Scout checks `robots.txt` first and skips sites that say no.
 
+### Scout suggests creators
+
+Once a week (or when you ask the Boss) Scout looks at the most-watched Twitch channels, checks how many views their top
+clip got today and whether their bio mentions clippers or a business contact, and lists the best on the dashboard under
+**Creators to clip**. It uses only the free Twitch API with your Twitch keys and no Claude call. Scout cannot know whether
+a creator allows clipping: you check their socials, Discord or a clipping campaign, then press **I can clip them** and
+type how you're allowed to. That is saved in `config/streamers.yaml`, which is what lets Chad clip them.
+
 ## Pitch (clients)
 
 Pitch finds streamers and podcasters who might pay you to clip for them and drafts a short, personal message for each.
