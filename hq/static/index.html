@@ -190,6 +190,7 @@
     <div class="stat" id="s-approved"><span class="ico">👍</span><b id="c-approved">0</b><span>Approved</span></div>
     <div class="stat" id="s-posted"><span class="ico">🚀</span><b id="c-posted">0</b><span>Posted</span></div>
     <div class="stat" id="s-failed"><span class="ico">💥</span><b id="c-failed">0</b><span>Failed</span></div>
+    <div class="stat" id="s-spend" title="What Claude has cost today"><span class="ico">💵</span><b id="c-spend">$0.00</b><span id="spend-sub">Spent today</span></div>
   </div>
 </header>
 <section class="world" id="world">
@@ -363,6 +364,11 @@ async function refresh() {
   catch { $("live").className = "live off"; $("live").textContent = "Offline"; return; }
   for (const k of ["approved", "posted", "failed"]) setCount(k, s.counts[k] || 0);
   setCount("pending", s.counts.pending_approval || 0);
+  if (s.spend) {
+    $("c-spend").textContent = "$" + s.spend.today_usd.toFixed(2);
+    $("spend-sub").textContent = s.spend.over_budget ? "Budget reached" : "$" + s.spend.month_usd.toFixed(2) + " this month";
+    $("s-spend").title = s.spend.month_by_agent.map(a => a.agent + " $" + a.usd.toFixed(2)).join("\n") || "No Claude calls yet";
+  }
   renderAgents(s.agents);
   renderActivity(s.activity);
   try { window.HQWorld?.update(s); } catch (err) { console.error("HQ Town:", err); }   // the town never breaks the dashboard

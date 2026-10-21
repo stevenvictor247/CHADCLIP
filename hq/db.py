@@ -56,6 +56,17 @@ CREATE TABLE IF NOT EXISTS boss_messages (
     content TEXT NOT NULL,                       -- JSON content blocks
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS llm_usage (
+    id INTEGER PRIMARY KEY,
+    agent TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,

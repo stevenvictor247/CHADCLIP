@@ -7,7 +7,7 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
-from . import agents, boss, db, llm
+from . import agents, boss, db, ledger, llm
 from .agents.chad.publish import publish_approved
 from .config import DATA_DIR, REQUIRE_APPROVAL
 
@@ -43,6 +43,8 @@ def run_next_task() -> bool:
 
 
 def queue_scheduled(state: dict):
+    if ledger.over_budget():
+        return  # today's Claude budget is spent: nothing new starts on its own until tomorrow
     now = time.time()
     for agent in agents.AGENTS.values():
         for every_hours, instructions, params in agent.schedule:

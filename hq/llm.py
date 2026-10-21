@@ -4,6 +4,7 @@ import json
 
 import anthropic
 
+from . import ledger
 from .config import HAS_LLM
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -22,9 +23,19 @@ class RefusedError(RuntimeError):
     pass
 
 
+# Models whose safety declines can be retried on another model by the API itself. Haiku can't.
+FALLBACK_MODELS = ("claude-opus-5", "claude-sonnet-5-5", "claude-fable")
+
+
+def supports_fallback(model: str) -> bool:
+    return model.startswith(FALLBACK_MODELS)
+
+
 def create(model: str, system: str, messages: list, tools: list | None = None,
-           effort: str = "medium", max_tokens: int = 16000, output_schema: dict | None = None):
-    """One Messages API call. Uses server-side fallbacks so a safety decline is retried on another model."""
+           effort: str = "medium", max_tokens: int = 16000, output_schema: dict | None = None,
+           agent: str = "Boss"):
+    """One Messages API call. Where the model allows it, a safety decline is retried on another model.
+    `agent` is who is paying, so the Ledger can show spending per agent."""
     kwargs = dict(
         model=model,
         max_tokens=max_tokens,
@@ -32,22 +43,24 @@ def create(model: str, system: str, messages: list, tools: list | None = None,
         messages=messages,
         thinking={"type": "adaptive"},
         output_config={"effort": effort},
-        betas=[FALLBACK_BETA],
-        fallbacks="default",
     )
+    if supports_fallback(model):
+        kwargs.update(betas=[FALLBACK_BETA], fallbacks="default")
     if tools:
         kwargs["tools"] = tools
     if output_schema:
         kwargs["output_config"]["format"] = {"type": "json_schema", "schema": output_schema}
     response = client().beta.messages.create(**kwargs)
+    ledger.record(agent, getattr(response, "model", None) or model, response.usage)
     if response.stop_reason == "refusal":
         raise RefusedError("Claude declined this request.")
     return response
 
 
-def ask_json(model: str, system: str, prompt: str, schema: dict, effort: str = "medium") -> dict:
+def ask_json(model: str, system: str, prompt: str, schema: dict, effort: str = "medium", agent: str = "Boss") -> dict:
     """Ask for a JSON answer that matches `schema`."""
-    response = create(model, system, [{"role": "user", "content": prompt}], effort=effort, output_schema=schema)
+    response = create(model, system, [{"role": "user", "content": prompt}], effort=effort,
+                      output_schema=schema, agent=agent)
     text = next(b.text for b in response.content if b.type == "text")
     return json.loads(text)
 
