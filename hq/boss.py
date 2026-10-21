@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import threading
 
 from . import agents, db, llm
 from .config import BOSS_MODEL, VISION_PATH
@@ -134,10 +135,21 @@ def _vision_block(messages: list) -> list:
     return [{"type": "text", "text": f'<vision id="{tag}">\n{vision}\n</vision>'}]
 
 
+_chat_lock = threading.Lock()  # the dashboard and the daily report share one conversation; take turns
+
+
 def chat(text: str) -> str:
-    if not llm.HAS_LLM:
-        return _offline(text)
+    with _chat_lock:
+        return _chat(text)
+
+
+def _chat(text: str) -> str:
     conv = current_conversation()
+    if not llm.HAS_LLM:
+        reply = _offline(text)
+        _save(conv, "user", [{"type": "text", "text": text}])
+        _save(conv, "assistant", [{"type": "text", "text": reply}])
+        return reply
     messages = history(conv)
     user = {"role": "user", "content": _vision_block(messages) + [{"type": "text", "text": text}]}
     messages.append(user)

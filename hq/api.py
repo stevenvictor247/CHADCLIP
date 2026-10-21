@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import agents, boss, db
-from .config import CLIPS_DIR
+from .config import CLIPS_DIR, HAS_LLM
 
 app = FastAPI(title="Agent HQ")
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
@@ -44,6 +44,7 @@ def index():
 def state():
     running = {r["agent"]: r["instructions"] for r in db.rows("SELECT agent, instructions FROM tasks WHERE status = 'running'")}
     return {
+        "has_llm": HAS_LLM,
         "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None}] +
                   [{"name": a.name, "role": a.role, "doing": running.get(a.name)} for a in agents.AGENTS.values()],
         "counts": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},
@@ -59,7 +60,10 @@ def state():
 
 @app.post("/api/chat")
 def chat(body: ChatIn):
-    return {"reply": boss.chat(body.text)}
+    try:
+        return {"reply": boss.chat(body.text)}
+    except Exception as e:  # show the problem in the chat instead of failing silently
+        return {"reply": f"Something went wrong talking to Claude: {e}"}
 
 
 @app.post("/api/conversation/new")

@@ -26,3 +26,12 @@ def test_render_makes_vertical_clip(tmp_path):
                             "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout.strip()
     assert probe == "1080,1920"
     assert 3.5 < editor.duration(str(out)) < 4.5
+
+
+def test_offline_boss_chat_is_saved(monkeypatch):
+    from hq import boss, db, llm
+    db.init()
+    monkeypatch.setattr(llm, "HAS_LLM", False)
+    before = len(boss.history(boss.current_conversation()))
+    boss.chat("hello")
+    assert len(boss.history(boss.current_conversation())) == before + 2
