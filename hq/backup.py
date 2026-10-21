@@ -1,6 +1,7 @@
 """Zip the database and settings into data/backups so they can be downloaded or moved."""
 
 import sqlite3
+from contextlib import closing
 import tempfile
 import zipfile
 from datetime import datetime
@@ -18,7 +19,8 @@ def make_backup(with_clips: bool = False, keep: int = 14) -> Path:
     with tempfile.TemporaryDirectory() as tmp, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         # SQLite's own backup copies a consistent snapshot even while the worker is writing
         snapshot = Path(tmp) / DB_PATH.name
-        with sqlite3.connect(DB_PATH) as src, sqlite3.connect(snapshot) as dst:
+        # closing(): sqlite3's own `with` doesn't close the file, and Windows can't delete an open one
+        with closing(sqlite3.connect(DB_PATH)) as src, closing(sqlite3.connect(snapshot)) as dst:
             src.backup(dst)
         z.write(snapshot, f"data/{DB_PATH.name}")
         files = [p for p in CONFIG_DIR.rglob("*") if p.is_file()]
