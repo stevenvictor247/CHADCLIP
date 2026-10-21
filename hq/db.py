@@ -75,6 +75,19 @@ CREATE TABLE IF NOT EXISTS campaigns (
     score REAL,                                  -- Scout's 0-10 rating
     verdict TEXT,
     status TEXT NOT NULL DEFAULT 'proposed',     -- proposed, joined, skipped, ended
+    created_at TEXT NOT NULL,
+    source TEXT                                  -- inbox, feed or manual
+);
+CREATE TABLE IF NOT EXISTS scout_inbox (
+    id INTEGER PRIMARY KEY,
+    url TEXT,
+    text TEXT,
+    status TEXT NOT NULL DEFAULT 'queued',       -- queued, done, needs_text, failed
+    note TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS scout_seen (
+    key TEXT PRIMARY KEY,                        -- hash of a link or pasted text Scout already rated
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS submissions (
@@ -168,6 +181,8 @@ def init():
         for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER")):
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
+        if "source" not in {r["name"] for r in c.execute("PRAGMA table_info(campaigns)")}:
+            c.execute("ALTER TABLE campaigns ADD COLUMN source TEXT")  # inbox, feed or manual
 
 
 def rows(sql: str, *args) -> list[dict]:

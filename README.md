@@ -120,6 +120,17 @@ posted clip becomes a "to submit" entry. Scout lists those every 6 hours. After 
 the Boss the views and earnings and Scout keeps the totals on the dashboard. Whop has no public API for clippers, so
 the submitting and the numbers are manual for now.
 
+### Scout finds campaigns on its own
+
+Every 6 hours Scout reads its **inbox** (the box on the dashboard's Campaigns section: paste links or page text) and any
+public feeds you list in `SCOUT_FEED_URLS` (Settings page), rates what is new with the cheap model, and puts the good ones
+(`SCOUT_MIN_SCORE`, default 6) on the dashboard and your phone for a Join decision. It never joins or signs up for you,
+skips campaigns that are more than 80% spent, and stops when `HQ_DAILY_BUDGET` is reached.
+
+What it will not do: Whop's terms forbid automated access, and Discord forbids it for personal accounts, so Scout never
+opens those sites. For a Whop campaign, open it in your browser and paste the page text into the inbox. Everywhere else
+Scout checks `robots.txt` first and skips sites that say no.
+
 ## Pitch (clients)
 
 Pitch finds streamers and podcasters who might pay you to clip for them and drafts a short, personal message for each.
