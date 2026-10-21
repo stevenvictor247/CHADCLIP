@@ -27,7 +27,7 @@ def _serve(host, port):
     uvicorn.run("hq.api:app", host=host, port=port)
 
 
-def open_app(port=PORT):
+def open_app(port=PORT, update=True):
     """Open HQ in its own window. Starts HQ first unless it's already running (e.g. from start-hq.bat)."""
     # The shortcut runs without a console window, so send output to a log file you can read if something breaks.
     if sys.stdout is None or not sys.stdout.isatty():
@@ -35,6 +35,11 @@ def open_app(port=PORT):
         sys.stdout = sys.stderr = log
 
     if not _running(port):
+        from .update import update as pull_latest
+        if update and pull_latest():
+            # New code arrived: start again so it's the new code that runs.
+            subprocess.Popen([sys.executable, "-m", "hq", "app", "--no-update"], cwd=ROOT)
+            return
         # With a password set, keep HQ reachable from your other computers while the window is open.
         host = "0.0.0.0" if PASSWORD else "127.0.0.1"
         threading.Thread(target=_serve, args=(host, port), daemon=True).start()

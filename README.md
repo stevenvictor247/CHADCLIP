@@ -26,6 +26,10 @@ Double-click `install-desktop-app.bat` once. It installs what the app needs and 
 Desktop. Double-click that icon to open HQ in its own window, no terminal needed. Closing the window stops HQ (and
 the agents), so minimize it instead if you want Chad to keep working. If HQ is already running from `start-hq.bat`,
 the icon just opens a window onto it. If you move the HQ folder, run `install-desktop-app.bat` again.
+Each time you open it, the icon first grabs the latest HQ code from GitHub (and installs any new requirements), so
+you never need to pull by hand. This needs HQ to be a git copy (`git clone`), not a downloaded ZIP. Your `data/`
+folder and `.env` are never touched, and if an update would overwrite a file you edited (like something in
+`config/`), HQ skips the update and opens as it is. `start-hq.bat` updates the same way, or run `python -m hq update`.
 If the window doesn't open, look in `data/desktop-app.log`. You can also run `python -m hq app` from a terminal.
 
 ## Open HQ from your other computers
