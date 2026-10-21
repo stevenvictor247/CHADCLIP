@@ -14,7 +14,7 @@ _client = None
 def client() -> anthropic.Anthropic:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic()
+        _client = anthropic.Anthropic(timeout=180.0, max_retries=2)  # fail with a visible error instead of hanging
     return _client
 
 
