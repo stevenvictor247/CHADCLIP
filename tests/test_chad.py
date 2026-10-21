@@ -35,3 +35,20 @@ def test_offline_boss_chat_is_saved(monkeypatch):
     before = len(boss.history(boss.current_conversation()))
     boss.chat("hello")
     assert len(boss.history(boss.current_conversation())) == before + 2
+
+
+def test_library_lists_decided_clips_with_posts():
+    from fastapi.testclient import TestClient
+    from hq import db
+    from hq.api import app
+    db.init()
+    cid = db.execute("INSERT INTO clips (creator, start_s, end_s, path, title, status, created_at) "
+                     "VALUES ('c', 0, 5, 'x.mp4', 't', 'approved', ?)", db.now())
+    db.execute("INSERT INTO posts (clip_id, platform, account, status, created_at) VALUES (?, 'tiktok', 'a', 'posted', ?)",
+               cid, db.now())
+    pend = db.execute("INSERT INTO clips (creator, start_s, end_s, path, title, created_at) VALUES ('c', 0, 5, 'y.mp4', 'p', ?)", db.now())
+    s = TestClient(app).get("/api/state").json()
+    mine = [c for c in s["clips"] if c["id"] == cid]
+    assert mine and mine[0]["posts"][0]["platform"] == "tiktok"
+    assert all(c["id"] != pend for c in s["clips"])
+    assert any(c["id"] == pend for c in s["pending"])

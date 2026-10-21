@@ -35,6 +35,10 @@
   .clip { background:#171310; border:1px solid var(--line); border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:6px; }
   .clip video { width:100%; aspect-ratio:9/16; background:black; border-radius:6px; }
   .clip textarea { min-height:60px; font-size:13px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; background:#3a302a; }
+  .pill.posted { background:var(--good); color:#0d1f0d; } .pill.failed, .pill.rejected { background:var(--bad); color:white; }
+  .pill.approved { background:var(--accent); color:#1a1209; }
+  select { background:#120f0d; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:2px 6px; }
   .row { display:flex; gap:6px; }
   .row button { flex:1; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -72,6 +76,12 @@
       <div class="clips" id="pending"><p class="muted">Nothing waiting.</p></div>
     </section>
     <section>
+      <h2>Clips <select id="clipfilter" class="ghost" style="float:right">
+        <option value="">All</option><option value="approved">Approved</option><option value="posted">Posted</option>
+        <option value="failed">Failed</option><option value="rejected">Rejected</option></select></h2>
+      <div class="clips" id="library"><p class="muted">Approved clips will show up here.</p></div>
+    </section>
+    <section>
       <h2>Activity</h2>
       <table id="activity"></table>
     </section>
@@ -81,7 +91,8 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fileName = p => p.split(/[\\/]/).pop();
-let shownPending = "";
+let shownPending = "", shownLibrary = "";
+const STATUS = {approved: "Approved, waiting to post", posted: "Posted", failed: "Failed to post", rejected: "Rejected"};
 
 async function refresh() {
   const s = await (await fetch("/api/state")).json();
@@ -95,6 +106,7 @@ async function refresh() {
     <td><b>${esc(a.agent)}</b></td><td>${esc(a.message)}</td></tr>`).join("");
   $("nokey").style.display = s.has_llm ? "none" : "block";
   renderChat(s.chat);
+  renderLibrary(s.clips);
   const key = s.pending.map(c => c.id).join(",");
   if (key !== shownPending) {   // don't re-render while someone may be editing a caption
     shownPending = key;
@@ -110,6 +122,25 @@ async function refresh() {
       </div>`).join("") : '<p class="muted">Nothing waiting.</p>';
   }
 }
+
+function renderLibrary(clips) {
+  const want = $("clipfilter").value;
+  const shown = clips.filter(c => !want || c.status === want);
+  const key = want + "|" + shown.map(c => c.id + c.status + c.posts.length).join(",");
+  if (key === shownLibrary) return;   // leave playing videos alone
+  shownLibrary = key;
+  $("library").innerHTML = shown.length ? shown.map(c => `
+    <div class="clip">
+      <video src="/clips/${esc(fileName(c.path))}" controls preload="metadata"></video>
+      <div><span class="pill ${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>
+      <span class="muted">#${c.id} · ${esc(c.creator)}</span></div>
+      <b>${esc(c.title)}</b>
+      ${c.posts.map(p => `<div class="muted">${esc(p.platform)} (${esc(p.account)}): ${p.status === "posted"
+        ? (p.url ? `<a href="${esc(p.url)}" target="_blank" style="color:var(--accent)">posted</a>` : "posted")
+        : "failed: " + esc(p.error)}</div>`).join("")}
+    </div>`).join("") : '<p class="muted">Nothing here yet. Clips you approve move here.</p>';
+}
+$("clipfilter").onchange = () => { shownLibrary = ""; refresh(); };
 
 function renderChat(msgs) {
   const log = $("chatlog");
