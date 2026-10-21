@@ -5,122 +5,359 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent HQ</title>
 <style>
-  :root { --bg:#14110f; --panel:#1f1a17; --line:#3a302a; --text:#f2ebe4; --muted:#a8998c; --accent:#f0a33a; --good:#5cb85c; --bad:#d9534f; }
+  :root {
+    --bg:#120f1a; --bg2:#1b1426; --panel:rgba(34,27,44,.78); --panel2:#231b2e; --line:#3b2f4a; --text:#f4eefb; --muted:#a99cbb;
+    --accent:#ffb347; --accent2:#ff6fa8; --good:#4ade80; --bad:#f87171; --sky:#7cc4ff;
+    --radius:16px; --ease:cubic-bezier(.2,.8,.2,1.1);
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font:15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; gap:12px; align-items:center; padding:14px 20px; border-bottom:2px solid var(--accent); flex-wrap:wrap; }
-  header h1 { font-size:20px; margin:0 12px 0 0; }
-  .stat { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 12px; }
-  .stat b { display:block; font-size:18px; }
+  html, body { min-height:100%; }
+  body { margin:0; font:15px/1.45 "Nunito", system-ui, sans-serif; color:var(--text); overflow-x:hidden;
+         background:radial-gradient(1200px 700px at 10% -10%, #3a2357 0%, transparent 60%),
+                    radial-gradient(900px 600px at 110% 10%, #2b2f5c 0%, transparent 55%), var(--bg); background-attachment:fixed; }
+  /* floating background sparkles */
+  #sky { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+  #sky i { position:absolute; bottom:-20px; width:6px; height:6px; border-radius:50%; background:var(--accent); opacity:0;
+           animation:floatUp linear infinite; filter:blur(.5px); }
+  @keyframes floatUp { 0% { transform:translateY(0) scale(.6); opacity:0; } 10% { opacity:.55; } 100% { transform:translateY(-110vh) scale(1.1); opacity:0; } }
+
+  header, main { position:relative; z-index:1; }
+  header { display:flex; gap:14px; align-items:center; padding:16px 22px; flex-wrap:wrap;
+           background:linear-gradient(90deg, rgba(255,179,71,.12), rgba(255,111,168,.10), rgba(124,196,255,.10));
+           border-bottom:1px solid var(--line); backdrop-filter:blur(8px); }
+  .logo { display:flex; align-items:center; gap:10px; margin-right:10px; }
+  .logo .mark { width:38px; height:38px; border-radius:12px; display:grid; place-items:center; font-size:20px;
+                background:linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow:0 6px 20px rgba(255,111,168,.35);
+                animation:wiggle 6s ease-in-out infinite; }
+  @keyframes wiggle { 0%,90%,100% { transform:rotate(0); } 93% { transform:rotate(-10deg); } 96% { transform:rotate(8deg); } }
+  header h1 { font-size:22px; margin:0; letter-spacing:.01em;
+              background:linear-gradient(90deg, #fff, #ffd9a8); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .live { font-size:12px; color:var(--good); display:flex; align-items:center; gap:6px; }
+  .live::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--good); animation:pulse 1.8s infinite; }
+  .live.off { color:var(--bad); } .live.off::before { background:var(--bad); animation:none; }
+  @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(74,222,128,.6); } 100% { box-shadow:0 0 0 10px rgba(74,222,128,0); } }
+  .stats { display:flex; gap:10px; flex-wrap:wrap; margin-left:auto; }
+  .stat { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:8px 14px 8px 44px; min-width:118px;
+          transition:transform .25s var(--ease), border-color .25s; }
+  .stat:hover { transform:translateY(-3px); border-color:var(--accent); }
+  .stat .ico { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:20px; }
+  .stat b { display:block; font-size:20px; font-variant-numeric:tabular-nums; }
   .stat span { color:var(--muted); font-size:12px; }
-  main { display:grid; grid-template-columns: 380px 1fr; gap:16px; padding:16px 20px; }
-  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
-  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px; }
-  h2 { font-size:15px; margin:0 0 10px; color:var(--accent); text-transform:uppercase; letter-spacing:.05em; }
-  .agent { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
-  .agent:last-child { border:0; }
-  .dot { width:10px; height:10px; border-radius:50%; background:var(--muted); margin-top:6px; flex:none; }
-  .dot.on { background:var(--good); box-shadow:0 0 8px var(--good); }
+  .stat.bump { animation:bump .6s var(--ease); }
+  .stat.hot { border-color:var(--accent); box-shadow:0 0 0 0 rgba(255,179,71,.5); animation:glow 2s infinite; }
+  @keyframes bump { 0% { transform:scale(1); } 40% { transform:scale(1.12); } 100% { transform:scale(1); } }
+  @keyframes glow { 0% { box-shadow:0 0 0 0 rgba(255,179,71,.45); } 100% { box-shadow:0 0 0 12px rgba(255,179,71,0); } }
+
+  main { display:grid; grid-template-columns:400px 1fr; gap:18px; padding:18px 22px; }
+  @media (max-width:960px) { main { grid-template-columns:1fr; padding:14px; } header { padding:14px; } .stats { margin-left:0; } }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:18px;
+            backdrop-filter:blur(10px); box-shadow:0 10px 30px rgba(0,0,0,.25); animation:rise .6s var(--ease) both; }
+  main > div:nth-child(1) section:nth-child(2) { animation-delay:.08s; }
+  main > div:nth-child(2) section:nth-child(1) { animation-delay:.12s; }
+  main > div:nth-child(2) section:nth-child(2) { animation-delay:.2s; }
+  main > div:nth-child(2) section:nth-child(3) { animation-delay:.28s; }
+  @keyframes rise { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:none; } }
+  h2 { font-size:14px; margin:0 0 12px; color:var(--accent); text-transform:uppercase; letter-spacing:.08em; display:flex; align-items:center; gap:8px; }
+  h2 .count { background:var(--accent2); color:#2a0d1b; border-radius:999px; padding:0 8px; font-size:12px; letter-spacing:0; }
   .muted { color:var(--muted); font-size:13px; }
-  #chatlog { height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
-  .msg { padding:8px 10px; border-radius:8px; white-space:pre-wrap; max-width:92%; }
-  .msg.user { background:#3b2c1c; align-self:flex-end; }
-  .msg.assistant { background:#28221e; border:1px solid var(--line); }
+  .empty { text-align:center; padding:22px 10px; color:var(--muted); }
+  .empty .big { font-size:34px; display:block; animation:bob 3s ease-in-out infinite; }
+
+  /* ---- the team: each agent gets a little room ---- */
+  #agents { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .room { position:relative; border-radius:14px; padding:12px 10px 10px; text-align:center; overflow:hidden; min-height:170px;
+          background:linear-gradient(180deg, color-mix(in srgb, var(--c) 22%, #1d1726) 0%, #1a1422 70%); border:1px solid var(--line);
+          transition:transform .3s var(--ease), border-color .3s, box-shadow .3s; }
+  .room:hover { transform:translateY(-4px) rotate(-.5deg); border-color:var(--c); }
+  .room::after { content:""; position:absolute; left:0; right:0; bottom:0; height:34px;   /* the floor */
+                 background:repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 18px, rgba(0,0,0,.08) 18px 36px); }
+  .room.busy { border-color:var(--c); box-shadow:0 0 22px color-mix(in srgb, var(--c) 45%, transparent); }
+  .room .name { font-weight:800; position:relative; z-index:1; }
+  .room .role { font-size:12px; color:var(--muted); position:relative; z-index:1; min-height:32px; }
+  .room .tag { position:absolute; top:8px; right:8px; font-size:11px; padding:1px 7px; border-radius:999px; background:#2c2338; color:var(--muted); z-index:2; }
+  .room.busy .tag { background:var(--good); color:#062b12; }
+  .critter { position:relative; width:72px; height:72px; margin:4px auto 6px; z-index:1; animation:bob 3.2s ease-in-out infinite; }
+  .room.busy .critter { animation:hop .7s ease-in-out infinite; }
+  .critter svg { width:100%; height:100%; overflow:visible; }
+  .critter .eyes { transform-origin:36px 34px; animation:blink 4.5s infinite; }
+  .critter .prop { position:absolute; right:-10px; bottom:2px; font-size:22px; transform-origin:bottom left; animation:sway 2.6s ease-in-out infinite; }
+  .room.busy .prop { animation:work .35s ease-in-out infinite; }
+  .zzz { position:absolute; left:58%; top:6px; font-size:12px; color:var(--muted); z-index:1; animation:zz 3s ease-in infinite; }
+  .room.busy .zzz { display:none; }
+  .bubble { position:relative; z-index:1; margin:2px 4px 0; padding:5px 8px; border-radius:10px; font-size:12px; background:#fff; color:#2a2233;
+            display:none; animation:pop .35s var(--ease); text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
+  .room.busy .bubble { display:block; }
+  .dots i { display:inline-block; width:4px; height:4px; margin:0 1px; border-radius:50%; background:currentColor; animation:dot 1s infinite; }
+  .dots i:nth-child(2) { animation-delay:.15s; } .dots i:nth-child(3) { animation-delay:.3s; }
+  @keyframes bob { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-5px); } }
+  @keyframes hop { 0%,100% { transform:translateY(0) scale(1,1); } 30% { transform:translateY(-8px) scale(.96,1.04); } 60% { transform:translateY(0) scale(1.05,.95); } }
+  @keyframes blink { 0%,94%,100% { transform:scaleY(1); } 97% { transform:scaleY(.1); } }
+  @keyframes sway { 0%,100% { transform:rotate(-6deg); } 50% { transform:rotate(8deg); } }
+  @keyframes work { 0%,100% { transform:rotate(-18deg); } 50% { transform:rotate(14deg); } }
+  @keyframes zz { 0% { opacity:0; transform:translate(0,6px); } 30% { opacity:1; } 100% { opacity:0; transform:translate(12px,-14px); } }
+  @keyframes pop { from { opacity:0; transform:scale(.7) translateY(6px); } to { opacity:1; transform:none; } }
+  @keyframes dot { 0%,100% { opacity:.25; transform:translateY(0); } 50% { opacity:1; transform:translateY(-3px); } }
+
+  /* ---- Boss chat ---- */
+  #chatlog { height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-bottom:10px; padding-right:4px; scroll-behavior:smooth; }
+  .msg { padding:9px 12px; border-radius:14px; white-space:pre-wrap; max-width:88%; animation:pop .3s var(--ease) both; }
+  .msg.user { background:linear-gradient(135deg, #ff9f43, #ff6fa8); color:#2a0d1b; align-self:flex-end; border-bottom-right-radius:4px; }
+  .msg.assistant { background:var(--panel2); border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .msg.still { animation:none; }
   form { display:flex; gap:8px; }
-  input, textarea { flex:1; background:#120f0d; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px; font:inherit; }
-  button { background:var(--accent); color:#1a1209; border:0; border-radius:6px; padding:8px 14px; font-weight:600; cursor:pointer; }
+  input, textarea { flex:1; background:#150f1d; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:9px 11px; font:inherit;
+                    transition:border-color .2s, box-shadow .2s; }
+  input:focus, textarea:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(255,179,71,.2); }
+  button { background:linear-gradient(135deg, var(--accent), #ff8a5c); color:#2a1405; border:0; border-radius:10px; padding:9px 16px; font-weight:800; cursor:pointer;
+           transition:transform .15s var(--ease), box-shadow .2s, filter .2s; font-family:inherit; }
+  button:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(255,140,80,.35); }
+  button:active { transform:translateY(1px) scale(.97); }
+  button:disabled { filter:grayscale(.6) brightness(.8); cursor:wait; transform:none; }
   button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
-  button.bad { background:var(--bad); color:white; }
+  button.ghost:hover { color:var(--text); border-color:var(--accent); box-shadow:none; }
+  button.bad { background:linear-gradient(135deg, #f87171, #e0457b); color:white; }
+  .nokey { color:var(--bad); background:rgba(248,113,113,.1); border:1px solid rgba(248,113,113,.35); border-radius:10px; padding:8px 10px; }
+
+  /* ---- clips ---- */
   .clips { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:14px; }
-  .clip { background:#171310; border:1px solid var(--line); border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:6px; }
-  .clip video { width:100%; aspect-ratio:9/16; background:black; border-radius:6px; }
+  .clip { background:#19121f; border:1px solid var(--line); border-radius:14px; padding:9px; display:flex; flex-direction:column; gap:7px;
+          animation:pop .45s var(--ease) both; transition:transform .25s var(--ease), border-color .25s, box-shadow .25s; }
+  .clip:hover { transform:translateY(-4px); border-color:var(--accent); box-shadow:0 12px 26px rgba(0,0,0,.35); }
+  .clip video { width:100%; aspect-ratio:9/16; background:black; border-radius:10px; }
   .clip textarea { min-height:60px; font-size:13px; }
-  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; background:#3a302a; }
-  .pill.posted { background:var(--good); color:#0d1f0d; } .pill.failed, .pill.rejected { background:var(--bad); color:white; }
-  .pill.approved { background:var(--accent); color:#1a1209; }
-  select { background:#120f0d; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:2px 6px; }
+  .clip.leaving-approve { animation:flyUp .55s ease-in forwards; }
+  .clip.leaving-reject { animation:fallAway .5s ease-in forwards; }
+  @keyframes flyUp { to { opacity:0; transform:translateY(-40px) scale(.85) rotate(3deg); } }
+  @keyframes fallAway { to { opacity:0; transform:translateY(30px) scale(.9) rotate(-4deg); filter:grayscale(1); } }
+  .score { display:inline-block; padding:0 7px; border-radius:999px; background:#2c2338; font-weight:700; color:var(--accent); }
+  .pill { display:inline-block; padding:1px 9px; border-radius:999px; font-size:12px; background:#3a3046; font-weight:700; }
+  .pill.posted { background:var(--good); color:#062b12; } .pill.failed, .pill.rejected { background:var(--bad); color:white; }
+  .pill.approved { background:var(--accent); color:#2a1405; }
+  select { background:#150f1d; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:3px 8px; font:inherit; font-size:13px; margin-left:auto; }
   .row { display:flex; gap:6px; }
   .row button { flex:1; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  td { padding:5px 4px; border-bottom:1px solid var(--line); vertical-align:top; }
+  a { color:var(--accent); }
+
+  /* ---- activity feed ---- */
+  #activity { list-style:none; margin:0; padding:0; max-height:360px; overflow-y:auto; }
+  #activity li { display:grid; grid-template-columns:86px 26px 1fr; gap:8px; align-items:start; padding:7px 4px; border-bottom:1px solid var(--line); font-size:13px; }
+  #activity li.new { animation:slideIn .5s var(--ease) both, flash 1.6s ease-out; }
+  #activity .who { font-size:16px; text-align:center; }
+  @keyframes slideIn { from { opacity:0; transform:translateX(-14px); } to { opacity:1; transform:none; } }
+  @keyframes flash { 0% { background:rgba(255,179,71,.25); } 100% { background:transparent; } }
+
+  /* ---- toasts ---- */
+  #toasts { position:fixed; right:18px; bottom:18px; display:flex; flex-direction:column; gap:8px; z-index:10; }
+  .toast { background:var(--panel2); border:1px solid var(--accent); border-radius:12px; padding:10px 14px; box-shadow:0 10px 30px rgba(0,0,0,.4);
+           animation:toastIn .4s var(--ease) both; max-width:300px; }
+  .toast.out { animation:toastOut .4s ease-in forwards; }
+  @keyframes toastIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:none; } }
+  @keyframes toastOut { to { opacity:0; transform:translateX(40px); } }
+  .confetti { position:fixed; width:8px; height:12px; z-index:11; pointer-events:none; border-radius:2px; animation:confetti 1s ease-out forwards; }
+  @keyframes confetti { to { transform:translate(var(--dx), var(--dy)) rotate(var(--r)); opacity:0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation:none !important; transition:none !important; }
+    #sky { display:none; }
+  }
 </style>
 </head>
 <body>
+<div id="sky"></div>
 <header>
-  <h1>Agent HQ</h1>
-  <div class="stat"><b id="c-pending">0</b><span>Waiting for you</span></div>
-  <div class="stat"><b id="c-approved">0</b><span>Approved</span></div>
-  <div class="stat"><b id="c-posted">0</b><span>Posted</span></div>
-  <div class="stat"><b id="c-failed">0</b><span>Failed</span></div>
+  <div class="logo"><div class="mark">🏡</div><div><h1>Agent HQ</h1><div class="live" id="live">Live</div></div></div>
+  <div class="stats">
+    <div class="stat" id="s-pending"><span class="ico">⏳</span><b id="c-pending">0</b><span>Waiting for you</span></div>
+    <div class="stat" id="s-approved"><span class="ico">👍</span><b id="c-approved">0</b><span>Approved</span></div>
+    <div class="stat" id="s-posted"><span class="ico">🚀</span><b id="c-posted">0</b><span>Posted</span></div>
+    <div class="stat" id="s-failed"><span class="ico">💥</span><b id="c-failed">0</b><span>Failed</span></div>
+  </div>
 </header>
 <main>
   <div>
     <section>
-      <h2>Team</h2>
+      <h2>The Team</h2>
       <div id="agents"></div>
     </section>
     <section>
       <h2>Talk to the Boss</h2>
-      <p id="nokey" class="muted" style="display:none;color:var(--bad)">No Anthropic API key found. Put it after ANTHROPIC_API_KEY= in the .env file, save, then stop and restart the app.</p>
+      <p id="nokey" class="nokey" style="display:none">No Anthropic API key found. Put it after ANTHROPIC_API_KEY= in the .env file, save, then stop and restart the app.</p>
       <div id="chatlog"></div>
       <form id="chatform">
         <input id="chatinput" placeholder="Tell the Boss what you want…" autocomplete="off">
-        <button>Send</button>
+        <button id="sendbtn">Send</button>
       </form>
       <p><button class="ghost" id="newconv">New conversation</button></p>
     </section>
   </div>
   <div>
     <section>
-      <h2>Clips waiting for approval</h2>
-      <div class="clips" id="pending"><p class="muted">Nothing waiting.</p></div>
+      <h2>Clips waiting for approval <span class="count" id="pendingcount" style="display:none"></span></h2>
+      <div class="clips" id="pending"></div>
     </section>
     <section>
-      <h2>Clips <select id="clipfilter" class="ghost" style="float:right">
+      <h2>Clips <select id="clipfilter">
         <option value="">All</option><option value="approved">Approved</option><option value="posted">Posted</option>
         <option value="failed">Failed</option><option value="rejected">Rejected</option></select></h2>
-      <div class="clips" id="library"><p class="muted">Approved clips will show up here.</p></div>
+      <div class="clips" id="library"></div>
     </section>
     <section>
       <h2>Activity</h2>
-      <table id="activity"></table>
+      <ul id="activity"></ul>
     </section>
   </div>
 </main>
+<div id="toasts"></div>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fileName = p => p.split(/[\\/]/).pop();
-let shownPending = "", shownLibrary = "";
+const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let shownPending = null, shownLibrary = "", shownAgents = "", lastActivity = null, firstLoad = true;
+const counts = {};
 const STATUS = {approved: "Approved, waiting to post", posted: "Posted", failed: "Failed to post", rejected: "Rejected"};
 
+// Each agent's look. Agents not listed here get a colour and prop picked from their name.
+const LOOKS = {
+  Boss: {color: "#ffb347", prop: "📋", hat: "crown"},
+  Chad: {color: "#ff6fa8", prop: "✂️", hat: "cap"},
+};
+const PALETTE = ["#7cc4ff", "#4ade80", "#c084fc", "#facc15", "#fb923c", "#2dd4bf"];
+const PROPS = ["💡", "📈", "🛒", "🎨", "📦", "🔎"];
+function look(name) {
+  name = String(name || "?");
+  const known = Object.keys(LOOKS).find(k => k.toLowerCase() === name.toLowerCase());
+  if (known) return LOOKS[known];
+  const h = [...name].reduce((n, c) => n + c.charCodeAt(0), 0);
+  return {color: PALETTE[h % PALETTE.length], prop: PROPS[h % PROPS.length], hat: null};
+}
+function critter({color, hat}) {
+  const hats = {
+    crown: `<path d="M22 14 L27 3 L36 11 L45 3 L50 14 Z" fill="#ffd34d" stroke="#b8860b" stroke-width="1.5"/>`,
+    cap: `<path d="M18 20 Q36 2 54 20 Z" fill="#2a2233"/><rect x="44" y="17" width="18" height="4" rx="2" fill="#2a2233"/>`,
+  };
+  return `<svg viewBox="0 0 72 72" aria-hidden="true">
+    <ellipse cx="36" cy="68" rx="20" ry="3.5" fill="rgba(0,0,0,.35)"/>
+    <path d="M10 44 C10 22 22 14 36 14 C50 14 62 22 62 44 C62 60 52 66 36 66 C20 66 10 60 10 44 Z" fill="${color}"/>
+    <path d="M18 30 C20 22 28 18 34 18" stroke="rgba(255,255,255,.45)" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <g class="eyes"><ellipse cx="28" cy="36" rx="4" ry="5" fill="#1d1426"/><ellipse cx="44" cy="36" rx="4" ry="5" fill="#1d1426"/>
+      <circle cx="29.5" cy="34" r="1.4" fill="#fff"/><circle cx="45.5" cy="34" r="1.4" fill="#fff"/></g>
+    <circle cx="22" cy="45" r="3.5" fill="rgba(255,255,255,.3)"/><circle cx="50" cy="45" r="3.5" fill="rgba(255,255,255,.3)"/>
+    <path d="M31 46 Q36 51 41 46" stroke="#1d1426" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    ${hats[hat] || ""}
+  </svg>`;
+}
+const avatar = name => look(name).prop;
+
+// Start a few slow sparkles drifting up the background.
+if (!calm) for (let i = 0; i < 18; i++) {
+  const s = document.createElement("i");
+  s.style.left = Math.random() * 100 + "vw";
+  s.style.animationDuration = 14 + Math.random() * 16 + "s";
+  s.style.animationDelay = -Math.random() * 30 + "s";
+  s.style.background = ["#ffb347", "#ff6fa8", "#7cc4ff"][i % 3];
+  $("sky").appendChild(s);
+}
+
+function toast(html) {
+  const t = document.createElement("div");
+  t.className = "toast"; t.innerHTML = html;
+  $("toasts").appendChild(t);
+  setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 400); }, 4000);
+}
+
+function confetti(el) {
+  if (calm) return;
+  const r = el.getBoundingClientRect();
+  for (let i = 0; i < 24; i++) {
+    const c = document.createElement("div");
+    c.className = "confetti";
+    c.style.left = r.left + r.width / 2 + "px"; c.style.top = r.top + r.height / 2 + "px";
+    c.style.background = ["#ffb347", "#ff6fa8", "#7cc4ff", "#4ade80"][i % 4];
+    c.style.setProperty("--dx", (Math.random() - .5) * 260 + "px");
+    c.style.setProperty("--dy", (Math.random() - .8) * 220 + "px");
+    c.style.setProperty("--r", Math.random() * 720 + "deg");
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 1000);
+  }
+}
+
+// Count a stat up (or down) to its new value instead of jumping.
+function setCount(key, value) {
+  const el = $("c-" + key), from = counts[key] ?? 0;
+  counts[key] = value;
+  if (key === "pending") $("s-pending").classList.toggle("hot", value > 0);
+  if (from === value) { el.textContent = value; return; }
+  if (!firstLoad) { const box = $("s-" + key); box.classList.remove("bump"); void box.offsetWidth; box.classList.add("bump"); }
+  if (calm) { el.textContent = value; return; }
+  const start = performance.now();
+  const step = t => {
+    const k = Math.min(1, (t - start) / 600);
+    el.textContent = Math.round(from + (value - from) * (1 - Math.pow(1 - k, 3)));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function renderAgents(list) {
+  const key = list.map(a => a.name + "|" + (a.doing || "")).join(";");
+  if (key === shownAgents) return;   // keep the animations running smoothly
+  shownAgents = key;
+  $("agents").innerHTML = list.map(a => {
+    const l = look(a.name);
+    return `<div class="room ${a.doing ? "busy" : ""}" style="--c:${l.color}" title="${esc(a.doing || a.role)}">
+      <span class="tag">${a.doing ? "working" : "idle"}</span>
+      <span class="zzz">z z</span>
+      <div class="critter">${critter(l)}<span class="prop">${l.prop}</span></div>
+      <div class="name">${esc(a.name)}</div>
+      <div class="bubble">${esc(a.doing || "")}</div>
+      <div class="role">${a.doing ? "" : esc(a.role)}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderActivity(items) {
+  const newest = items[0]?.id;
+  if (newest === lastActivity) return;
+  const seen = lastActivity;
+  lastActivity = newest;
+  $("activity").innerHTML = items.map(a => `<li class="${seen !== null && a.id > seen ? "new" : ""}">
+    <span class="muted">${esc(a.created_at.slice(5, 16).replace("T", " "))}</span>
+    <span class="who" title="${esc(a.agent)}">${a.agent === "Steven" ? "🙂" : avatar(a.agent)}</span>
+    <span><b>${esc(a.agent)}</b> ${esc(a.message)}</span></li>`).join("") || '<li class="muted">Nothing yet.</li>';
+}
+
 async function refresh() {
-  const s = await (await fetch("/api/state")).json();
-  for (const k of ["approved", "posted", "failed"]) $("c-" + k).textContent = s.counts[k] || 0;
-  $("c-pending").textContent = s.counts.pending_approval || 0;
-  $("agents").innerHTML = s.agents.map(a => `
-    <div class="agent"><div class="dot ${a.doing ? "on" : ""}"></div>
-    <div><b>${esc(a.name)}</b> <span class="muted">${a.doing ? "· " + esc(a.doing) : ""}</span>
-    <div class="muted">${esc(a.role)}</div></div></div>`).join("");
-  $("activity").innerHTML = s.activity.map(a => `<tr><td class="muted">${esc(a.created_at.slice(5,16).replace("T"," "))}</td>
-    <td><b>${esc(a.agent)}</b></td><td>${esc(a.message)}</td></tr>`).join("");
+  let s;
+  try { s = await (await fetch("/api/state")).json(); $("live").className = "live"; $("live").textContent = "Live"; }
+  catch { $("live").className = "live off"; $("live").textContent = "Offline"; return; }
+  for (const k of ["approved", "posted", "failed"]) setCount(k, s.counts[k] || 0);
+  setCount("pending", s.counts.pending_approval || 0);
+  renderAgents(s.agents);
+  renderActivity(s.activity);
   $("nokey").style.display = s.has_llm ? "none" : "block";
   renderChat(s.chat);
   renderLibrary(s.clips);
   const key = s.pending.map(c => c.id).join(",");
   if (key !== shownPending) {   // don't re-render while someone may be editing a caption
+    const before = new Set((shownPending || "").split(",").filter(Boolean));
+    const fresh = s.pending.filter(c => !before.has(String(c.id)));
+    if (shownPending !== null && fresh.length) toast(`🎬 <b>${fresh.length} new clip${fresh.length > 1 ? "s" : ""}</b> waiting for you`);
     shownPending = key;
-    $("pending").innerHTML = s.pending.length ? s.pending.map(c => `
-      <div class="clip" data-id="${c.id}">
+    $("pendingcount").style.display = s.pending.length ? "" : "none";
+    $("pendingcount").textContent = s.pending.length;
+    $("pending").innerHTML = s.pending.length ? s.pending.map((c, i) => `
+      <div class="clip" data-id="${c.id}" style="animation-delay:${i * 60}ms">
         <video src="/clips/${esc(fileName(c.path))}" controls preload="metadata"></video>
-        <div class="muted">#${c.id} · ${esc(c.creator)} · score ${c.score ?? "?"}</div>
+        <div class="muted">#${c.id} · ${esc(c.creator)} · <span class="score">★ ${c.score ?? "?"}</span></div>
         <input class="title" value="${esc(c.title)}">
         <textarea class="caption">${esc(c.caption)}</textarea>
         <div class="muted">${esc(c.reason)}</div>
         <div class="row"><button onclick="decide(${c.id}, 'approve')">Approve</button>
         <button class="bad" onclick="decide(${c.id}, 'reject')">Reject</button></div>
-      </div>`).join("") : '<p class="muted">Nothing waiting.</p>';
+      </div>`).join("") : '<div class="empty"><span class="big">🌤️</span>All caught up. Nothing waiting.</div>';
   }
+  firstLoad = false;
 }
 
 function renderLibrary(clips) {
@@ -129,38 +366,50 @@ function renderLibrary(clips) {
   const key = want + "|" + shown.map(c => c.id + c.status + c.posts.length).join(",");
   if (key === shownLibrary) return;   // leave playing videos alone
   shownLibrary = key;
-  $("library").innerHTML = shown.length ? shown.map(c => `
-    <div class="clip">
+  $("library").innerHTML = shown.length ? shown.map((c, i) => `
+    <div class="clip" style="animation-delay:${Math.min(i, 8) * 50}ms">
       <video src="/clips/${esc(fileName(c.path))}" controls preload="metadata"></video>
       <div><span class="pill ${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>
       <span class="muted">#${c.id} · ${esc(c.creator)}</span></div>
       <b>${esc(c.title)}</b>
       ${c.posts.map(p => `<div class="muted">${esc(p.platform)} (${esc(p.account)}): ${p.status === "posted"
-        ? (p.url ? `<a href="${esc(p.url)}" target="_blank" style="color:var(--accent)">posted</a>` : "posted")
+        ? (p.url ? `<a href="${esc(p.url)}" target="_blank">posted</a>` : "posted")
         : "failed: " + esc(p.error)}</div>`).join("")}
-    </div>`).join("") : '<p class="muted">Nothing here yet. Clips you approve move here.</p>';
+    </div>`).join("") : '<div class="empty"><span class="big">🎞️</span>Nothing here yet. Clips you approve move here.</div>';
 }
 $("clipfilter").onchange = () => { shownLibrary = ""; refresh(); };
 
+let shownChat = null;
 function renderChat(msgs) {
   const log = $("chatlog");
-  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-  log.innerHTML = msgs.map(m => {
+  if ($("thinking")) return;   // a reply is on its way; don't wipe the typing bubble
+  const html = msgs.map(m => {
     const text = m.content.filter(b => b.type === "text").map(b => b.text)
       .filter(t => !t.startsWith("<vision")).join("\n");
     return text ? `<div class="msg ${m.role}">${esc(text)}</div>` : "";
   }).join("");
-  if (atBottom) log.scrollTop = log.scrollHeight;
+  if (html === shownChat) return;
+  const grew = shownChat && html.startsWith(shownChat);
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  // Only the newly added bubbles should pop in.
+  log.innerHTML = grew ? shownChat.replace(/class="msg /g, 'class="msg still ') + html.slice(shownChat.length) : html;
+  if (!grew) log.querySelectorAll(".msg").forEach(m => m.classList.add("still"));
+  shownChat = html;
+  if (!html) log.innerHTML = '<div class="empty"><span class="big">👑</span>Say hi to the Boss. Ask what the team is up to.</div>';
+  if (atBottom || grew) log.scrollTop = log.scrollHeight;
 }
 
 async function decide(id, decision) {
   const card = document.querySelector(`.clip[data-id="${id}"]`);
+  card.querySelectorAll("button").forEach(b => b.disabled = true);
   if (decision === "approve") {
     await fetch(`/api/clips/${id}`, {method: "PATCH", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({title: card.querySelector(".title").value, caption: card.querySelector(".caption").value})});
   }
   await fetch(`/api/clips/${id}/${decision}`, {method: "POST"});
-  shownPending = ""; refresh();
+  if (decision === "approve") { confetti(card); toast(`👍 Clip #${id} approved. Chad will post it.`); }
+  card.classList.add("leaving-" + decision);
+  setTimeout(() => { shownPending = null; refresh(); }, calm ? 0 : 500);
 }
 
 $("chatform").onsubmit = async e => {
@@ -168,14 +417,21 @@ $("chatform").onsubmit = async e => {
   const text = $("chatinput").value.trim();
   if (!text) return;
   $("chatinput").value = "";
-  $("chatlog").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div><div class="msg assistant muted" id="thinking">Thinking…</div>`);
+  $("sendbtn").disabled = true;
+  $("chatlog").querySelector(".empty")?.remove();
+  $("chatlog").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div><div class="msg assistant muted" id="thinking">Boss is thinking <span class="dots"><i></i><i></i><i></i></span></div>`);
   $("chatlog").scrollTop = $("chatlog").scrollHeight;
-  const r = await (await fetch("/api/chat", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})})).json();
+  let reply;
+  try { reply = (await (await fetch("/api/chat", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})})).json()).reply; }
+  catch (err) { reply = "Couldn't reach the app. Is it still running? (" + err + ")"; }
   $("thinking")?.remove();
-  $("chatlog").insertAdjacentHTML("beforeend", `<div class="msg assistant">${esc(r.reply)}</div>`);
+  $("chatlog").insertAdjacentHTML("beforeend", `<div class="msg assistant">${esc(reply)}</div>`);
+  $("chatlog").scrollTop = $("chatlog").scrollHeight;
+  $("sendbtn").disabled = false;
+  shownChat = null;   // let the next refresh take over from the server's copy
   refresh();
 };
-$("newconv").onclick = async () => { await fetch("/api/conversation/new", {method: "POST"}); refresh(); };
+$("newconv").onclick = async () => { await fetch("/api/conversation/new", {method: "POST"}); shownChat = null; refresh(); };
 
 refresh();
 setInterval(refresh, 5000);
