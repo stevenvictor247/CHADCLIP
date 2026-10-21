@@ -89,6 +89,18 @@ Set `enabled: true` on an account once its secrets are in `.env`.
 Subclass `Agent` in `hq/agents/base.py`, implement `run(task)`, and add it to `hq/agents/__init__.py`.
 The Boss, task queue, scheduler and dashboard pick it up automatically.
 
+## Scout (campaigns)
+
+Paid clipping campaigns (for example on Whop) tell you what to clip, how to caption it and what they pay per 1,000
+views. Ask the Boss to have Scout vet one: paste the campaign's rules (and the link, and any video links they give you).
+Scout pulls out the pay, budget, rules and required hashtags, rates it out of 10, flags problems, and sends it to the
+dashboard (and your phone, if Relay is on) with Join and Skip buttons.
+
+Once you join, Chad treats the campaign as a creator he has permission to clip, adds the required hashtags, and every
+posted clip becomes a "to submit" entry. Scout lists those every 6 hours. After you submit a link to the campaign, tell
+the Boss the views and earnings and Scout keeps the totals on the dashboard. Whop has no public API for clippers, so
+the submitting and the numbers are manual for now.
+
 ## Relay (phone)
 
 Relay is a private Telegram bot. Message it to talk to the Boss, get each new clip as a video with Approve and

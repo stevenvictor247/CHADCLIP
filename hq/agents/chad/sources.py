@@ -12,8 +12,11 @@ SEEN_PATH = DATA_DIR / "chad_seen.json"
 
 
 def load_creators() -> list[dict]:
+    """creators.yaml plus every clipping campaign you've joined (the campaign is their recorded permission)."""
+    from ... import campaigns
     with open(CONFIG_DIR / "creators.yaml") as f:
-        return (yaml.safe_load(f) or {}).get("creators") or []
+        listed = (yaml.safe_load(f) or {}).get("creators") or []
+    return listed + campaigns.as_creators()
 
 
 def find_creator(name: str) -> dict | None:

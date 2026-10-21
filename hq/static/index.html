@@ -114,6 +114,11 @@
   button:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(255,140,80,.35); }
   button:active { transform:translateY(1px) scale(.97); }
   button:disabled { filter:grayscale(.6) brightness(.8); cursor:wait; transform:none; }
+  .camp { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+  .camp h3 { margin:0 0 4px; font-size:15px; }
+  .camp .meta { color:var(--muted); font-size:13px; }
+  .camp .warn { color:#fbbf24; font-size:13px; margin-top:4px; }
+  .camp .tag { display:inline-block; border:1px solid var(--line); border-radius:999px; padding:0 8px; font-size:12px; margin-right:6px; }
   button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
   button.ghost:hover { color:var(--text); border-color:var(--accent); box-shadow:none; }
   button.bad { background:linear-gradient(135deg, #f87171, #e0457b); color:white; }
@@ -217,6 +222,10 @@
     </section>
   </div>
   <div>
+    <section id="campsection" style="display:none">
+      <h2>Campaigns</h2>
+      <div id="campaigns"></div>
+    </section>
     <section>
       <h2>Clips waiting for approval <span class="count" id="pendingcount" style="display:none"></span></h2>
       <div class="clips" id="pending"></div>
@@ -248,6 +257,7 @@ const STATUS = {approved: "Approved, waiting to post", posted: "Posted", failed:
 const LOOKS = {
   Boss: {color: "#ffb347", prop: "📋", hat: "crown"},
   Chad: {color: "#ff6fa8", prop: "✂️", hat: "cap"},
+  Scout: {color: "#2dd4bf", prop: "🔎", hat: null},
 };
 const PALETTE = ["#7cc4ff", "#4ade80", "#c084fc", "#facc15", "#fb923c", "#2dd4bf"];
 const PROPS = ["💡", "📈", "🛒", "🎨", "📦", "🔎"];
@@ -369,6 +379,7 @@ async function refresh() {
     $("spend-sub").textContent = s.spend.over_budget ? "Budget reached" : "$" + s.spend.month_usd.toFixed(2) + " this month";
     $("s-spend").title = s.spend.month_by_agent.map(a => a.agent + " $" + a.usd.toFixed(2)).join("\n") || "No Claude calls yet";
   }
+  renderCampaigns(s.campaigns || []);
   renderAgents(s.agents);
   renderActivity(s.activity);
   try { window.HQWorld?.update(s); } catch (err) { console.error("HQ Town:", err); }   // the town never breaks the dashboard
@@ -435,6 +446,31 @@ function renderChat(msgs) {
   shownChat = html;
   if (!html) log.innerHTML = '<div class="empty"><span class="big">👑</span>Say hi to the Boss. Ask what the team is up to.</div>';
   if (atBottom || grew) log.scrollTop = log.scrollHeight;
+}
+
+let shownCampaigns = null;
+function renderCampaigns(list) {
+  $("campsection").style.display = list.length ? "" : "none";
+  const key = JSON.stringify(list);
+  if (key === shownCampaigns) return;
+  shownCampaigns = key;
+  $("campaigns").innerHTML = list.map(c => {
+    const t = c.totals;
+    const pay = c.rate_per_1k == null ? "pay not stated" : `$${c.rate_per_1k} per 1,000 views`;
+    const buttons = c.status === "proposed"
+      ? `<div class="row"><button onclick="decideCampaign(${c.id}, 'join')">Join</button><button class="ghost" onclick="decideCampaign(${c.id}, 'skip')">Skip</button></div>` : "";
+    const earned = c.status === "joined"
+      ? `<div class="meta">${t.submissions} clips posted, ${t.to_submit} to submit, ${t.views.toLocaleString()} views, $${t.earned_usd.toFixed(2)} earned (about $${t.expected_usd.toFixed(2)} expected)</div>` : "";
+    return `<div class="camp"><h3>${esc(c.name)} <span class="tag">${esc(c.status)}</span>${c.score != null ? `<span class="tag">${c.score}/10</span>` : ""}</h3>
+      <div class="meta">${esc(pay)} · ${esc((c.platforms || []).join(", ") || "any platform")}</div>
+      <div class="meta">${esc(c.verdict || "")}</div>
+      ${(c.flags || []).length ? `<div class="warn">⚠ ${esc(c.flags.join("; "))}</div>` : ""}${earned}${buttons}</div>`;
+  }).join("");
+}
+async function decideCampaign(id, decision) {
+  const r = await (await fetch(`/api/campaigns/${id}/${decision}`, {method: "POST"})).json();
+  toast(r.message || "Done");
+  shownCampaigns = null; refresh();
 }
 
 async function decide(id, decision) {

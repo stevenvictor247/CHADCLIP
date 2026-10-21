@@ -48,10 +48,19 @@ def notify(text: str) -> None:
             traceback.print_exc()
 
 
+def ask(text: str, kind: str, ref: int) -> None:
+    """Send you a message with Approve and Reject buttons. `kind` picks which handler in DECIDERS runs on a tap."""
+    if enabled():
+        try:
+            api("sendMessage", chat_id=owner_id(), text=text[:3800], reply_markup=_buttons(kind, ref))
+        except Exception:
+            traceback.print_exc()
+
+
 def _buttons(kind: str, ref: int) -> str:
     import json
-    return json.dumps({"inline_keyboard": [[{"text": "✅ Approve", "callback_data": f"{kind}:approve:{ref}"},
-                                            {"text": "❌ Reject", "callback_data": f"{kind}:reject:{ref}"}]]})
+    return json.dumps({"inline_keyboard": [[{"text": "✅ Join" if kind == "campaign" else "✅ Approve", "callback_data": f"{kind}:approve:{ref}"},
+                                            {"text": "⏭ Skip" if kind == "campaign" else "❌ Reject", "callback_data": f"{kind}:reject:{ref}"}]]})
 
 
 # ---- what you can do from your phone ---------------------------------------------------------------

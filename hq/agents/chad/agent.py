@@ -18,6 +18,13 @@ def settings() -> dict:
         return yaml.safe_load(f) or {}
 
 
+def _with_required_tags(tags: list, creator: dict) -> list:
+    """Campaign rules often demand certain hashtags; make sure every clip carries them."""
+    required = [t.lstrip("#@").strip() for t in creator.get("required_tags") or [] if t.strip()]
+    have = {t.lower() for t in tags}
+    return required + [t for t in tags if t.lower() not in {r.lower() for r in required}] if required else tags
+
+
 class Chad(Agent):
     def __init__(self):
         every = settings().get("run_every_hours", 0)
@@ -134,8 +141,10 @@ class Chad(Agent):
                 "INSERT INTO clips (task_id, creator, source_url, source_title, start_s, end_s, path, title, caption, "
                 "hashtags, score, reason, captioned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 task_id, creator.get("name"), url, title, m["start"], m["end"], str(out), m["title"], caption,
-                json.dumps(m["hashtags"]), m.get("score"), m.get("reason"),
+                json.dumps(_with_required_tags(m["hashtags"], creator)), m.get("score"), m.get("reason"),
                 int(bool(cfg.get("captions", True) and words)), db.now(),
             )
+            if creator.get("campaign_id"):
+                db.execute("UPDATE clips SET campaign_id = ? WHERE id = ?", creator["campaign_id"], clip_id)
             db.log("Chad", f"Clip #{clip_id} ready for approval: {m['title']}")
         return len(picked)
