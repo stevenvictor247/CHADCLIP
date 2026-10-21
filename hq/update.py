@@ -73,9 +73,10 @@ def check(force: bool = False) -> dict:
         if not force and time.time() - _status["checked"] < CHECK_EVERY:
             return dict(_status)
         status = {"checked": time.time(), "git": is_git_copy(), "available": False, "count": 0, "changes": [],
-                  "tested": False, "testing": 0, "error": ""}
+                  "tested": False, "testing": 0, "error": "", "version": ""}
         if status["git"]:
             try:
+                status["version"] = _out("git", "log", "-1", "--format=%h, %cd", "--date=format:%b %d")
                 _out("git", "fetch", "--quiet", "origin", timeout=120)
                 target = _target()
                 status["tested"] = target == TESTED

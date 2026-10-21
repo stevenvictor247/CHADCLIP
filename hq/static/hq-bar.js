@@ -7,6 +7,8 @@
     #hq-update { position:relative; z-index:2; display:none; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 22px;
                  background:linear-gradient(90deg, rgba(74,222,128,.18), rgba(124,196,255,.14)); border-bottom:1px solid var(--line); }
     #hq-update.zip { background:rgba(248,113,113,.14); }
+    #hq-update.ok { background:transparent; padding:6px 22px; }
+    #hq-update.ok button { background:var(--panel); color:var(--text); border:1px solid var(--line); padding:5px 10px; }
     #hq-update.testing { background:rgba(124,196,255,.10); }
     #hq-update b { margin-right:4px; }
     #hq-update .what { color:var(--muted); font-size:13px; flex:1; min-width:200px; }
@@ -56,7 +58,17 @@
       bar.className = "testing"; bar.style.display = "flex";
       bar.innerHTML = `<b>🧪 ${s.testing} new change${s.testing === 1 ? " is" : "s are"} being tested</b><span class="what">It shows up here as an update once every test passes on GitHub.</span>`;
     } else {
-      bar.style.display = "none";
+      // Nothing to install: say so, so a missing bar never looks like a broken updater.
+      bar.className = "ok"; bar.style.display = "flex";
+      const ago = s.checked ? Math.max(0, Math.round((Date.now() / 1000 - s.checked) / 60)) : 0;
+      bar.innerHTML = s.error
+        ? `<b>Couldn't check for updates.</b><span class="what">${esc(s.error)}</span><button id="hq-recheck">Try again</button>`
+        : `<b>✅ HQ is up to date</b><span class="what">Version ${esc(s.version || "unknown")} · checked ${ago < 1 ? "just now" : ago + " min ago"}</span><button id="hq-recheck">Check for updates</button>`;
+      document.getElementById("hq-recheck").onclick = async e => {
+        e.target.disabled = true; e.target.textContent = "Checking…";
+        try { await fetch("/api/update?refresh=true"); } catch (err) {}
+        check();
+      };
     }
   }
   check();

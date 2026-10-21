@@ -98,7 +98,8 @@ def test_update_never_gets_stuck_on_local_edits(monkeypatch, tmp_path):
     monkeypatch.setattr(hq.update, "ROOT", home)
     monkeypatch.setattr(hq.update, "DATA_DIR", tmp_path / "data")
 
-    assert hq.update.check(force=True)["available"] is False
+    first = hq.update.check(force=True)
+    assert first["available"] is False and first["version"].count(",") == 1  # the bar shows "Version abc1234, Oct 21"
     assert hq.update.update() is False
 
     # On Steven's PC: the Boss remembers something, a code file got edited, and he made a config file by hand.
@@ -156,3 +157,10 @@ def test_updates_wait_until_github_tests_pass(monkeypatch, tmp_path):
     assert status["available"] and status["changes"] == ["Untested change"] and status["testing"] == 0
     assert hq.update.update() is True
     assert (home / "hq/code.py").read_text() == "v2\n"
+
+
+def test_update_bar_is_always_shown_and_has_a_check_button():
+    from pathlib import Path
+    js = (Path(__file__).parent.parent / "hq/static/hq-bar.js").read_text(encoding="utf-8")
+    assert "HQ is up to date" in js and "hq-recheck" in js and "Couldn't check for updates" in js
+    assert 'bar.style.display = "none"' not in js  # a missing bar must never look like a broken updater
