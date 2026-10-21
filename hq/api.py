@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, connections, db, ledger, settings, setup_check, update
+from . import agents, approvals, boss, campaigns, connections, db, discovery, ledger, settings, setup_check, update
 from .config import CLIPS_DIR, HAS_LLM, PASSWORD, SOURCES_DIR
 
 app = FastAPI(title="Agent HQ")
@@ -134,6 +134,7 @@ def state():
         "has_llm": HAS_LLM,
         "spend": ledger.summary(),
         "campaigns": campaigns.summary(),
+        "scout_inbox": discovery.inbox(),
         "approvals": approvals.pending(),
         "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at FROM leads "
                          "ORDER BY id DESC LIMIT 50"),
@@ -185,6 +186,19 @@ def decide_campaign(campaign_id: int, decision: str):
         return {"message": campaigns.decide(campaign_id, decision)}
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+class InboxIn(BaseModel):
+    text: str
+
+
+@app.post("/api/scout/inbox")
+def scout_inbox(body: InboxIn):
+    n = discovery.add_to_inbox(body.text)
+    if not n:
+        raise HTTPException(400, "Paste a campaign link or its rules first")
+    db.create_task("Scout", "Rate what was pasted into the inbox.", {"discover": True}, created_by="Steven")
+    return {"message": f"Added {n} to Scout's inbox. Scout is rating it now."}
 
 
 @app.get("/api/campaigns/{campaign_id}/submissions")

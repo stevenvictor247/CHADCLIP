@@ -23,6 +23,11 @@ def get(campaign_id: int) -> dict | None:
     return _load(r[0]) if r else None
 
 
+def by_url(url: str) -> dict | None:
+    r = db.rows("SELECT * FROM campaigns WHERE url = ?", url)
+    return _load(r[0]) if r else None
+
+
 def all_campaigns() -> list[dict]:
     return [_load(r) for r in db.rows("SELECT * FROM campaigns ORDER BY id DESC")]
 
@@ -41,16 +46,16 @@ def flags_for(c: dict) -> list[str]:
     return out
 
 
-def propose(data: dict, url: str | None = None, sources: list | None = None) -> int:
+def propose(data: dict, url: str | None = None, sources: list | None = None, source: str = "manual") -> int:
     c = {**data, "content_sources": list(sources or data.get("content_sources") or [])}
     flags = list(data.get("red_flags") or []) + flags_for(c)
     return db.execute(
         "INSERT INTO campaigns (name, creator, url, platforms, rate_per_1k, budget_left_pct, min_views, max_payout, "
-        "required_tags, credit, rules, clip_style, content_sources, flags, score, verdict, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "required_tags, credit, rules, clip_style, content_sources, flags, score, verdict, created_at, source) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         c["name"], c.get("creator"), url, _j(c.get("platforms")), c.get("rate_per_1k"), c.get("budget_left_pct"),
         c.get("min_views"), c.get("max_payout"), _j(c.get("required_tags")), c.get("credit"), c.get("rules"),
-        c.get("clip_style"), _j(c["content_sources"]), _j(flags), c.get("score"), c.get("verdict"), db.now())
+        c.get("clip_style"), _j(c["content_sources"]), _j(flags), c.get("score"), c.get("verdict"), db.now(), source)
 
 
 def decide(campaign_id: int, decision: str) -> str:

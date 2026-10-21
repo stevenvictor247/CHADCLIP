@@ -1,8 +1,9 @@
 """Scout: reads clipping-campaign rules, rates them, and keeps score of what your clips earn."""
 
 import json
+import os
 
-from ... import campaigns, db, llm, relay
+from ... import campaigns, db, discovery, ledger, llm, relay
 from ...config import model_for
 from ..base import Agent
 
@@ -69,11 +70,14 @@ class Scout(Agent):
                         'to vet a campaign; {"add_sources": {"campaign_id": 1, "urls": ["..."]}}; {"sync": true} to list '
                         'posted clips that need submitting; {"record": {"submission_id": 1, "views": 5000, '
                         '"earned_usd": 7.5, "status": "paid"}}; {"report": true} for earnings so far.',
-            schedule=[(6, "Find posted campaign clips that still need submitting.", {"sync": True})],
+            schedule=[(6, "Find posted campaign clips that still need submitting.", {"sync": True}),
+                      (6, "Look for new campaigns in the inbox and the feeds.", {"discover": True})],
         )
 
     def run(self, task: dict) -> str:
         params = json.loads(task.get("params") or "{}")
+        if params.get("discover"):
+            return self.discover()
         if params.get("text"):
             return self.vet(params["text"], params.get("url"), params.get("sources") or [])
         if params.get("add_sources"):
@@ -88,16 +92,83 @@ class Scout(Agent):
             return self.sync()
         return self.report()
 
+    def _rate(self, text: str, url: str | None, sources: list, source: str = "manual") -> int:
+        data = llm.ask_json(model_for("scout"), SYSTEM, f"Campaign link: {url or 'not given'}\n\n{text[:20000]}",
+                            SCHEMA, effort="low", agent="Scout")
+        return campaigns.propose(data, url, sources, source)
+
     def vet(self, text: str, url: str | None, sources: list) -> str:
         if not llm.HAS_LLM:
             return "Scout needs ANTHROPIC_API_KEY set to read campaign rules."
-        data = llm.ask_json(model_for("scout"), SYSTEM, f"Campaign link: {url or 'not given'}\n\n{text[:20000]}",
-                            SCHEMA, effort="low", agent="Scout")
-        cid = campaigns.propose(data, url, sources)
+        cid = self._rate(text, url, sources)
         c = campaigns.get(cid)
         db.log("Scout", f"Found campaign #{cid}: {c['name']} ({c['score']}/10)")
         relay.ask(describe(c) + "\n\nJoin it?", "campaign", cid, yes="✅ Join", no="⏭ Skip")
         return describe(c) + "\n\nApprove it on the dashboard (or on your phone) to let Chad start clipping."
+
+    def discover(self) -> str:
+        """Rate what's in the inbox and what the feeds list. Nothing is ever joined here: good ones wait for Steven."""
+        if not llm.HAS_LLM:
+            return "Scout needs ANTHROPIC_API_KEY set to rate campaigns."
+        cap = int(os.getenv("SCOUT_MAX_PER_RUN", "10") or 10)
+        min_score = float(os.getenv("SCOUT_MIN_SCORE", "6") or 6)
+        found, notes = [], []
+
+        def rate(text, url, source):
+            if len(found) >= cap or ledger.over_budget():
+                return False
+            cid = self._rate(text, url, [], source)
+            c = campaigns.get(cid)
+            if c["budget_left_pct"] is not None and c["budget_left_pct"] < 20:
+                campaigns.decide(cid, "skip")  # mostly spent: it may run dry before you're paid
+                c = campaigns.get(cid)
+            found.append(c)
+            return True
+
+        for item in discovery.inbox("queued"):
+            key = item["url"] or item["text"]
+            if discovery.seen(key):
+                discovery.set_inbox(item["id"], "done", "already rated")
+                continue
+            text = item["text"]
+            try:
+                text = text or discovery.to_text(discovery.fetch(item["url"]))
+            except Exception as e:
+                reason = str(e) if isinstance(e, discovery.NotAllowed) else f"couldn't open it ({e})"
+                discovery.set_inbox(item["id"], "needs_text", f"{reason}. Open the page yourself and paste its text here.")
+                continue
+            if not rate(text, item["url"], "inbox"):
+                break  # cap or budget reached: the rest stay queued for the next run
+            discovery.mark_seen(key)
+            discovery.set_inbox(item["id"], "done")
+
+        for feed in discovery.feed_urls():
+            try:
+                links = discovery.links_on(discovery.fetch(feed), feed)
+            except Exception as e:
+                notes.append(f"feed {feed}: {e}")
+                continue
+            for link in links:
+                if discovery.seen(link) or campaigns.by_url(link):
+                    continue
+                try:
+                    page = discovery.fetch(link)
+                except Exception:
+                    continue
+                if not rate(discovery.to_text(page), link, "feed"):
+                    break
+                discovery.mark_seen(link)
+
+        good = sorted((c for c in found if c["status"] == "proposed" and (c["score"] or 0) >= min_score),
+                      key=lambda c: -(c["score"] or 0))
+        for c in good[:3]:
+            relay.ask(describe(c) + "\n\nJoin it?", "campaign", c["id"], yes="✅ Join", no="⏭ Skip")
+        stuck = len(discovery.inbox("needs_text"))
+        db.log("Scout", f"Discovery: rated {len(found)} new campaign(s), {len(good)} worth a look")
+        text = f"Rated {len(found)} new campaign(s); {len(good)} scored {min_score:g}+ and wait for your Join decision."
+        if stuck:
+            text += f" {stuck} inbox link(s) need you to paste the page text."
+        return " ".join([text] + notes)
 
     def sync(self) -> str:
         new = campaigns.sync_submissions()

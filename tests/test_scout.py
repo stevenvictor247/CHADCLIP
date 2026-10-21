@@ -89,3 +89,106 @@ def test_dashboard_api_shows_and_decides_campaigns():
     assert client.post(f"/api/campaigns/{cid}/join").json()["message"].startswith("Campaign")
     assert client.post("/api/campaigns/999999/join").status_code == 404
     assert client.post(f"/api/campaigns/{cid}/maybe").status_code == 400
+
+
+# ---- discovery ----------------------------------------------------------------------------------------
+
+from hq import discovery, ledger  # noqa: E402
+
+
+def _discover(monkeypatch, fetcher=None):
+    monkeypatch.setattr(llm, "HAS_LLM", True)
+    monkeypatch.setattr(llm, "ask_json", lambda *a, **k: dict(DATA))
+    asked = []
+    monkeypatch.setattr(relay, "ask", lambda text, kind, ref, **kw: asked.append(ref))
+    if fetcher:
+        monkeypatch.setattr(discovery, "fetch", fetcher)
+    return asked
+
+
+def test_whop_and_discord_links_are_never_fetched():
+    for u in ("https://whop.com/discover/content-rewards/", "https://www.whop.com/x", "https://discord.gg/abc"):
+        with pytest.raises(discovery.NotAllowed):
+            discovery.fetch(u)
+
+
+def test_robots_txt_is_respected(monkeypatch):
+    class R:
+        status_code, ok, text = 200, True, "User-agent: *\nDisallow: /private"
+    monkeypatch.setattr(discovery.requests, "get", lambda *a, **k: R())
+    discovery._robots.clear()
+    assert discovery.robots_allows("https://example.com/campaigns")
+    assert not discovery.robots_allows("https://example.com/private/x")
+    R.ok, R.status_code = False, 403
+    discovery._robots.clear()
+    assert not discovery.robots_allows("https://other.example/a")  # unreadable robots.txt means no
+
+
+def test_paste_splits_links_but_keeps_page_text_whole():
+    assert [i["url"] for i in discovery.split_paste("https://a.com/1\nhttps://a.com/2")] == ["https://a.com/1", "https://a.com/2"]
+    one = discovery.split_paste("Campaign pays $2 per 1k views. " * 5 + "https://a.com/1")
+    assert len(one) == 1 and one[0]["text"] and one[0]["url"] == "https://a.com/1"
+
+
+def test_inbox_text_is_rated_and_good_ones_ask_steven(monkeypatch):
+    asked = _discover(monkeypatch)
+    discovery.add_to_inbox("Kai campaign rules " * 10)
+    out = scout_pkg.Scout().run({"params": '{"discover": true}'})
+    c = campaigns.all_campaigns()[0]
+    assert c["status"] == "proposed" and c["source"] == "inbox" and asked == [c["id"]]  # never joined by itself
+    assert "1 new" in out
+    assert not discovery.inbox("queued")
+
+
+def test_blocked_inbox_link_asks_for_pasted_text(monkeypatch):
+    asked = _discover(monkeypatch)
+    discovery.add_to_inbox("https://whop.com/some-campaign/")
+    out = scout_pkg.Scout().run({"params": '{"discover": true}'})
+    item = discovery.inbox("needs_text")[0]
+    assert "paste" in item["note"] and not asked and "need you to paste" in out
+
+
+def test_same_campaign_is_not_rated_twice_and_low_scores_stay_quiet(monkeypatch):
+    low = dict(DATA, score=3)
+    monkeypatch.setattr(llm, "HAS_LLM", True)
+    calls = []
+    monkeypatch.setattr(llm, "ask_json", lambda *a, **k: calls.append(1) or low)
+    asked = []
+    monkeypatch.setattr(relay, "ask", lambda *a, **k: asked.append(1))
+    for _ in range(2):
+        discovery.add_to_inbox("Same rules text " * 10)
+        scout_pkg.Scout().run({"params": '{"discover": true}'})
+    assert len(calls) == 1 and not asked
+
+
+def test_feed_links_are_read_and_nearly_spent_campaigns_are_skipped(monkeypatch):
+    pages = {"https://ok.example/feed": '<a href="/c/1">one</a><a href="https://elsewhere.com/x">x</a>',
+             "https://ok.example/c/1": "<p>Pays $1 per 1k</p>"}
+    asked = _discover(monkeypatch, lambda u: pages[u])
+    monkeypatch.setenv("SCOUT_FEED_URLS", "https://ok.example/feed")
+    monkeypatch.setattr(llm, "ask_json", lambda *a, **k: dict(DATA, budget_left_pct=5))
+    scout_pkg.Scout().run({"params": '{"discover": true}'})
+    c = next(c for c in campaigns.all_campaigns() if c["url"] == "https://ok.example/c/1")
+    assert c["source"] == "feed" and c["status"] == "skipped" and not asked
+
+
+def test_discovery_stops_when_over_budget_and_is_scheduled(monkeypatch):
+    _discover(monkeypatch)
+    monkeypatch.setattr(ledger, "over_budget", lambda: True)
+    discovery.add_to_inbox("Rules text " * 10)
+    scout_pkg.Scout().run({"params": '{"discover": true}'})
+    assert discovery.inbox("queued")  # still waiting, nothing rated
+    assert any(p.get("discover") for _, _, p in scout_pkg.Scout().schedule)
+
+
+def test_inbox_api_and_settings_field():
+    from fastapi.testclient import TestClient
+
+    from hq import settings
+    from hq.api import app
+    client = TestClient(app)
+    assert client.post("/api/scout/inbox", json={"text": "  "}).status_code == 400
+    assert client.post("/api/scout/inbox", json={"text": "https://a.com/x"}).status_code == 200
+    assert any(i["url"] == "https://a.com/x" for i in client.get("/api/state").json()["scout_inbox"])
+    keys = {f["key"] for s in settings._sections() for f in s["fields"]}
+    assert {"SCOUT_FEED_URLS", "SCOUT_MIN_SCORE", "SCOUT_MAX_PER_RUN"} <= keys

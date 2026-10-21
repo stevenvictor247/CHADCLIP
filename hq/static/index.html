@@ -229,8 +229,14 @@
       <h2>Waiting for your OK <span class="count" id="apprcount"></span></h2>
       <div id="approvals"></div>
     </section>
-    <section id="campsection" style="display:none">
-      <h2>Campaigns</h2>
+    <section id="campsection">
+      <h2>Campaigns <span class="count" id="campfound"></span></h2>
+      <div class="camp">
+        <div class="meta">Scout checks for campaigns every few hours. Paste campaign links, or a campaign page's text, and it rates them right away. It never joins anything for you.</div>
+        <textarea id="inboxtext" rows="3" style="width:100%" placeholder="Paste campaign links (one per line) or the campaign's rules"></textarea>
+        <div class="row"><button onclick="addInbox()">Send to Scout</button></div>
+        <div id="inboxnotes"></div>
+      </div>
       <div id="campaigns"></div>
     </section>
     <section id="leadsection" style="display:none">
@@ -395,6 +401,7 @@ async function refresh() {
   }
   renderApprovals(s.approvals || []);
   renderCampaigns(s.campaigns || []);
+  renderInbox(s.scout_inbox || []);
   renderLeads(s.leads || []);
   renderAgents(s.agents);
   renderActivity(s.activity);
@@ -466,7 +473,9 @@ function renderChat(msgs) {
 
 let shownCampaigns = null;
 function renderCampaigns(list) {
-  $("campsection").style.display = list.length ? "" : "none";
+  const waiting = list.filter(c => c.status === "proposed").length;
+  $("campfound").textContent = waiting ? `${waiting} to decide` : "";
+  list = [...list].sort((a, b) => (a.status === "proposed" ? 0 : 1) - (b.status === "proposed" ? 0 : 1) || (b.score || 0) - (a.score || 0));
   const key = JSON.stringify(list);
   if (key === shownCampaigns) return;
   shownCampaigns = key;
@@ -477,7 +486,7 @@ function renderCampaigns(list) {
       ? `<div class="row"><button onclick="decideCampaign(${c.id}, 'join')">Join</button><button class="ghost" onclick="decideCampaign(${c.id}, 'skip')">Skip</button></div>` : "";
     const earned = c.status === "joined"
       ? `<div class="meta">${t.submissions} clips posted, ${t.to_submit} to submit, ${t.views.toLocaleString()} views, $${t.earned_usd.toFixed(2)} earned (about $${t.expected_usd.toFixed(2)} expected)</div>` : "";
-    return `<div class="camp"><h3>${esc(c.name)} <span class="tag">${esc(c.status)}</span>${c.score != null ? `<span class="tag">${c.score}/10</span>` : ""}</h3>
+    return `<div class="camp"><h3>${esc(c.name)} <span class="tag">${esc(c.status)}</span>${c.source && c.source !== "manual" ? `<span class="tag">found: ${esc(c.source)}</span>` : ""}${c.score != null ? `<span class="tag">${c.score}/10</span>` : ""}</h3>
       <div class="meta">${esc(pay)} · ${esc((c.platforms || []).join(", ") || "any platform")}</div>
       <div class="meta">${esc(c.verdict || "")}</div>
       ${(c.flags || []).length ? `<div class="warn">⚠ ${esc(c.flags.join("; "))}</div>` : ""}${earned}${buttons}</div>`;
@@ -518,6 +527,18 @@ async function setLead(id, status) {
   shownLeads = null; refresh();
 }
 
+function renderInbox(items) {
+  const open = items.filter(i => i.status === "needs_text" || i.status === "queued");
+  $("inboxnotes").innerHTML = open.map(i => `<div class="meta">${i.status === "queued" ? "⏳ waiting for Scout: " : "✋ "}${esc(i.url || (i.text || "").slice(0, 60))}${i.note ? " — " + esc(i.note) : ""}</div>`).join("");
+}
+async function addInbox() {
+  const text = $("inboxtext").value;
+  const res = await fetch("/api/scout/inbox", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})});
+  const r = await res.json();
+  toast(esc(r.message || r.detail || "Done"));
+  if (res.ok) $("inboxtext").value = "";
+  refresh();
+}
 async function decideCampaign(id, decision) {
   const r = await (await fetch(`/api/campaigns/${id}/${decision}`, {method: "POST"})).json();
   toast(r.message || "Done");
