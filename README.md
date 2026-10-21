@@ -89,6 +89,12 @@ Set `enabled: true` on an account once its secrets are in `.env`.
 Subclass `Agent` in `hq/agents/base.py`, implement `run(task)`, and add it to `hq/agents/__init__.py`.
 The Boss, task queue, scheduler and dashboard pick it up automatically.
 
+## Relay (phone)
+
+Relay is a private Telegram bot. Message it to talk to the Boss, get each new clip as a video with Approve and
+Reject buttons, and receive the daily report. It only ever answers your own Telegram account. Setup is in `.env.example`
+(a bot token from @BotFather, then `python -m hq relay-id` for your ID). It stays off until both are set.
+
 ## Models and cost
 
 Each agent uses the cheapest Claude model that does its job: the Boss on Opus 5.5, Chad on Sonnet 5.5, and every

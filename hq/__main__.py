@@ -18,6 +18,7 @@ def main():
     sub.add_parser("update", help="Fetch the latest HQ code from GitHub")
     sub.add_parser("install-shortcut", help="Put an Agent HQ icon on the Windows Desktop")
     sub.add_parser("worker", help="Run only the background worker")
+    sub.add_parser("relay-id", help="Find your Telegram ID after messaging your Relay bot (for TELEGRAM_OWNER_ID)")
     sub.add_parser("chat", help="Talk to the Boss in the terminal")
     sub.add_parser("report", help="Ask the Boss for a status report")
 
@@ -59,8 +60,15 @@ def main():
         from .desktop import install_shortcut
         print(f"Added {install_shortcut()}")
     elif args.cmd == "worker":
+        from . import relay
         from .worker import loop
+        relay.start_in_background()
         loop()
+    elif args.cmd == "relay-id":
+        from . import relay
+        if not relay.token():
+            p.error("set TELEGRAM_BOT_TOKEN in .env first")
+        print(relay.find_owner_id())
     elif args.cmd == "chat":
         from . import boss
         print("Talking to the Boss. Type 'new' for a fresh conversation, Ctrl+C to quit.")
