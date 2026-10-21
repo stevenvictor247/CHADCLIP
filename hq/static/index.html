@@ -157,6 +157,24 @@
   .confetti { position:fixed; width:8px; height:12px; z-index:11; pointer-events:none; border-radius:2px; animation:confetti 1s ease-out forwards; }
   @keyframes confetti { to { transform:translate(var(--dx), var(--dy)) rotate(var(--r)); opacity:0; } }
 
+  /* ---- HQ Town (drawn by world.js) ---- */
+  .world { position:relative; z-index:1; margin:18px 22px 0; padding:0; overflow:hidden; border-radius:var(--radius); }
+  .world canvas { display:block; width:100%; aspect-ratio:960/416; image-rendering:auto; }
+  .world-hud { position:absolute; top:10px; left:10px; right:10px; display:flex; gap:8px; align-items:center; pointer-events:none; }
+  .chip { pointer-events:auto; background:rgba(20,14,30,.72); color:#fff; border:1px solid rgba(255,255,255,.15); border-radius:999px;
+          padding:4px 11px; font-size:12px; font-weight:700; backdrop-filter:blur(6px); }
+  button.chip { cursor:pointer; box-shadow:none; }
+  button.chip:hover { border-color:var(--accent); transform:none; box-shadow:none; }
+  .world-title { margin-right:auto; }
+  .world-ticker { position:absolute; left:50%; bottom:12px; transform:translate(-50%, 20px); opacity:0; pointer-events:none; white-space:nowrap;
+                  background:rgba(20,14,30,.8); border:1px solid var(--accent); border-radius:999px; padding:5px 14px; font-size:13px; font-weight:700;
+                  transition:opacity .4s, transform .4s var(--ease); max-width:90%; overflow:hidden; text-overflow:ellipsis; }
+  .world-ticker.show { opacity:1; transform:translate(-50%, 0); }
+  .world-tip { position:absolute; display:none; pointer-events:none; max-width:220px; background:#fff; color:#2a2233; border-radius:10px;
+               padding:6px 9px; font-size:12px; font-weight:700; box-shadow:0 6px 18px rgba(0,0,0,.35); }
+  @media (max-width:960px) { .world { margin:14px 14px 0; } .world-hud .chip { font-size:10px; padding:3px 8px; } }
+  @media (max-width:600px) { .world-title { display:none; } .world-hud { justify-content:flex-end; } }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation:none !important; transition:none !important; }
     #sky { display:none; }
@@ -174,6 +192,12 @@
     <div class="stat" id="s-failed"><span class="ico">💥</span><b id="c-failed">0</b><span>Failed</span></div>
   </div>
 </header>
+<section class="world" id="world">
+  <canvas id="worldcanvas" aria-label="HQ Town: your agents at work"></canvas>
+  <div class="world-hud"><span class="chip world-title">🏘️ HQ Town</span><span class="chip" id="worldclock"></span><button class="chip" id="worldmode" title="Change the time of day">🕒 Real time</button></div>
+  <div class="world-ticker" id="worldticker"></div>
+  <div class="world-tip" id="worldtip"></div>
+</section>
 <main>
   <div>
     <section>
@@ -209,6 +233,7 @@
   </div>
 </main>
 <div id="toasts"></div>
+<script src="/world.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -232,6 +257,7 @@ function look(name) {
   const h = [...name].reduce((n, c) => n + c.charCodeAt(0), 0);
   return {color: PALETTE[h % PALETTE.length], prop: PROPS[h % PROPS.length], hat: null};
 }
+window.hqLook = look;   // HQ Town draws the agents with the same colours
 function critter({color, hat}) {
   const hats = {
     crown: `<path d="M22 14 L27 3 L36 11 L45 3 L50 14 Z" fill="#ffd34d" stroke="#b8860b" stroke-width="1.5"/>`,
@@ -339,6 +365,7 @@ async function refresh() {
   setCount("pending", s.counts.pending_approval || 0);
   renderAgents(s.agents);
   renderActivity(s.activity);
+  try { window.HQWorld?.update(s); } catch (err) { console.error("HQ Town:", err); }   // the town never breaks the dashboard
   $("nokey").style.display = s.has_llm ? "none" : "block";
   renderChat(s.chat);
   renderLibrary(s.clips);
@@ -426,10 +453,12 @@ $("chatform").onsubmit = async e => {
   $("chatlog").querySelector(".empty")?.remove();
   $("chatlog").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div><div class="msg assistant muted" id="thinking">Boss is thinking <span class="dots"><i></i><i></i><i></i></span></div>`);
   $("chatlog").scrollTop = $("chatlog").scrollHeight;
+  window.HQWorld?.bossThinking(true);
   let reply;
   try { reply = (await (await fetch("/api/chat", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})})).json()).reply; }
   catch (err) { reply = "Couldn't reach the app. Is it still running? (" + err + ")"; }
   $("thinking")?.remove();
+  window.HQWorld?.bossThinking(false);
   $("chatlog").insertAdjacentHTML("beforeend", `<div class="msg assistant">${esc(reply)}</div>`);
   $("chatlog").scrollTop = $("chatlog").scrollHeight;
   $("sendbtn").disabled = false;
