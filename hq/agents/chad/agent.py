@@ -107,10 +107,11 @@ class Chad(Agent):
                       cfg.get("captions", True), int(cfg.get("caption_font_size", 64)))
         clip_id = db.execute(
             "INSERT INTO clips (task_id, creator, source_url, source_title, start_s, end_s, path, title, caption, "
-            "hashtags, score, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "hashtags, score, reason, captioned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             task_id, creator["name"], video["url"], title, 0, length, str(out), title[:80],
             f"{title}\n\nCredit: {creator['credit']}", json.dumps(["twitch", "streamer", "funny", "fyp"]),
-            float(views), f"{views:,} views on Twitch in the last day(s).", db.now())
+            float(views), f"{views:,} views on Twitch in the last day(s).",
+            int(bool(cfg.get("captions", True) and words)), db.now())
         db.log("Chad", f"Clip #{clip_id} ready for approval: {title}")
         sources.mark_seen(video["id"])
         return 1
@@ -131,9 +132,10 @@ class Chad(Agent):
                 caption += f"\n\nCredit: {creator['credit']}"
             clip_id = db.execute(
                 "INSERT INTO clips (task_id, creator, source_url, source_title, start_s, end_s, path, title, caption, "
-                "hashtags, score, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "hashtags, score, reason, captioned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 task_id, creator.get("name"), url, title, m["start"], m["end"], str(out), m["title"], caption,
-                json.dumps(m["hashtags"]), m.get("score"), m.get("reason"), db.now(),
+                json.dumps(m["hashtags"]), m.get("score"), m.get("reason"),
+                int(bool(cfg.get("captions", True) and words)), db.now(),
             )
             db.log("Chad", f"Clip #{clip_id} ready for approval: {m['title']}")
         return len(picked)

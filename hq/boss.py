@@ -4,7 +4,7 @@ import hashlib
 import json
 import threading
 
-from . import agents, db, llm
+from . import agents, db, llm, review
 from .config import BOSS_MODEL, VISION_PATH
 
 SYSTEM = """You are the Boss, the head of an AI agent team that runs parts of Steven's online business.
@@ -16,6 +16,13 @@ How you work:
 - Delegate with assign_task. Give each agent clear, specific instructions and the params it understands.
   Agents run tasks in the background; tell Steven what you assigned rather than waiting for results.
 - Use get_status and list_pending_clips to answer questions about what the team is doing. Never invent numbers.
+- You check Chad's work. When Steven asks you to check on Chad (or his clips), and in every report, call
+  review_chad. Lead with what needs Steven: failed or stuck tasks, failed posts, and flagged clips with the
+  reason in plain words. Then say briefly what went fine. Use list_pending_clips to judge titles and captions
+  yourself too (boring, misleading, typos, missing credit).
+- When a waiting clip has a real problem, leave a short note on it with flag_clip so Steven sees it on the
+  approval card. Flagging never approves, rejects or posts. If Chad keeps making the same mistake, suggest a
+  fix (a setting in chad.yaml, or a task with clearer instructions) and ask Steven before assigning it.
 - Anything that posts publicly, spends money or contacts people needs Steven's approval. Only call decide_clip
   when Steven has explicitly told you, in this conversation, to approve or reject those specific clips.
 - When Steven states a lasting preference or goal, save it with remember so it becomes part of the vision.
@@ -40,6 +47,17 @@ TOOLS = [
          "clip_ids": {"type": "array", "items": {"type": "integer"}},
          "decision": {"type": "string", "enum": ["approve", "reject"]}},
          "required": ["clip_ids", "decision"], "additionalProperties": False}},
+    {"name": "review_chad", "description": "Check Chad's recent work: tasks done, failed or stuck, new clips, "
+     "quality problems on clips waiting for approval (missing captions, no credit, weak moment, duplicates, "
+     "too long, missing file) and failed posts.",
+     "input_schema": {"type": "object", "properties": {
+         "hours": {"type": "number", "description": "How far back to look. Default 24."}},
+         "additionalProperties": False}},
+    {"name": "flag_clip", "description": "Put a short review note on a clip waiting for approval, shown to Steven "
+     "on its approval card. Empty note clears it. Does not approve, reject or post.",
+     "input_schema": {"type": "object", "properties": {
+         "clip_id": {"type": "integer"}, "note": {"type": "string"}},
+         "required": ["clip_id", "note"], "additionalProperties": False}},
     {"name": "remember", "description": "Add a lasting goal or preference of Steven's to the vision file.",
      "input_schema": {"type": "object", "properties": {"note": {"type": "string"}},
                       "required": ["note"], "additionalProperties": False}},
@@ -81,6 +99,22 @@ def decide_clip(clip_ids: list[int], decision: str) -> dict:
     return {"updated": clip_ids, "status": status}
 
 
+def review_chad(hours: float = 24) -> dict:
+    return review.review_chad(hours)
+
+
+def flag_clip(clip_id: int, note: str) -> dict:
+    found = db.rows("SELECT status FROM clips WHERE id = ?", clip_id)
+    if not found:
+        return {"error": f"No clip #{clip_id}"}
+    if found[0]["status"] != "pending_approval":
+        return {"error": f"Clip #{clip_id} is {found[0]['status']}, not waiting for approval"}
+    note = note.strip()[:300]
+    db.execute("UPDATE clips SET boss_note = ? WHERE id = ?", note or None, clip_id)
+    db.log("Boss", f"Flagged clip #{clip_id}: {note}" if note else f"Cleared note on clip #{clip_id}")
+    return {"clip_id": clip_id, "note": note}
+
+
 def remember(note: str) -> dict:
     with open(VISION_PATH, "a", encoding="utf-8") as f:
         f.write(f"\n- {note.strip()}\n")
@@ -88,7 +122,8 @@ def remember(note: str) -> dict:
 
 
 TOOL_FUNCS = {"list_agents": list_agents, "assign_task": assign_task, "get_status": get_status,
-              "list_pending_clips": list_pending_clips, "decide_clip": decide_clip, "remember": remember}
+              "list_pending_clips": list_pending_clips, "decide_clip": decide_clip, "remember": remember,
+              "review_chad": review_chad, "flag_clip": flag_clip}
 
 
 def run_tool(name: str, args: dict) -> tuple[str, bool]:
@@ -178,7 +213,8 @@ def _chat(text: str) -> str:
 def report() -> str:
     """A short status report for Steven, used for the daily briefing."""
     return chat("Give me a short status report: what each agent did since your last report, what is waiting on "
-                "my approval, and anything that failed. Use get_status and list_pending_clips.")
+                "my approval, and anything that failed. Check Chad's work with review_chad and flag any waiting "
+                "clip with a real problem. Use get_status and list_pending_clips too.")
 
 
 def _offline(text: str) -> str:
@@ -189,9 +225,11 @@ def _offline(text: str) -> str:
         params = {"url": rest} if rest.startswith("http") else ({"creator": rest} if rest else {})
         tid = db.create_task("Chad", f"Clip {rest or 'all creators'}", params, created_by="Steven")
         return f"Queued task #{tid} for Chad."
+    if "chad" in t and any(w in t for w in ("check", "review", "how")):
+        return review.summary(review.review_chad())
     if t in ("status", "report"):
         s = get_status()
         return (f"Clips: {s['clips_by_status'] or 'none yet'}. Latest tasks: " +
                 "; ".join(f"#{x['id']} {x['agent']} {x['status']}" for x in s["tasks"][:5]))
     return ("The Boss needs ANTHROPIC_API_KEY set to talk properly. Until then, try: "
-            "'status', 'clip <creator name>' or 'clip <video link>'.")
+            "'status', 'check on chad', 'clip <creator name>' or 'clip <video link>'.")
