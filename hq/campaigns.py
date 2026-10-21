@@ -95,7 +95,8 @@ def sync_submissions() -> list[dict]:
     """Make a to-do entry for each posted clip from a campaign that hasn't been logged yet. Returns the new ones."""
     new = []
     for p in db.rows("SELECT p.id post_id, p.url, p.platform, p.clip_id, c.campaign_id FROM posts p "
-                     "JOIN clips c ON c.id = p.clip_id WHERE p.status = 'posted' AND c.campaign_id IS NOT NULL "
+                     "JOIN clips c ON c.id = p.clip_id WHERE p.status = 'posted' AND p.platform != 'practice' "
+                     "AND c.campaign_id IS NOT NULL "
                      "AND p.id NOT IN (SELECT post_id FROM submissions)"):
         ts = db.now()
         sid = db.execute("INSERT INTO submissions (campaign_id, clip_id, post_id, post_url, platform, created_at, updated_at) "

@@ -39,6 +39,16 @@
   button.go { background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#1a1209; border:0; border-radius:10px;
               padding:10px 18px; font:inherit; font-weight:800; cursor:pointer; }
   button.go:disabled { opacity:.5; cursor:default; }
+  .test { display:flex; gap:10px; align-items:flex-start; grid-column:2; font-size:13px; }
+  @media (max-width:640px) { .test { grid-column:1; } }
+  .test button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:4px 10px;
+                 font:inherit; font-weight:700; cursor:pointer; white-space:nowrap; }
+  .test button:hover { border-color:var(--sky); }
+  .test button:disabled { opacity:.6; cursor:wait; }
+  .result { color:var(--muted); padding-top:4px; }
+  .result.ok { color:var(--good); } .result.bad { color:var(--bad); }
+  .field.flash, .acct.flash { animation:flash 2.4s ease-out; border-radius:10px; }
+  @keyframes flash { 0% { background:rgba(255,179,71,.25); } 100% { background:transparent; } }
   button.plain { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:10px 14px; font:inherit; cursor:pointer; }
 </style>
 </head>
@@ -46,7 +56,8 @@
 <div class="wrap">
   <header><a class="back" href="/">← Back to HQ</a><h1>⚙️ Settings</h1></header>
   <p class="intro">Paste your keys here instead of editing files. They're saved on this computer in HQ's data folder, which updates
-    never touch. Keys stay hidden after you save them. Restart HQ after saving so every agent picks up the change.</p>
+    never touch. Keys stay hidden after you save them. Press <b>Test</b> to check a key works (it tests what you typed, even before
+    saving). Restart HQ after saving so every agent picks up the change.</p>
   <div id="sections">Loading…</div>
 </div>
 <div class="savebar">
@@ -57,6 +68,14 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const changes = {}, accounts = {};
+let lastTests = {};
+
+function testRow(name) {
+  if (!name) return "";
+  const t = lastTests[name];
+  const res = t ? `<span class="result ${t.ok ? "ok" : "bad"}">${t.ok ? "✅" : "⚠️"} ${esc(t.message)}</span>` : `<span class="result"></span>`;
+  return `<div class="test"><button type="button" data-test="${esc(name)}">Test</button>${res}</div>`;
+}
 
 function field(f) {
   const id = "f-" + f.key;
@@ -72,15 +91,17 @@ function field(f) {
   } else {
     input = `<input id="${id}" data-key="${f.key}" data-orig="${esc(f.value)}" value="${esc(f.value)}" placeholder="${esc(f.example)}">`;
   }
-  return `<div class="field"><label for="${id}">${esc(f.key)}</label>${input}${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}</div>`;
+  return `<div class="field" id="k-${f.key}"><label for="${id}">${esc(f.key)}</label>${input}${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}${testRow(f.test)}</div>`;
 }
 
 function render(d) {
+  lastTests = d.tests || {};
   let html = d.sections.map(s => `<section><h2>${esc(s.title)}</h2>${s.fields.map(field).join("")}</section>`).join("");
   if (d.accounts.length) {
-    html += `<section><h2>Posting accounts</h2><p class="help" style="margin:0 0 6px">Turn an account on once its keys are saved above. Chad only posts to accounts that are on.</p>` +
+    html += `<section id="accounts"><h2>Posting accounts</h2><p class="help" style="margin:0 0 6px">Turn an account on once its keys are saved above. Chad only posts to accounts that are on.</p>` +
       d.accounts.map(a => `<label class="switch"><input type="checkbox" data-account="${esc(a.name)}" ${a.enabled ? "checked" : ""}>
-        ${esc(a.name)} <span class="help" style="grid-column:auto">(${esc(a.platform)})</span></label>${a.fields.map(field).join("")}`).join("") + `</section>`;
+        ${esc(a.name)} <span class="help" style="grid-column:auto">(${esc(a.platform)})</span></label>${a.fields.map(field).join("")}
+        <div class="field acct" id="a-${esc(a.name)}" style="border-top:0;padding-top:0">${testRow(a.test)}</div>`).join("") + `</section>`;
   }
   $("sections").innerHTML = html;
   document.querySelectorAll("[data-key]").forEach(el => el.addEventListener("input", () => {
@@ -96,6 +117,31 @@ function render(d) {
     update();
   });
   document.querySelectorAll("[data-account]").forEach(el => el.onchange = () => { accounts[el.dataset.account] = el.checked; update(); });
+  document.querySelectorAll("[data-test]").forEach(b => b.onclick = () => runTest(b));
+  if (location.hash) {
+    const target = document.getElementById(location.hash.slice(1));
+    if (target) { target.scrollIntoView({block: "center"}); target.classList.add("flash"); target.querySelector("input")?.focus(); }
+  }
+}
+
+async function runTest(btn) {
+  const name = btn.dataset.test;
+  const out = btn.nextElementSibling;
+  btn.disabled = true; btn.textContent = "Testing…"; out.className = "result"; out.textContent = "";
+  try {
+    const r = await fetch("/api/test/" + encodeURIComponent(name), {method: "POST",
+      headers: {"Content-Type": "application/json", "X-HQ": "1"}, body: JSON.stringify({values: changes})});
+    const t = await r.json();
+    lastTests[name] = t;
+    // Telegram and Twitch each have two keys: show the result next to both.
+    document.querySelectorAll(`[data-test="${CSS.escape(name)}"]`).forEach(b => {
+      b.nextElementSibling.className = "result " + (t.ok ? "ok" : "bad");
+      b.nextElementSibling.textContent = (t.ok ? "✅ " : "⚠️ ") + t.message;
+    });
+  } catch (e) {
+    out.className = "result bad"; out.textContent = "⚠️ Couldn't run the test. Is HQ running?";
+  }
+  btn.disabled = false; btn.textContent = "Test";
 }
 
 function update() {

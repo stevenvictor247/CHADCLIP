@@ -4,13 +4,13 @@ import hashlib
 import hmac
 from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, db, ledger, settings, update
-from .config import CLIPS_DIR, HAS_LLM, PASSWORD
+from . import agents, approvals, boss, campaigns, connections, db, ledger, settings, setup_check, update
+from .config import CLIPS_DIR, HAS_LLM, PASSWORD, SOURCES_DIR
 
 app = FastAPI(title="Agent HQ")
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
@@ -54,6 +54,10 @@ def _from_hq_page(request: Request):
     """Settings, updates and restarts only answer HQ's own pages (a custom header other websites can't send)."""
     if request.headers.get("x-hq") != "1":
         raise HTTPException(403, "Use the HQ dashboard for this")
+
+
+class TestIn(BaseModel):
+    values: dict[str, str] = {}   # keys typed on the Settings page but not saved yet
 
 
 class ClipEdit(BaseModel):
@@ -111,6 +115,11 @@ def settings_page():
 @app.get("/hq-bar.js")
 def hq_bar():
     return FileResponse(STATIC / "hq-bar.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/setup-card.js")
+def setup_card():
+    return FileResponse(STATIC / "setup-card.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/world.js")
@@ -251,6 +260,43 @@ def save_settings(body: SettingsIn, request: Request):
     if changed or body.accounts:
         db.log("Steven", "Changed settings: " + ", ".join(changed + [f"{n} account" for n in body.accounts]))
     return {"changed": changed}
+
+
+@app.post("/api/test/{name}")
+def test_connection(name: str, body: TestIn, request: Request):
+    """One harmless call to a service (the Test buttons). Typed-but-unsaved keys are tested as typed."""
+    _from_hq_page(request)
+    return connections.run(name, body.values)
+
+
+@app.get("/api/setup")
+def setup_status():
+    setup_check.refresh_in_background()
+    return setup_check.summary()
+
+
+@app.post("/api/setup/check")
+def setup_check_now(request: Request):
+    _from_hq_page(request)
+    connections.run_all()
+    return setup_check.summary()
+
+
+@app.post("/api/try-chad")
+def try_chad(request: Request, video: UploadFile = File(...)):
+    """Upload a video you made and have Chad clip it, to watch the whole chain work (it's your own content)."""
+    _from_hq_page(request)
+    name = Path(video.filename or "video.mp4").name
+    if Path(name).suffix.lower() not in (".mp4", ".mov", ".mkv", ".webm", ".m4v"):
+        raise HTTPException(400, "Pick a video file (mp4, mov, mkv or webm).")
+    safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in name)
+    dest = SOURCES_DIR / f"try-{db.now().replace(':', '')[:15]}-{safe}"
+    with dest.open("wb") as out:
+        while chunk := video.file.read(1024 * 1024):
+            out.write(chunk)
+    task_id = db.create_task("Chad", f"Clip {name} (your own video, to try HQ out)",
+                             {"file": str(dest), "creator": "You"}, created_by="Steven")
+    return {"task_id": task_id}
 
 
 @app.get("/api/update")

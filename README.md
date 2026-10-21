@@ -30,6 +30,16 @@ The Desktop icon opens HQ in its own window. Closing the window stops HQ (and th
 you want Chad to keep working. If HQ is already running from `start-hq.bat`, the icon just opens a window onto it.
 If the window doesn't open, look in `data/desktop-app.log`.
 
+## Getting started
+
+The dashboard opens with a **Getting started** checklist: every key, account and permission HQ still needs, in the order
+to do them, with a **Fix** button that jumps to the right place. In ⚙️ Settings, press **Test** next to a key to check it
+works (it tests what you typed, even before you save). Ask the Boss "what's left to set up?" for the same list.
+
+Until a real posting account is switched on, approved clips go to the **practice account**: they're saved with their
+caption in `data/practice-posts/` instead of being uploaded (`HQ_PRACTICE_POSTING` changes that). To watch the whole
+chain work, press **Pick a video** on the checklist and give Chad a video you made yourself.
+
 ## Run it by hand (Mac, Linux, developers)
 
 ```bash

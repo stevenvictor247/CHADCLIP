@@ -62,16 +62,20 @@ def _value(key: str) -> dict:
 
 def describe() -> dict:
     """Everything the Settings page shows. Secrets never leave HQ, only whether they're set."""
+    from . import connections
+    tests = connections.results()
     sections = _sections()
     listed = {f["key"] for s in sections for f in s["fields"]}
     for s in sections:
-        s["fields"] = [{**f, **_value(f["key"])} for f in s["fields"]]
+        s["fields"] = [{**f, **_value(f["key"]), "test": connections.KEY_TESTS.get(f["key"])} for f in s["fields"]]
     accts = []
     for a in accounts():
         keys = [v for k, v in a.items() if k.endswith("_env") and isinstance(v, str)]
         accts.append({"name": a.get("name"), "platform": a.get("platform"), "enabled": bool(a.get("enabled")),
+                      "test": f"account:{a.get('name')}",
                       "fields": [{"key": k, "help": "", "example": "", **_value(k)} for k in keys if k not in listed]})
-    return {"sections": sections, "accounts": accts}
+    last = {name: {"ok": r["ok"], "message": r["message"]} for name, r in tests.items()}
+    return {"sections": sections, "accounts": accts, "tests": last}
 
 
 def save(values: dict) -> list[str]:

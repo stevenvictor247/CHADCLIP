@@ -58,6 +58,10 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {
          "clip_id": {"type": "integer"}, "note": {"type": "string"}},
          "required": ["clip_id", "note"], "additionalProperties": False}},
+    {"name": "setup_status", "description": "The getting-started checklist: which keys, accounts and permissions HQ "
+     "still needs, what's broken, and how Steven fixes each one. Use when he asks what's left to set up or why "
+     "nothing is happening.",
+     "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "remember", "description": "Add a lasting goal or preference of Steven's to the vision file.",
      "input_schema": {"type": "object", "properties": {"note": {"type": "string"}},
                       "required": ["note"], "additionalProperties": False}},
@@ -122,9 +126,16 @@ def remember(note: str) -> dict:
     return {"saved": True}
 
 
+def setup_status() -> dict:
+    from . import setup_check
+    s = setup_check.summary()
+    return {"ready": s["ready"], "done": f"{s['done']} of {s['total']}",
+            "items": [{k: i[k] for k in ("title", "status", "detail", "fix", "required")} for i in s["items"]]}
+
+
 TOOL_FUNCS = {"list_agents": list_agents, "assign_task": assign_task, "get_status": get_status,
               "list_pending_clips": list_pending_clips, "decide_clip": decide_clip, "remember": remember,
-              "review_chad": review_chad, "flag_clip": flag_clip}
+              "review_chad": review_chad, "flag_clip": flag_clip, "setup_status": setup_status}
 
 
 def run_tool(name: str, args: dict) -> tuple[str, bool]:
