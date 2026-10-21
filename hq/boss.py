@@ -135,9 +135,12 @@ def _vision_block(messages: list) -> list:
 
 
 def chat(text: str) -> str:
-    if not llm.HAS_LLM:
-        return _offline(text)
     conv = current_conversation()
+    if not llm.HAS_LLM:
+        reply = _offline(text)
+        _save(conv, "user", [{"type": "text", "text": text}])
+        _save(conv, "assistant", [{"type": "text", "text": reply}])
+        return reply
     messages = history(conv)
     user = {"role": "user", "content": _vision_block(messages) + [{"type": "text", "text": text}]}
     messages.append(user)

@@ -57,6 +57,7 @@
     </section>
     <section>
       <h2>Talk to the Boss</h2>
+      <p id="nokey" class="muted" style="display:none;color:var(--bad)">No Anthropic API key found. Put it after ANTHROPIC_API_KEY= in the .env file, save, then stop and restart the app.</p>
       <div id="chatlog"></div>
       <form id="chatform">
         <input id="chatinput" placeholder="Tell the Boss what you want…" autocomplete="off">
@@ -92,6 +93,7 @@ async function refresh() {
     <div class="muted">${esc(a.role)}</div></div></div>`).join("");
   $("activity").innerHTML = s.activity.map(a => `<tr><td class="muted">${esc(a.created_at.slice(5,16).replace("T"," "))}</td>
     <td><b>${esc(a.agent)}</b></td><td>${esc(a.message)}</td></tr>`).join("");
+  $("nokey").style.display = s.has_llm ? "none" : "block";
   renderChat(s.chat);
   const key = s.pending.map(c => c.id).join(",");
   if (key !== shownPending) {   // don't re-render while someone may be editing a caption
