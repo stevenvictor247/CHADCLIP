@@ -265,6 +265,7 @@
   </div>
 </main>
 <div id="toasts"></div>
+<script src="/money-bar.js"></script>
 <script src="/world.js"></script>
 <script src="/hq-bar.js"></script>
 <script src="/setup-card.js"></script>
@@ -411,6 +412,7 @@ async function refresh() {
   renderLeads(s.leads || []);
   renderAgents(s.agents);
   renderActivity(s.activity);
+  try { window.HQMoney?.update(s.money); } catch (err) { console.error("Money strip:", err); }
   try { window.HQWorld?.update(s); } catch (err) { console.error("HQ Town:", err); }   // the town never breaks the dashboard
   $("nokey").style.display = s.has_llm ? "none" : "block";
   renderChat(s.chat);

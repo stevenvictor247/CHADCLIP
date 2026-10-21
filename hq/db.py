@@ -161,6 +161,14 @@ CREATE TABLE IF NOT EXISTS llm_usage (
     cost_usd REAL NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS money_entries (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,                          -- expense or income
+    amount_usd REAL NOT NULL,
+    note TEXT NOT NULL DEFAULT '',               -- what it was for, or where the money came from
+    day TEXT NOT NULL,                           -- YYYY-MM-DD, your local date
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,

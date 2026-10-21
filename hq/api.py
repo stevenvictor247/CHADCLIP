@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, ledger, settings, setup_check, update
+from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, ledger, money, settings, setup_check, update
 from .config import CLIPS_DIR, HAS_LLM, PASSWORD, SOURCES_DIR
 
 app = FastAPI(title="Agent HQ")
@@ -122,6 +122,11 @@ def setup_card():
     return FileResponse(STATIC / "setup-card.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/money-bar.js")
+def money_bar():
+    return FileResponse(STATIC / "money-bar.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/world.js")
 def world():
     return FileResponse(STATIC / "world.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
@@ -133,6 +138,7 @@ def state():
     return {
         "has_llm": HAS_LLM,
         "spend": ledger.summary(),
+        "money": money.summary(),
         "campaigns": campaigns.summary(),
         "scout_inbox": discovery.inbox(),
         "creator_picks": creators.pending(),
@@ -187,6 +193,33 @@ def decide_campaign(campaign_id: int, decision: str):
         return {"message": campaigns.decide(campaign_id, decision)}
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+class MoneyIn(BaseModel):
+    kind: str
+    amount_usd: float
+    note: str = ""
+    day: str | None = None
+
+
+@app.post("/api/money")
+def add_money(body: MoneyIn, request: Request):
+    _from_hq_page(request)
+    try:
+        entry_id = money.add(body.kind, body.amount_usd, body.note, body.day)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"id": entry_id, "money": money.summary()}
+
+
+@app.delete("/api/money/{entry_id}")
+def delete_money(entry_id: int, request: Request):
+    _from_hq_page(request)
+    try:
+        money.delete(entry_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {"money": money.summary()}
 
 
 class InboxIn(BaseModel):
