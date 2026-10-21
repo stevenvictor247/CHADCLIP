@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, boss, db, ledger
+from . import agents, boss, campaigns, db, ledger
 from .config import CLIPS_DIR, HAS_LLM, PASSWORD
 
 app = FastAPI(title="Agent HQ")
@@ -102,6 +102,7 @@ def state():
     return {
         "has_llm": HAS_LLM,
         "spend": ledger.summary(),
+        "campaigns": campaigns.summary(),
         "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None}] +
                   [{"name": a.name, "role": a.role, "doing": running.get(a.name)} for a in agents.AGENTS.values()],
         "counts": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},
@@ -134,6 +135,36 @@ def add_task(body: TaskIn):
     if not agents.get(body.agent):
         raise HTTPException(404, f"No agent called {body.agent}")
     return {"task_id": db.create_task(body.agent, body.instructions, body.params, created_by="Steven")}
+
+
+class SubmissionIn(BaseModel):
+    views: int | None = None
+    earned_usd: float | None = None
+    status: str | None = None
+
+
+@app.post("/api/campaigns/{campaign_id}/{decision}")
+def decide_campaign(campaign_id: int, decision: str):
+    if decision not in ("join", "skip"):
+        raise HTTPException(400, "decision must be join or skip")
+    try:
+        return {"message": campaigns.decide(campaign_id, decision)}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.get("/api/campaigns/{campaign_id}/submissions")
+def campaign_submissions(campaign_id: int):
+    return db.rows("SELECT * FROM submissions WHERE campaign_id = ? ORDER BY id DESC", campaign_id)
+
+
+@app.post("/api/submissions/{submission_id}")
+def update_submission(submission_id: int, body: SubmissionIn):
+    try:
+        campaigns.record(submission_id, body.views, body.earned_usd, body.status)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
 
 
 @app.post("/api/clips/{clip_id}/{decision}")

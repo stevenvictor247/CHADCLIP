@@ -56,6 +56,40 @@ CREATE TABLE IF NOT EXISTS boss_messages (
     content TEXT NOT NULL,                       -- JSON content blocks
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS campaigns (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    creator TEXT,
+    url TEXT,
+    platforms TEXT NOT NULL DEFAULT '[]',        -- JSON list
+    rate_per_1k REAL,                            -- US dollars per 1,000 views
+    budget_left_pct REAL,                        -- how much of the campaign budget is still unspent
+    min_views INTEGER,
+    max_payout REAL,                             -- cap per clip, dollars
+    required_tags TEXT NOT NULL DEFAULT '[]',    -- JSON list of hashtags/mentions the rules demand
+    credit TEXT,
+    rules TEXT,                                  -- plain-words summary of the rules
+    clip_style TEXT,
+    content_sources TEXT NOT NULL DEFAULT '[]',  -- JSON list of video links Chad may clip
+    flags TEXT NOT NULL DEFAULT '[]',            -- JSON list of warnings
+    score REAL,                                  -- Scout's 0-10 rating
+    verdict TEXT,
+    status TEXT NOT NULL DEFAULT 'proposed',     -- proposed, joined, skipped, ended
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS submissions (
+    id INTEGER PRIMARY KEY,
+    campaign_id INTEGER NOT NULL,
+    clip_id INTEGER NOT NULL,
+    post_id INTEGER NOT NULL UNIQUE,
+    post_url TEXT,
+    platform TEXT,
+    status TEXT NOT NULL DEFAULT 'to_submit',    -- to_submit, submitted, paid, unpaid
+    views INTEGER NOT NULL DEFAULT 0,
+    earned_usd REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS relay_sent (
     kind TEXT NOT NULL,
     ref_id INTEGER NOT NULL,
@@ -102,7 +136,7 @@ def init():
         c.executescript(SCHEMA)
         # Databases made before these columns existed get them added in place.
         have = {r["name"] for r in c.execute("PRAGMA table_info(clips)")}
-        for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT")):
+        for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER")):
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
 
