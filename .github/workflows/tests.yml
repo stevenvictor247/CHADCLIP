@@ -1,0 +1,56 @@
+# Runs every test on Linux and Windows for each pull request and each change to main.
+# When main passes on both, the "tested" branch is moved to that commit. HQ's updater installs from "tested",
+# so a change that breaks the tests never reaches Steven's PC.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+      - name: Install
+        run: python -m pip install -r requirements.txt
+      - name: Test
+        run: python -m pytest -q
+
+  mark-tested:
+    needs: tests
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Move the tested branch to this commit
+        run: |
+          # Only move forward: an older run finishing late must not take "tested" backwards.
+          if git fetch origin tested 2>/dev/null && ! git merge-base --is-ancestor origin/tested "$GITHUB_SHA"; then
+            echo "tested is already past this commit"; exit 0
+          fi
+          git push origin "$GITHUB_SHA:refs/heads/tested" --force

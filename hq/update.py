@@ -3,6 +3,10 @@
 Only works when the HQ folder is a git copy (the installer makes one). data/ and .env aren't in git so they're never
 touched. If you (or the Boss) changed a file in config/, your version is kept. Any other file you edited is copied
 to data/update-backups/ and then replaced with the new version, so an edit can never block an update again.
+
+Updates come from the "tested" branch, which GitHub moves forward only after every test passed on Linux and Windows
+(.github/workflows/tests.yml). Newer changes on main wait there until their tests pass. A copy whose GitHub has no
+"tested" branch yet updates from main as before.
 """
 
 import hashlib
@@ -22,6 +26,7 @@ from .config import DATA_DIR, ROOT
 _QUIET = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
 CHECK_EVERY = 30 * 60  # seconds between "is there an update?" checks while HQ runs
 RESTART_CODE = 3       # start-hq.bat (and the cloud server) start HQ again when it exits with this
+TESTED = "origin/tested"  # moved forward by GitHub once a version passed every test
 _status = {"checked": 0}
 _lock = threading.Lock()
 
@@ -57,20 +62,29 @@ def is_git_copy() -> bool:
     return (ROOT / ".git").exists()
 
 
+def _target() -> str:
+    """Where updates come from: the last version that passed the tests, or main if GitHub has no tested branch."""
+    return TESTED if _run("git", "rev-parse", "--verify", "--quiet", TESTED).returncode == 0 else "@{u}"
+
+
 def check(force: bool = False) -> dict:
     """Is there new code on GitHub? Cached for CHECK_EVERY seconds unless force."""
     with _lock:
         if not force and time.time() - _status["checked"] < CHECK_EVERY:
             return dict(_status)
         status = {"checked": time.time(), "git": is_git_copy(), "available": False, "count": 0, "changes": [],
-                  "error": ""}
+                  "tested": False, "testing": 0, "error": ""}
         if status["git"]:
             try:
                 _out("git", "fetch", "--quiet", "origin", timeout=120)
-                status["count"] = int(_out("git", "rev-list", "--count", "HEAD..@{u}") or 0)
+                target = _target()
+                status["tested"] = target == TESTED
+                status["count"] = int(_out("git", "rev-list", "--count", f"HEAD..{target}") or 0)
                 status["available"] = status["count"] > 0
+                if status["tested"]:  # changes on GitHub still waiting for their tests to pass
+                    status["testing"] = int(_out("git", "rev-list", "--count", f"HEAD..@{{u}}", f"^{TESTED}") or 0)
                 if status["available"]:
-                    log = _out("git", "log", "--no-merges", "--format=%s", "-n", "8", "HEAD..@{u}")
+                    log = _out("git", "log", "--no-merges", "--format=%s", "-n", "8", f"HEAD..{target}")
                     status["changes"] = [line for line in log.splitlines() if line]
             except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError) as e:
                 status["error"] = str(e)[:300]
@@ -96,14 +110,15 @@ def update():
         return False
     try:
         _out("git", "fetch", "--quiet", "origin", timeout=120)
-        if _out("git", "rev-list", "--count", "HEAD..@{u}") == "0":
+        target = _target()
+        if _out("git", "rev-list", "--count", f"HEAD..{target}") == "0":
             return False
         before, reqs = _out("git", "rev-parse", "HEAD"), _requirements_hash()
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
         # Files you changed, and files you made that the update would add too.
         edited = _out("git", "diff", "--name-only", "HEAD").splitlines()
-        incoming = _out("git", "diff", "--name-only", "--diff-filter=A", "HEAD", "@{u}").splitlines()
+        incoming = _out("git", "diff", "--name-only", "--diff-filter=A", "HEAD", target).splitlines()
         clashing = [p for p in incoming if (ROOT / p).exists()]
         touched = [p for p in dict.fromkeys(edited + clashing) if p]
         keep = {p: (ROOT / p).read_bytes() for p in touched if p.startswith("config/") and (ROOT / p).is_file()}
@@ -115,10 +130,10 @@ def update():
             for p in clashing:
                 (ROOT / p).unlink()
 
-        if _run("git", "merge", "--ff-only", "@{u}").returncode:
+        if _run("git", "merge", "--ff-only", target).returncode:
             # Someone committed in this folder. Keep those commits on a branch, then take GitHub's version.
             _out("git", "branch", f"before-update-{stamp}")
-            _out("git", "reset", "--hard", "@{u}")
+            _out("git", "reset", "--hard", target)
             print(f"Local commits kept on branch before-update-{stamp}")
         for p, data in keep.items():
             (ROOT / p).parent.mkdir(parents=True, exist_ok=True)
