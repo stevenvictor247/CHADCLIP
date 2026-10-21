@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent HQ</title>
+<style>
+  :root { --bg:#120f1a; --panel:rgba(34,27,44,.85); --line:#3b2f4a; --text:#f4eefb; --muted:#a99cbb;
+          --accent:#ffb347; --accent2:#ff6fa8; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:16px; color:var(--text);
+         font:15px/1.45 "Nunito", system-ui, sans-serif;
+         background:radial-gradient(1200px 700px at 10% -10%, #3a2357 0%, transparent 60%),
+                    radial-gradient(900px 600px at 110% 10%, #2b2f5c 0%, transparent 55%), var(--bg); }
+  form { width:100%; max-width:340px; background:var(--panel); border:1px solid var(--line); border-radius:16px;
+         padding:28px 24px; display:flex; flex-direction:column; gap:14px; animation:pop .5s cubic-bezier(.2,.8,.2,1.1); }
+  @keyframes pop { from { transform:translateY(12px) scale(.97); opacity:0; } }
+  .mark { width:48px; height:48px; border-radius:14px; display:grid; place-items:center; font-size:24px; margin:0 auto;
+          background:linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow:0 6px 20px rgba(255,111,168,.35); }
+  h1 { margin:0; font-size:20px; text-align:center; }
+  input { background:#120f0d; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:inherit; }
+  button { background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#1a1209; border:0; border-radius:10px;
+           padding:10px; font:inherit; font-weight:700; cursor:pointer; }
+  .wrong { color:var(--bad); font-size:13px; text-align:center; display:none; }
+</style>
+</head>
+<body>
+<form method="post" action="/login">
+  <div class="mark">🏠</div>
+  <h1>Agent HQ</h1>
+  <input type="password" name="password" placeholder="Password" autofocus required>
+  <div class="wrong" id="wrong">That password didn't match. Try again.</div>
+  <button type="submit">Open HQ</button>
+</form>
+<script>if (location.search.includes("wrong")) document.getElementById("wrong").style.display = "block";</script>
+</body>
+</html>

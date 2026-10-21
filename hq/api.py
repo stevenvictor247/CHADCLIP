@@ -1,18 +1,38 @@
 """The dashboard and its API. Run with: python -m hq serve"""
 
+import hashlib
+import hmac
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import agents, boss, db
-from .config import CLIPS_DIR, HAS_LLM
+from .config import CLIPS_DIR, HAS_LLM, PASSWORD
 
 app = FastAPI(title="Agent HQ")
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
 STATIC = Path(__file__).parent / "static"
+SESSION_COOKIE = "hq_session"
+
+
+def _session_token() -> str:
+    """The cookie value a logged-in browser holds. Changing HQ_PASSWORD logs everyone out."""
+    return hmac.new(PASSWORD.encode(), b"agent-hq-session", hashlib.sha256).hexdigest()
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    """With HQ_PASSWORD set, every page except the login page needs the session cookie."""
+    if not PASSWORD or request.url.path in ("/login", "/logout"):
+        return await call_next(request)
+    if hmac.compare_digest(request.cookies.get(SESSION_COOKIE, ""), _session_token()):
+        return await call_next(request)
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"detail": "Log in first"}, status_code=401)
+    return RedirectResponse("/login", status_code=303)
 
 
 class ChatIn(BaseModel):
@@ -42,6 +62,27 @@ def _library() -> list[dict]:
 @app.on_event("startup")
 def _startup():
     db.init()
+
+
+@app.get("/login")
+def login_page():
+    return FileResponse(STATIC / "login.html")
+
+
+@app.post("/login")
+def login(password: str = Form("")):
+    if not PASSWORD or not hmac.compare_digest(password.encode(), PASSWORD.encode()):
+        return RedirectResponse("/login?wrong=1", status_code=303)
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(SESSION_COOKIE, _session_token(), max_age=60 * 60 * 24 * 30, httponly=True, samesite="lax")
+    return response
+
+
+@app.get("/logout")
+def logout():
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
 
 
 @app.get("/")

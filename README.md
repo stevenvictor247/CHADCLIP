@@ -20,6 +20,24 @@ python -m hq serve                     # dashboard at http://127.0.0.1:8000, wor
 Other commands: `python -m hq chat` (talk to the Boss in the terminal), `python -m hq report`,
 `python -m hq chad --file some.mp4` (try Chad on a local video), `python -m hq publish`.
 
+## Open HQ from your other computers
+
+Keep HQ running on one computer (your Windows PC) and open its dashboard from anywhere, like your Mac:
+
+1. Install [Tailscale](https://tailscale.com/download) on both computers and sign in with the same account.
+2. On the PC, put a password in `.env`: `HQ_PASSWORD=pick-something-long`.
+3. On the PC, allow Tailscale devices through the Windows firewall (PowerShell as administrator, once):
+   `New-NetFirewallRule -DisplayName "Agent HQ" -Direction Inbound -Protocol TCP -LocalPort 8000 -RemoteAddress 100.64.0.0/10 -Action Allow`
+4. Double-click `start-hq.bat` instead of running `python -m hq serve`.
+5. On the Mac, open `http://<your PC's name in Tailscale>:8000` and log in.
+
+The PC must stay on and awake (Settings > System > Power > sleep "Never" when plugged in). To start HQ when the PC
+turns on, put a shortcut to `start-hq.bat` in the Startup folder (Win+R, type `shell:startup`).
+
+Without `HQ_PASSWORD`, HQ only listens on the computer it runs on, exactly as before. `python -m hq backup` zips the
+database and settings into `data/backups`, and HQ does this by itself once a day. To move HQ to an always-on
+cloud server later, see `deploy/cloud/install.sh`.
+
 ## The Boss
 
 Chat with it on the dashboard. It reads `config/vision.md` before every conversation, assigns tasks to

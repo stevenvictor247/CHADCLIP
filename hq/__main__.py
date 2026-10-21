@@ -26,6 +26,9 @@ def main():
 
     sub.add_parser("publish", help="Post every approved clip now")
 
+    b = sub.add_parser("backup", help="Zip the database and settings into data/backups")
+    b.add_argument("--with-clips", action="store_true", help="Include the clip videos too (much bigger)")
+
     y = sub.add_parser("connect-youtube", help="Sign in a YouTube account from accounts.yaml")
     y.add_argument("account")
 
@@ -34,6 +37,10 @@ def main():
 
     if args.cmd == "serve":
         import uvicorn
+
+        from .config import PASSWORD
+        if args.host not in ("127.0.0.1", "localhost") and not PASSWORD:
+            p.error("set HQ_PASSWORD in .env before opening HQ to other computers")
 
         from .worker import start_in_background
         start_in_background()
@@ -67,6 +74,9 @@ def main():
     elif args.cmd == "publish":
         from .agents.chad.publish import publish_approved
         print("\n".join(publish_approved()) or "Nothing approved to post.")
+    elif args.cmd == "backup":
+        from .backup import make_backup
+        print(f"Saved {make_backup(with_clips=args.with_clips)}")
     elif args.cmd == "connect-youtube":
         from .agents.chad.publish import load_accounts, youtube
         account = next(a for a in load_accounts() if a["name"] == args.account)
