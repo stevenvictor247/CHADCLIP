@@ -12,9 +12,11 @@ def main():
     s = sub.add_parser("serve", help="Run the dashboard and the background worker")
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--wait-port", action="store_true", help=argparse.SUPPRESS)
 
     a = sub.add_parser("app", help="Open HQ in its own window (starts HQ if it isn't running)")
     a.add_argument("--no-update", action="store_true", help="Don't fetch the latest code first")
+    a.add_argument("--wait-port", action="store_true", help=argparse.SUPPRESS)
     sub.add_parser("update", help="Fetch the latest HQ code from GitHub")
     sub.add_parser("install-shortcut", help="Put an Agent HQ icon on the Windows Desktop")
     sub.add_parser("worker", help="Run only the background worker")
@@ -47,12 +49,15 @@ def main():
         if args.host not in ("127.0.0.1", "localhost") and not PASSWORD:
             p.error("set HQ_PASSWORD in .env before opening HQ to other computers")
 
+        if args.wait_port:  # restarting: let the old HQ finish closing first
+            from .update import wait_for_port
+            wait_for_port(args.port)
         from .worker import start_in_background
         start_in_background()
         uvicorn.run("hq.api:app", host=args.host, port=args.port)
     elif args.cmd == "app":
         from .desktop import open_app
-        open_app(update=not args.no_update)
+        open_app(update=not args.no_update, wait_port=args.wait_port)
     elif args.cmd == "update":
         from .update import update
         print("HQ updated." if update() else "No new updates.")

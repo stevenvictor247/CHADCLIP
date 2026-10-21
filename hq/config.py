@@ -1,5 +1,10 @@
-"""Settings and paths. Everything is read from environment variables (or a .env file)."""
+"""Settings and paths. Everything is read from environment variables, a .env file, or the Settings page.
 
+The Settings page saves to data/settings.json, which git never touches, so updates can't overwrite your keys.
+Anything saved there wins over .env.
+"""
+
+import json
 import os
 from pathlib import Path
 
@@ -13,10 +18,22 @@ DATA_DIR = Path(os.getenv("HQ_DATA_DIR", ROOT / "data"))
 SOURCES_DIR = DATA_DIR / "sources"
 CLIPS_DIR = DATA_DIR / "clips"
 DB_PATH = DATA_DIR / "hq.sqlite3"
+SETTINGS_PATH = DATA_DIR / "settings.json"
 VISION_PATH = CONFIG_DIR / "vision.md"
 
 for d in (DATA_DIR, SOURCES_DIR, CLIPS_DIR):
     d.mkdir(parents=True, exist_ok=True)
+
+
+def saved_settings() -> dict:
+    """What you saved on the Settings page."""
+    try:
+        return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+os.environ.update({k: str(v) for k, v in saved_settings().items()})
 
 # Models. Each agent gets the cheapest model that does its job well. Override any of them in .env with
 # HQ_MODEL_<NAME>=..., for example HQ_MODEL_CHAD=claude-opus-5-5. HQ_BOSS_MODEL still works for the Boss.

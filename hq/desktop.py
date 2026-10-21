@@ -1,6 +1,5 @@
 """HQ as a desktop app: the dashboard in its own window, plus a Desktop shortcut that opens it."""
 
-import socket
 import subprocess
 import sys
 import threading
@@ -13,10 +12,7 @@ PORT = 8000
 ICON = ROOT / "hq" / "static" / "hq.ico"
 
 
-def _running(port):
-    with socket.socket() as s:
-        s.settimeout(0.5)
-        return s.connect_ex(("127.0.0.1", port)) == 0
+from .update import port_in_use as _running
 
 
 def _serve(host, port):
@@ -27,13 +23,16 @@ def _serve(host, port):
     uvicorn.run("hq.api:app", host=host, port=port)
 
 
-def open_app(port=PORT, update=True):
+def open_app(port=PORT, update=True, wait_port=False):
     """Open HQ in its own window. Starts HQ first unless it's already running (e.g. from start-hq.bat)."""
     # The shortcut runs without a console window, so send output to a log file you can read if something breaks.
     if sys.stdout is None or not sys.stdout.isatty():
         log = open(DATA_DIR / "desktop-app.log", "a", buffering=1, encoding="utf-8")
         sys.stdout = sys.stderr = log
 
+    if wait_port:  # restarting: let the old HQ finish closing first
+        from .update import wait_for_port
+        wait_for_port(port)
     if not _running(port):
         from .update import update as pull_latest
         if update and pull_latest():
