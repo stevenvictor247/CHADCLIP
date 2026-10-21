@@ -60,7 +60,10 @@ def daily_report(state: dict):
     today = datetime.now().strftime("%Y-%m-%d")
     if datetime.now().hour >= REPORT_HOUR and state.get("last_report") != today:
         state["last_report"] = today
-        db.log("Boss", "Daily report: " + boss.report())
+        report = boss.report()
+        db.log("Boss", "Daily report: " + report)
+        from . import relay
+        relay.notify("Daily report\n\n" + report)
 
 
 def daily_backup(state: dict):
@@ -100,3 +103,5 @@ def loop(interval: float = 15):
 
 def start_in_background():
     threading.Thread(target=loop, daemon=True).start()
+    from . import relay
+    relay.start_in_background()  # does nothing until TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_ID are set

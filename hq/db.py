@@ -56,6 +56,12 @@ CREATE TABLE IF NOT EXISTS boss_messages (
     content TEXT NOT NULL,                       -- JSON content blocks
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS relay_sent (
+    kind TEXT NOT NULL,
+    ref_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (kind, ref_id)
+);
 CREATE TABLE IF NOT EXISTS llm_usage (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,
