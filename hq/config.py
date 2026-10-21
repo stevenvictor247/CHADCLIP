@@ -24,6 +24,7 @@ for d in (DATA_DIR, SOURCES_DIR, CLIPS_DIR):
 DEFAULT_MODELS = {
     "boss": "claude-opus-5-5",      # takes direction and delegates, so it gets the strongest model
     "chad": "claude-sonnet-5-5",    # picks moments from transcripts
+    "pitch": "claude-sonnet-5-5",   # writes the messages to potential clients, so wording matters
 }
 SIMPLE_MODEL = "claude-haiku-5-5"   # every other agent: sorting, drafting, summarising
 

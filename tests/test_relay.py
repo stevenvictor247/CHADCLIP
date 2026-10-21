@@ -24,13 +24,13 @@ def test_relay_is_off_without_token_and_owner(monkeypatch):
 
 
 def test_messages_from_strangers_are_ignored(telegram, monkeypatch):
-    monkeypatch.setattr(relay.boss, "chat", lambda t: pytest.fail("a stranger reached the Boss"))
+    monkeypatch.setattr("hq.boss.chat", lambda t: pytest.fail("a stranger reached the Boss"))
     relay.handle_update({"update_id": 1, "message": {"from": {"id": 7}, "chat": {"id": 7}, "text": "status"}})
     assert telegram == []
 
 
 def test_owner_message_goes_to_the_boss(telegram, monkeypatch):
-    monkeypatch.setattr(relay.boss, "chat", lambda t: f"boss heard: {t}")
+    monkeypatch.setattr("hq.boss.chat", lambda t: f"boss heard: {t}")
     relay.handle_update({"update_id": 1, "message": {"from": {"id": 42}, "chat": {"id": 42}, "text": "status"}})
     assert telegram[-1][0] == "sendMessage" and telegram[-1][1]["text"] == "boss heard: status"
 

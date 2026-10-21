@@ -119,6 +119,9 @@
   .camp .meta { color:var(--muted); font-size:13px; }
   .camp .warn { color:#fbbf24; font-size:13px; margin-top:4px; }
   .camp .tag { display:inline-block; border:1px solid var(--line); border-radius:999px; padding:0 8px; font-size:12px; margin-right:6px; }
+  .camp pre { white-space:pre-wrap; word-break:break-word; font:inherit; font-size:13px; margin:6px 0 10px; color:var(--text); }
+  .leadrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:6px 0; border-top:1px solid var(--line); font-size:13px; }
+  .leadrow select { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:3px 6px; }
   button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
   button.ghost:hover { color:var(--text); border-color:var(--accent); box-shadow:none; }
   button.bad { background:linear-gradient(135deg, #f87171, #e0457b); color:white; }
@@ -222,9 +225,17 @@
     </section>
   </div>
   <div>
+    <section id="apprsection" style="display:none">
+      <h2>Waiting for your OK <span class="count" id="apprcount"></span></h2>
+      <div id="approvals"></div>
+    </section>
     <section id="campsection" style="display:none">
       <h2>Campaigns</h2>
       <div id="campaigns"></div>
+    </section>
+    <section id="leadsection" style="display:none">
+      <h2>Leads</h2>
+      <div class="camp" id="leads"></div>
     </section>
     <section>
       <h2>Clips waiting for approval <span class="count" id="pendingcount" style="display:none"></span></h2>
@@ -258,6 +269,7 @@ const LOOKS = {
   Boss: {color: "#ffb347", prop: "📋", hat: "crown"},
   Chad: {color: "#ff6fa8", prop: "✂️", hat: "cap"},
   Scout: {color: "#2dd4bf", prop: "🔎", hat: null},
+  Pitch: {color: "#a78bfa", prop: "✉️", hat: null},
 };
 const PALETTE = ["#7cc4ff", "#4ade80", "#c084fc", "#facc15", "#fb923c", "#2dd4bf"];
 const PROPS = ["💡", "📈", "🛒", "🎨", "📦", "🔎"];
@@ -379,7 +391,9 @@ async function refresh() {
     $("spend-sub").textContent = s.spend.over_budget ? "Budget reached" : "$" + s.spend.month_usd.toFixed(2) + " this month";
     $("s-spend").title = s.spend.month_by_agent.map(a => a.agent + " $" + a.usd.toFixed(2)).join("\n") || "No Claude calls yet";
   }
+  renderApprovals(s.approvals || []);
   renderCampaigns(s.campaigns || []);
+  renderLeads(s.leads || []);
   renderAgents(s.agents);
   renderActivity(s.activity);
   try { window.HQWorld?.update(s); } catch (err) { console.error("HQ Town:", err); }   // the town never breaks the dashboard
@@ -467,6 +481,41 @@ function renderCampaigns(list) {
       ${(c.flags || []).length ? `<div class="warn">⚠ ${esc(c.flags.join("; "))}</div>` : ""}${earned}${buttons}</div>`;
   }).join("");
 }
+let shownApprovals = null;
+function renderApprovals(list) {
+  $("apprsection").style.display = list.length ? "" : "none";
+  $("apprcount").textContent = list.length;
+  const key = JSON.stringify(list);
+  if (key === shownApprovals) return;
+  shownApprovals = key;
+  $("approvals").innerHTML = list.map(a => `<div class="camp"><h3>${esc(a.title)} <span class="tag">${esc(a.agent)}</span></h3>
+    <pre>${esc(a.preview)}</pre>
+    <div class="row"><button onclick="decideApproval(${a.id}, 'approve')">${esc(a.yes_label)}</button>
+    <button class="ghost" onclick="decideApproval(${a.id}, 'reject')">${esc(a.no_label)}</button></div></div>`).join("");
+}
+async function decideApproval(id, decision) {
+  const r = await (await fetch(`/api/approvals/${id}/${decision}`, {method: "POST"})).json();
+  toast(esc((r.message || "Done").split("\n")[0]));
+  shownApprovals = null; refresh();
+}
+
+let shownLeads = null;
+const LEAD_STATUSES = ["drafted", "pitched", "replied", "client", "dead", "dropped"];
+function renderLeads(list) {
+  $("leadsection").style.display = list.length ? "" : "none";
+  const key = JSON.stringify(list);
+  if (key === shownLeads) return;
+  shownLeads = key;
+  $("leads").innerHTML = list.map(l => `<div class="leadrow"><b>${esc(l.name)}</b><span class="meta">${esc(l.platform)}</span>
+    <select onchange="setLead(${l.id}, this.value)" aria-label="Status of ${esc(l.name)}">${LEAD_STATUSES.map(s =>
+      `<option ${s === l.status ? "selected" : ""}>${s}</option>`).join("")}</select>
+    <span class="meta">${esc(l.contact || "")}</span></div>`).join("");
+}
+async function setLead(id, status) {
+  await fetch(`/api/leads/${id}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({status})});
+  shownLeads = null; refresh();
+}
+
 async function decideCampaign(id, decision) {
   const r = await (await fetch(`/api/campaigns/${id}/${decision}`, {method: "POST"})).json();
   toast(r.message || "Done");

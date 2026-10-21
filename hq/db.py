@@ -90,6 +90,35 @@ CREATE TABLE IF NOT EXISTS submissions (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS approvals (
+    id INTEGER PRIMARY KEY,
+    agent TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    preview TEXT NOT NULL,
+    payload TEXT NOT NULL DEFAULT '{}',
+    yes_label TEXT NOT NULL DEFAULT 'Approve',
+    no_label TEXT NOT NULL DEFAULT 'Reject',
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending, approved, rejected
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
+CREATE TABLE IF NOT EXISTS leads (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    handle TEXT NOT NULL,
+    followers INTEGER,                           -- live viewers when found, or followers
+    contact TEXT,
+    notes TEXT,
+    pitch TEXT,
+    status TEXT NOT NULL DEFAULT 'new',          -- new, drafted, pitched, replied, client, dead, dropped
+    followups INTEGER NOT NULL DEFAULT 0,
+    followup_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (platform, handle)
+);
 CREATE TABLE IF NOT EXISTS relay_sent (
     kind TEXT NOT NULL,
     ref_id INTEGER NOT NULL,

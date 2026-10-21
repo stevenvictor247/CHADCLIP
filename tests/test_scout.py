@@ -24,7 +24,7 @@ def test_vet_proposes_a_campaign_and_asks_on_the_phone(monkeypatch):
     monkeypatch.setattr(llm, "HAS_LLM", True)
     monkeypatch.setattr(llm, "ask_json", lambda *a, **k: dict(DATA))
     asked = []
-    monkeypatch.setattr(relay, "ask", lambda text, kind, ref: asked.append((kind, ref)))
+    monkeypatch.setattr(relay, "ask", lambda text, kind, ref, **kw: asked.append((kind, ref)))
     out = scout_pkg.Scout().run({"params": json.dumps({"text": "campaign page", "url": "https://whop.com/x",
                                                        "sources": ["https://youtube.com/@kai/videos"]})})
     c = campaigns.all_campaigns()[0]

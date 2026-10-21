@@ -101,6 +101,17 @@ posted clip becomes a "to submit" entry. Scout lists those every 6 hours. After 
 the Boss the views and earnings and Scout keeps the totals on the dashboard. Whop has no public API for clippers, so
 the submitting and the numbers are manual for now.
 
+## Pitch (clients)
+
+Pitch finds streamers and podcasters who might pay you to clip for them and drafts a short, personal message for each.
+It only drafts: every message waits in "Waiting for your OK" (dashboard and phone). Tap "I'll send it", copy the text,
+and send it yourself. Pitch then reminds you to follow up after 4 days (twice at most) and keeps a Leads list.
+
+Fill in `config/pitch.yaml` first (your name, one honest line about you, what you offer, price). Then ask the Boss
+"have Pitch find 5 streamers", or give it someone you found: `{"lead": {"name": ..., "platform": ..., "handle": ...,
+"contact": ..., "notes": ...}}`. Finding streamers uses the Twitch app keys in `.env`. Messages never send themselves,
+because platforms ban accounts that automate this and spam laws apply to cold email (honest subject, opt-out line).
+
 ## Relay (phone)
 
 Relay is a private Telegram bot. Message it to talk to the Boss, get each new clip as a video with Approve and

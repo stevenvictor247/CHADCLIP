@@ -34,6 +34,33 @@ def top_streamers(n: int = 10) -> list[dict]:
             for s in r.json()["data"]][:n]
 
 
+def small_streamers(min_viewers: int, max_viewers: int, language: str = "en", max_pages: int = 8) -> list[dict]:
+    """Live channels with between min and max viewers. Twitch lists streams from most-watched down, so this pages
+    past the big ones (100 channels a page) and keeps the mid-size ones."""
+    out, cursor = [], None
+    for _ in range(max_pages):
+        params = {"first": 100, "language": language, **({"after": cursor} if cursor else {})}
+        r = requests.get(f"{HELIX}/streams", headers=_headers(), params=params, timeout=30)
+        r.raise_for_status()
+        body = r.json()
+        for s in body["data"]:
+            if min_viewers <= s["viewer_count"] <= max_viewers:
+                out.append({"login": s["user_login"], "name": s["user_name"], "id": s["user_id"],
+                            "viewers": s["viewer_count"], "game": s.get("game_name", "")})
+        cursor = (body.get("pagination") or {}).get("cursor")
+        if not cursor or (body["data"] and body["data"][-1]["viewer_count"] < min_viewers):
+            break
+    return out
+
+
+def profile(user_id: str) -> dict:
+    """A channel's public bio and partner level."""
+    r = requests.get(f"{HELIX}/users", headers=_headers(), params={"id": user_id}, timeout=30)
+    r.raise_for_status()
+    u = (r.json()["data"] or [{}])[0]
+    return {"bio": u.get("description", ""), "type": u.get("broadcaster_type", "")}
+
+
 def top_clips(broadcaster_id: str, days: int = 1, limit: int = 5) -> list[dict]:
     """Most-viewed clips from the last `days` days (Twitch returns them sorted by views)."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
