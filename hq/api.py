@@ -30,6 +30,15 @@ class ClipEdit(BaseModel):
     caption: str | None = None
 
 
+def _library() -> list[dict]:
+    """Clips that have left the approval queue, newest first, with where each was posted."""
+    clips = db.rows("SELECT * FROM clips WHERE status != 'pending_approval' ORDER BY id DESC LIMIT 100")
+    posts = db.rows("SELECT clip_id, platform, account, status, url, error FROM posts ORDER BY id")
+    for c in clips:
+        c["posts"] = [p for p in posts if p["clip_id"] == c["id"]]
+    return clips
+
+
 @app.on_event("startup")
 def _startup():
     db.init()
@@ -49,6 +58,7 @@ def state():
                   [{"name": a.name, "role": a.role, "doing": running.get(a.name)} for a in agents.AGENTS.values()],
         "counts": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},
         "pending": db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY score DESC, id"),
+        "clips": _library(),
         "tasks": db.rows("SELECT * FROM tasks ORDER BY id DESC LIMIT 20"),
         "posts": db.rows("SELECT * FROM posts ORDER BY id DESC LIMIT 20"),
         "activity": db.rows("SELECT * FROM activity ORDER BY id DESC LIMIT 40"),
