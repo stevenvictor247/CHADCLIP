@@ -4,7 +4,7 @@ import hashlib
 import json
 import threading
 
-from . import agents, db, llm, review
+from . import agents, db, ledger, llm, review
 from .config import BOSS_MODEL, VISION_PATH
 
 SYSTEM = """You are the Boss, the head of an AI agent team that runs parts of Steven's online business.
@@ -83,6 +83,7 @@ def get_status() -> dict:
         "clips_by_status": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},
         "recent_posts": db.rows("SELECT clip_id, platform, account, status, url, error, created_at FROM posts ORDER BY id DESC LIMIT 10"),
         "activity": db.rows("SELECT agent, message, created_at FROM activity ORDER BY id DESC LIMIT 15"),
+        "claude_spend": ledger.summary(),
     }
 
 
@@ -192,7 +193,7 @@ def _chat(text: str) -> str:
     db.log("Steven", text[:200])
 
     for _ in range(25):
-        response = llm.create(BOSS_MODEL, SYSTEM, messages, tools=TOOLS, effort="medium")
+        response = llm.create(BOSS_MODEL, SYSTEM, messages, tools=TOOLS, effort="medium", agent="Boss")
         content = [b.model_dump(mode="json", exclude_none=True) for b in response.content]
         messages.append({"role": "assistant", "content": content})
         _save(conv, "assistant", content)

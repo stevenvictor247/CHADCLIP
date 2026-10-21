@@ -89,6 +89,15 @@ Set `enabled: true` on an account once its secrets are in `.env`.
 Subclass `Agent` in `hq/agents/base.py`, implement `run(task)`, and add it to `hq/agents/__init__.py`.
 The Boss, task queue, scheduler and dashboard pick it up automatically.
 
+## Models and cost
+
+Each agent uses the cheapest Claude model that does its job: the Boss on Opus 5.5, Chad on Sonnet 5.5, and every
+simpler agent on Haiku 5.5 (about 40 times cheaper than Opus). Change any of them in `.env` with
+`HQ_MODEL_<NAME>=...`, for example `HQ_MODEL_CHAD=claude-opus-5-5`.
+
+The dashboard's money tile (the Ledger) shows what Claude cost today and this month, per agent. Set
+`HQ_DAILY_BUDGET=2` in `.env` to stop scheduled agent work for the day once spending reaches $2.
+
 ## Safe defaults
 
 - Nothing posts until you approve it (`HQ_REQUIRE_APPROVAL=true`).

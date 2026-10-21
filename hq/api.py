@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, boss, db
+from . import agents, boss, db, ledger
 from .config import CLIPS_DIR, HAS_LLM, PASSWORD
 
 app = FastAPI(title="Agent HQ")
@@ -95,6 +95,7 @@ def state():
     running = {r["agent"]: r["instructions"] for r in db.rows("SELECT agent, instructions FROM tasks WHERE status = 'running'")}
     return {
         "has_llm": HAS_LLM,
+        "spend": ledger.summary(),
         "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None}] +
                   [{"name": a.name, "role": a.role, "doing": running.get(a.name)} for a in agents.AGENTS.values()],
         "counts": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},

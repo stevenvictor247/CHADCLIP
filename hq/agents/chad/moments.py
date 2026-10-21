@@ -1,7 +1,7 @@
 """Choosing which parts of a video become clips."""
 
 from ... import llm
-from ...config import AGENT_MODEL
+from ...config import model_for
 
 SYSTEM = """You are Chad, a short-form video clipper. You find the moments in long videos that will
 perform best as TikToks, YouTube Shorts and Instagram Reels.
@@ -51,7 +51,7 @@ def pick(transcript: dict | None, duration: float, video_title: str, creator: di
             f"seconds long, not overlapping. Start and end on sentence boundaries from the transcript.\n\n"
             f"Transcript:\n{lines}"
         )
-        moments = llm.ask_json(AGENT_MODEL, SYSTEM, prompt, SCHEMA)["moments"]
+        moments = llm.ask_json(model_for("chad"), SYSTEM, prompt, SCHEMA, agent="Chad")["moments"]
     else:
         moments = _fallback(transcript, duration, video_title, count, max_len)
     return _clean(moments, duration, count, min_len, max_len)
