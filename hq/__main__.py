@@ -13,6 +13,8 @@ def main():
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--host", default="127.0.0.1")
 
+    sub.add_parser("app", help="Open HQ in its own window (starts HQ if it isn't running)")
+    sub.add_parser("install-shortcut", help="Put an Agent HQ icon on the Windows Desktop")
     sub.add_parser("worker", help="Run only the background worker")
     sub.add_parser("chat", help="Talk to the Boss in the terminal")
     sub.add_parser("report", help="Ask the Boss for a status report")
@@ -45,6 +47,12 @@ def main():
         from .worker import start_in_background
         start_in_background()
         uvicorn.run("hq.api:app", host=args.host, port=args.port)
+    elif args.cmd == "app":
+        from .desktop import open_app
+        open_app()
+    elif args.cmd == "install-shortcut":
+        from .desktop import install_shortcut
+        print(f"Added {install_shortcut()}")
     elif args.cmd == "worker":
         from .worker import loop
         loop()

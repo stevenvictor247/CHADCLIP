@@ -11,3 +11,4 @@ google-auth-oauthlib
 pytest
 httpx
 python-multipart
+pywebview
