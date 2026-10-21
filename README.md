@@ -9,35 +9,43 @@ You  ->  Boss (Claude)  ->  tasks  ->  Chad  ->  clips waiting for your approval
               +---------- status reports <---------------+
 ```
 
-## Run it
+## Install (Windows)
+
+Download `Install-Agent-HQ.bat` and double-click it. It installs Git, Python and ffmpeg if they're missing, puts HQ in
+`C:\Users\<you>\CHADCLIP`, brings over your data, keys and edited config from older copies (like a ZIP in Downloads),
+and adds an **Agent HQ** icon to your Desktop. Run it again any time something seems broken: it's safe to repeat.
+
+After that you never download a ZIP or edit `.env` again:
+
+- **Updates**: the icon gets the newest HQ from GitHub each time it opens. While HQ runs, a green "Update ready" bar
+  appears on the dashboard when there's new code; press **Update and restart**. If you (or the Boss) changed a file in
+  `config/`, your version is kept. Any other file you edited is saved to `data/update-backups/` first, so an edit can
+  never block an update.
+- **Settings**: press **⚙️ Settings** on the dashboard to paste API keys, tokens and options, and to turn posting
+  accounts on. They're saved in `data/settings.json` (never touched by updates) and win over `.env`, which still works.
+  New settings appear there by themselves when they're added to `.env.example`.
+
+The Desktop icon opens HQ in its own window. Closing the window stops HQ (and the agents), so minimize it instead if
+you want Chad to keep working. If HQ is already running from `start-hq.bat`, the icon just opens a window onto it.
+If the window doesn't open, look in `data/desktop-app.log`.
+
+## Run it by hand (Mac, Linux, developers)
 
 ```bash
 pip install -r requirements.txt        # also needs ffmpeg installed
-cp .env.example .env                   # add ANTHROPIC_API_KEY
-python -m hq serve                     # dashboard at http://127.0.0.1:8000, worker runs in the same process
+python -m hq serve                     # dashboard at http://127.0.0.1:8000, then add your keys under Settings
 ```
 
 Other commands: `python -m hq chat` (talk to the Boss in the terminal), `python -m hq report`,
-`python -m hq chad --file some.mp4` (try Chad on a local video), `python -m hq publish`.
-
-## Desktop app (Windows)
-
-Double-click `install-desktop-app.bat` once. It installs what the app needs and puts an **Agent HQ** icon on your
-Desktop. Double-click that icon to open HQ in its own window, no terminal needed. Closing the window stops HQ (and
-the agents), so minimize it instead if you want Chad to keep working. If HQ is already running from `start-hq.bat`,
-the icon just opens a window onto it. If you move the HQ folder, run `install-desktop-app.bat` again.
-Each time you open it, the icon first grabs the latest HQ code from GitHub (and installs any new requirements), so
-you never need to pull by hand. This needs HQ to be a git copy (`git clone`), not a downloaded ZIP. Your `data/`
-folder and `.env` are never touched, and if an update would overwrite a file you edited (like something in
-`config/`), HQ skips the update and opens as it is. `start-hq.bat` updates the same way, or run `python -m hq update`.
-If the window doesn't open, look in `data/desktop-app.log`. You can also run `python -m hq app` from a terminal.
+`python -m hq chad --file some.mp4` (try Chad on a local video), `python -m hq publish`, `python -m hq update`,
+`python -m hq app` (the desktop window).
 
 ## Open HQ from your other computers
 
 Keep HQ running on one computer (your Windows PC) and open its dashboard from anywhere, like your Mac:
 
 1. Install [Tailscale](https://tailscale.com/download) on both computers and sign in with the same account.
-2. On the PC, put a password in `.env`: `HQ_PASSWORD=pick-something-long`.
+2. On the PC, open ⚙️ Settings and set `HQ_PASSWORD` to something long.
 3. On the PC, allow Tailscale devices through the Windows firewall (PowerShell as administrator, once):
    `New-NetFirewallRule -DisplayName "Agent HQ" -Direction Inbound -Protocol TCP -LocalPort 8000 -RemoteAddress 100.64.0.0/10 -Action Allow`
 4. Double-click `start-hq.bat` instead of running `python -m hq serve`.
@@ -82,7 +90,7 @@ Tune it in `config/chad.yaml` (clips per video, length, how often it checks, cap
 | YouTube Shorts | A Google Cloud project with YouTube Data API v3, an OAuth client file, then `python -m hq connect-youtube <account>` once. New projects get roughly 6 uploads per day of quota. |
 | Instagram Reels | A Business or Creator account linked to a Facebook page, the account's ID and token, and `HQ_PUBLIC_BASE_URL` pointing at where `data/clips` is reachable from the internet. |
 
-Set `enabled: true` on an account once its secrets are in `.env`.
+Paste each account's secrets under ⚙️ Settings, then switch the account on there.
 
 ## Adding the next agent
 
@@ -131,7 +139,8 @@ The dashboard's money tile (the Ledger) shows what Claude cost today and this mo
 
 - Nothing posts until you approve it (`HQ_REQUIRE_APPROVAL=true`).
 - Each platform's failure is recorded and doesn't block the others.
-- Secrets live only in `.env` and `config/secrets/`, both git-ignored.
+- Secrets live only in `data/settings.json`, `.env` and `config/secrets/`, all git-ignored. The Settings page never
+  sends a saved key back to the browser, only its last four characters.
 
 ## Clipping the top Twitch streamers
 

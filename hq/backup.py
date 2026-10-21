@@ -6,7 +6,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from .config import CLIPS_DIR, CONFIG_DIR, DATA_DIR, DB_PATH, ROOT
+from .config import CLIPS_DIR, CONFIG_DIR, DATA_DIR, DB_PATH, ROOT, SETTINGS_PATH
 
 BACKUP_DIR = DATA_DIR / "backups"
 
@@ -24,6 +24,8 @@ def make_backup(with_clips: bool = False, keep: int = 14) -> Path:
         files = [p for p in CONFIG_DIR.rglob("*") if p.is_file()]
         if (ROOT / ".env").exists():
             files.append(ROOT / ".env")
+        if SETTINGS_PATH.exists():
+            files.append(SETTINGS_PATH)
         if with_clips:
             files += [p for p in CLIPS_DIR.rglob("*") if p.is_file()]
         for p in files:

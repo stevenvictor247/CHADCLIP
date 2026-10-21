@@ -48,6 +48,7 @@ Wants=network-online.target
 User=hq
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
+Environment=HQ_SUPERVISED=1
 ExecStart=$APP_DIR/.venv/bin/python -m hq serve --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5

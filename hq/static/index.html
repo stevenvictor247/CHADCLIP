@@ -215,7 +215,7 @@
     </section>
     <section>
       <h2>Talk to the Boss</h2>
-      <p id="nokey" class="nokey" style="display:none">No Anthropic API key found. Put it after ANTHROPIC_API_KEY= in the .env file, save, then stop and restart the app.</p>
+      <p id="nokey" class="nokey" style="display:none">No Anthropic API key yet. Open <a href="/settings" style="color:var(--accent)">⚙️ Settings</a>, paste it into ANTHROPIC_API_KEY and press Save.</p>
       <div id="chatlog"></div>
       <form id="chatform">
         <input id="chatinput" placeholder="Tell the Boss what you want…" autocomplete="off">
@@ -255,6 +255,7 @@
 </main>
 <div id="toasts"></div>
 <script src="/world.js"></script>
+<script src="/hq-bar.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));

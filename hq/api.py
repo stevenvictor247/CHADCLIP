@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, db, ledger
+from . import agents, approvals, boss, campaigns, db, ledger, settings, update
 from .config import CLIPS_DIR, HAS_LLM, PASSWORD
 
 app = FastAPI(title="Agent HQ")
@@ -45,6 +45,17 @@ class TaskIn(BaseModel):
     params: dict = {}
 
 
+class SettingsIn(BaseModel):
+    values: dict[str, str] = {}
+    accounts: dict[str, bool] = {}
+
+
+def _from_hq_page(request: Request):
+    """Settings, updates and restarts only answer HQ's own pages (a custom header other websites can't send)."""
+    if request.headers.get("x-hq") != "1":
+        raise HTTPException(403, "Use the HQ dashboard for this")
+
+
 class ClipEdit(BaseModel):
     title: str | None = None
     caption: str | None = None
@@ -62,6 +73,7 @@ def _library() -> list[dict]:
 @app.on_event("startup")
 def _startup():
     db.init()
+    update.check_in_background()
 
 
 @app.get("/login")
@@ -89,6 +101,16 @@ def logout():
 def index():
     # no-cache: the browser checks for a newer page each time, so updates show up without Ctrl+F5
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/settings")
+def settings_page():
+    return FileResponse(STATIC / "settings.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/hq-bar.js")
+def hq_bar():
+    return FileResponse(STATIC / "hq-bar.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/world.js")
@@ -210,3 +232,45 @@ def edit_clip(clip_id: int, body: ClipEdit):
     if body.caption is not None:
         db.execute("UPDATE clips SET caption = ? WHERE id = ?", body.caption, clip_id)
     return {"ok": True}
+
+
+@app.get("/api/settings")
+def get_settings():
+    return settings.describe()
+
+
+@app.post("/api/settings")
+def save_settings(body: SettingsIn, request: Request):
+    _from_hq_page(request)
+    try:
+        changed = settings.save(body.values)
+        for name, enabled in body.accounts.items():
+            settings.set_account_enabled(name, enabled)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(400, str(e))
+    if changed or body.accounts:
+        db.log("Steven", "Changed settings: " + ", ".join(changed + [f"{n} account" for n in body.accounts]))
+    return {"changed": changed}
+
+
+@app.get("/api/update")
+def update_status(refresh: bool = False):
+    return update.check(force=refresh)
+
+
+@app.post("/api/update")
+def install_update(request: Request):
+    _from_hq_page(request)
+    if not update.update():
+        status = update.check(force=True)
+        return {"updated": False, "message": status["error"] or "HQ is already up to date."}
+    db.log("Steven", "Updated HQ to the newest version")
+    update.restart()
+    return {"updated": True, "message": "Updated. HQ is restarting."}
+
+
+@app.post("/api/restart")
+def restart(request: Request):
+    _from_hq_page(request)
+    update.restart()
+    return {"restarting": True}

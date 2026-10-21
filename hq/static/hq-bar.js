@@ -1,0 +1,59 @@
+// Adds the Settings button and the "update available" banner to the dashboard header.
+(function () {
+  const css = `
+    .hqbar-btn { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:12px; padding:8px 12px;
+                 font:inherit; font-weight:700; cursor:pointer; text-decoration:none; display:inline-flex; gap:6px; align-items:center; }
+    .hqbar-btn:hover { border-color:var(--accent); }
+    #hq-update { position:relative; z-index:2; display:none; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 22px;
+                 background:linear-gradient(90deg, rgba(74,222,128,.18), rgba(124,196,255,.14)); border-bottom:1px solid var(--line); }
+    #hq-update.zip { background:rgba(248,113,113,.14); }
+    #hq-update b { margin-right:4px; }
+    #hq-update .what { color:var(--muted); font-size:13px; flex:1; min-width:200px; }
+    #hq-update button { background:linear-gradient(135deg, var(--good), var(--sky)); color:#0d1a12; border:0; border-radius:10px;
+                        padding:8px 14px; font:inherit; font-weight:800; cursor:pointer; }
+    #hq-update button:disabled { opacity:.6; cursor:wait; }`;
+  document.head.insertAdjacentHTML("beforeend", `<style>${css}</style>`);
+
+  const header = document.querySelector("header");
+  if (!header) return;
+  header.insertAdjacentHTML("beforeend", `<a class="hqbar-btn" href="/settings" title="API keys, accounts and options">⚙️ Settings</a>`);
+  header.insertAdjacentHTML("afterend", `<div id="hq-update"></div>`);
+  const bar = document.getElementById("hq-update");
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+
+  async function waitForRestart() {
+    bar.innerHTML = `<b>🔄 Restarting HQ…</b><span class="what">This page reloads by itself in a few seconds.</span>`;
+    await new Promise(r => setTimeout(r, 4000));
+    for (let i = 0; i < 60; i++) {
+      try { if ((await fetch("/api/update")).ok) return location.reload(); } catch (e) {}
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    bar.innerHTML = `<b>HQ hasn't come back yet.</b><span class="what">Close the window and open the Agent HQ icon again.</span>`;
+  }
+  window.hqWaitForRestart = waitForRestart;
+
+  async function check() {
+    let s;
+    try { s = await (await fetch("/api/update")).json(); } catch (e) { return; }
+    if (!s.git) {
+      bar.className = "zip"; bar.style.display = "flex";
+      bar.innerHTML = `<b>This copy of HQ can't update itself.</b><span class="what">It came from a ZIP download. Run Install-Agent-HQ.bat once and HQ keeps itself up to date from then on.</span>`;
+    } else if (s.available) {
+      bar.className = ""; bar.style.display = "flex";
+      const list = s.changes.length ? "New: " + s.changes.map(esc).join(" · ") : "";
+      bar.innerHTML = `<b>✨ Update ready (${s.count} change${s.count === 1 ? "" : "s"})</b><span class="what">${list}</span><button id="hq-do-update">Update and restart</button>`;
+      document.getElementById("hq-do-update").onclick = async e => {
+        e.target.disabled = true; e.target.textContent = "Updating…";
+        try {
+          const r = await (await fetch("/api/update", {method: "POST", headers: {"X-HQ": "1"}})).json();
+          if (r.updated) return waitForRestart();
+          bar.innerHTML = `<b>Couldn't update.</b><span class="what">${esc(r.message)}</span>`;
+        } catch (err) { waitForRestart(); }
+      };
+    } else {
+      bar.style.display = "none";
+    }
+  }
+  check();
+  setInterval(check, 10 * 60 * 1000);
+})();
