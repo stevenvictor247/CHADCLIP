@@ -329,7 +329,10 @@ function renderActivity(items) {
 
 async function refresh() {
   let s;
-  try { s = await (await fetch("/api/state")).json(); $("live").className = "live"; $("live").textContent = "Live"; }
+  try {
+    const r = await fetch("/api/state");
+    if (r.status === 401) { location.href = "/login"; return; }
+    s = await r.json(); $("live").className = "live"; $("live").textContent = "Live"; }
   catch { $("live").className = "live off"; $("live").textContent = "Offline"; return; }
   for (const k of ["approved", "posted", "failed"]) setCount(k, s.counts[k] || 0);
   setCount("pending", s.counts.pending_approval || 0);

@@ -61,6 +61,17 @@ def daily_report(state: dict):
         db.log("Boss", "Daily report: " + boss.report())
 
 
+def daily_backup(state: dict):
+    today = datetime.now().strftime("%Y-%m-%d")
+    if state.get("last_backup") != today:
+        from .backup import make_backup
+        state["last_backup"] = today
+        try:
+            make_backup()
+        except Exception as e:  # a failed backup shouldn't stop the agents
+            db.log("HQ", f"Daily backup failed: {e}")
+
+
 def tick():
     state = _state()
     queue_scheduled(state)
@@ -70,6 +81,7 @@ def tick():
         pass
     publish_approved()
     daily_report(state)
+    daily_backup(state)
     _save_state(state)
 
 

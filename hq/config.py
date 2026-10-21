@@ -31,6 +31,9 @@ WHISPER_MODEL = os.getenv("HQ_WHISPER_MODEL", "small")
 # Clips wait for your approval before posting unless this is set to "false".
 REQUIRE_APPROVAL = os.getenv("HQ_REQUIRE_APPROVAL", "true").lower() != "false"
 
+# Password for the dashboard. Leave empty on your own computer; always set it on a server.
+PASSWORD = os.getenv("HQ_PASSWORD", "")
+
 # Public base URL where data/clips is served. Instagram fetches videos from a URL,
 # so it needs this to be reachable from the internet (e.g. via a tunnel or bucket).
 PUBLIC_BASE_URL = os.getenv("HQ_PUBLIC_BASE_URL", "").rstrip("/")
