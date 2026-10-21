@@ -128,3 +128,31 @@ def test_zip_copy_says_it_cannot_update(monkeypatch, tmp_path):
     monkeypatch.setattr(hq.update, "ROOT", tmp_path / "zip")
     assert hq.update.check(force=True)["git"] is False
     assert hq.update.update() is False
+
+
+def test_updates_wait_until_github_tests_pass(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path / "data")
+    upstream, origin, home = tmp_path / "upstream", tmp_path / "origin.git", tmp_path / "home"
+    upstream.mkdir()
+    _git(upstream, "init", "-q", "-b", "main")
+    _commit(upstream, {"hq/code.py": "v1\n"}, "first")
+    _git(tmp_path, "clone", "-q", "--bare", str(upstream), str(origin))
+    _git(tmp_path, "clone", "-q", str(origin), str(home))
+    monkeypatch.setattr(hq.update, "ROOT", home)
+    monkeypatch.setattr(hq.update, "DATA_DIR", tmp_path / "data")
+
+    # GitHub marks v1 as tested, then a v2 lands on main whose tests haven't passed yet.
+    _git(upstream, "push", "-q", str(origin), "main:tested")
+    _commit(upstream, {"hq/code.py": "v2\n"}, "Untested change")
+    _git(upstream, "push", "-q", str(origin), "main")
+    status = hq.update.check(force=True)
+    assert status["tested"] and not status["available"] and status["testing"] == 1
+    assert hq.update.update() is False
+    assert (home / "hq/code.py").read_text() == "v1\n"
+
+    # The tests pass, GitHub moves tested forward, and now the update installs.
+    _git(upstream, "push", "-q", str(origin), "main:tested")
+    status = hq.update.check(force=True)
+    assert status["available"] and status["changes"] == ["Untested change"] and status["testing"] == 0
+    assert hq.update.update() is True
+    assert (home / "hq/code.py").read_text() == "v2\n"

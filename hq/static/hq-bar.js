@@ -7,6 +7,7 @@
     #hq-update { position:relative; z-index:2; display:none; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 22px;
                  background:linear-gradient(90deg, rgba(74,222,128,.18), rgba(124,196,255,.14)); border-bottom:1px solid var(--line); }
     #hq-update.zip { background:rgba(248,113,113,.14); }
+    #hq-update.testing { background:rgba(124,196,255,.10); }
     #hq-update b { margin-right:4px; }
     #hq-update .what { color:var(--muted); font-size:13px; flex:1; min-width:200px; }
     #hq-update button { background:linear-gradient(135deg, var(--good), var(--sky)); color:#0d1a12; border:0; border-radius:10px;
@@ -41,7 +42,8 @@
     } else if (s.available) {
       bar.className = ""; bar.style.display = "flex";
       const list = s.changes.length ? "New: " + s.changes.map(esc).join(" · ") : "";
-      bar.innerHTML = `<b>✨ Update ready (${s.count} change${s.count === 1 ? "" : "s"})</b><span class="what">${list}</span><button id="hq-do-update">Update and restart</button>`;
+      const passed = s.tested ? `<span class="what">✅ Passed all tests on GitHub</span>` : "";
+      bar.innerHTML = `<b>✨ Update ready (${s.count} change${s.count === 1 ? "" : "s"})</b><span class="what">${list}</span>${passed}<button id="hq-do-update">Update and restart</button>`;
       document.getElementById("hq-do-update").onclick = async e => {
         e.target.disabled = true; e.target.textContent = "Updating…";
         try {
@@ -50,6 +52,9 @@
           bar.innerHTML = `<b>Couldn't update.</b><span class="what">${esc(r.message)}</span>`;
         } catch (err) { waitForRestart(); }
       };
+    } else if (s.testing) {
+      bar.className = "testing"; bar.style.display = "flex";
+      bar.innerHTML = `<b>🧪 ${s.testing} new change${s.testing === 1 ? " is" : "s are"} being tested</b><span class="what">It shows up here as an update once every test passes on GitHub.</span>`;
     } else {
       bar.style.display = "none";
     }
