@@ -20,7 +20,8 @@ After that you never download a ZIP or edit `.env` again:
 - **Updates**: the icon gets the newest HQ from GitHub each time it opens. While HQ runs, a green "Update ready" bar
   appears on the dashboard when there's new code; press **Update and restart**. If you (or the Boss) changed a file in
   `config/`, your version is kept. Any other file you edited is saved to `data/update-backups/` first, so an edit can
-  never block an update.
+  never block an update. Updates only arrive after GitHub has run every test on Windows and Linux and they all
+  passed; newer changes still being tested show as "being tested" on the dashboard.
 - **Settings**: press **⚙️ Settings** on the dashboard to paste API keys, tokens and options, and to turn posting
   accounts on. They're saved in `data/settings.json` (never touched by updates) and win over `.env`, which still works.
   New settings appear there by themselves when they're added to `.env.example`.
