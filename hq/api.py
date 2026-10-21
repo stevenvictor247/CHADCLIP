@@ -87,7 +87,13 @@ def logout():
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html")
+    # no-cache: the browser checks for a newer page each time, so updates show up without Ctrl+F5
+    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/world.js")
+def world():
+    return FileResponse(STATIC / "world.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/state")
