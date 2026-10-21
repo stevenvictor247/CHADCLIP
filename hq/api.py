@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, boss, campaigns, db, ledger
+from . import agents, approvals, boss, campaigns, db, ledger
 from .config import CLIPS_DIR, HAS_LLM, PASSWORD
 
 app = FastAPI(title="Agent HQ")
@@ -103,6 +103,9 @@ def state():
         "has_llm": HAS_LLM,
         "spend": ledger.summary(),
         "campaigns": campaigns.summary(),
+        "approvals": approvals.pending(),
+        "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at FROM leads "
+                         "ORDER BY id DESC LIMIT 50"),
         "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None}] +
                   [{"name": a.name, "role": a.role, "doing": running.get(a.name)} for a in agents.AGENTS.values()],
         "counts": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},
@@ -164,6 +167,29 @@ def update_submission(submission_id: int, body: SubmissionIn):
         campaigns.record(submission_id, body.views, body.earned_usd, body.status)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/approvals/{approval_id}/{decision}")
+def decide_approval(approval_id: int, decision: str):
+    if decision not in ("approve", "reject"):
+        raise HTTPException(400, "decision must be approve or reject")
+    try:
+        return {"message": approvals.decide(approval_id, decision)}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+class LeadIn(BaseModel):
+    status: str
+
+
+@app.post("/api/leads/{lead_id}")
+def update_lead(lead_id: int, body: LeadIn):
+    from .agents.pitch.agent import STATUSES
+    if body.status not in STATUSES:
+        raise HTTPException(400, f"status must be one of {', '.join(STATUSES)}")
+    db.execute("UPDATE leads SET status = ?, updated_at = ? WHERE id = ?", body.status, db.now(), lead_id)
     return {"ok": True}
 
 

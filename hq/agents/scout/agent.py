@@ -96,7 +96,7 @@ class Scout(Agent):
         cid = campaigns.propose(data, url, sources)
         c = campaigns.get(cid)
         db.log("Scout", f"Found campaign #{cid}: {c['name']} ({c['score']}/10)")
-        relay.ask(describe(c) + "\n\nJoin it?", "campaign", cid)
+        relay.ask(describe(c) + "\n\nJoin it?", "campaign", cid, yes="✅ Join", no="⏭ Skip")
         return describe(c) + "\n\nApprove it on the dashboard (or on your phone) to let Chad start clipping."
 
     def sync(self) -> str:

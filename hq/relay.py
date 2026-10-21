@@ -13,7 +13,7 @@ from pathlib import Path
 
 import requests
 
-from . import boss, db
+from . import db
 
 MAX_VIDEO_BYTES = 49 * 1024 * 1024  # Telegram bots can upload files up to 50 MB
 
@@ -48,19 +48,19 @@ def notify(text: str) -> None:
             traceback.print_exc()
 
 
-def ask(text: str, kind: str, ref: int) -> None:
-    """Send you a message with Approve and Reject buttons. `kind` picks which handler in DECIDERS runs on a tap."""
+def ask(text: str, kind: str, ref: int, yes: str = "✅ Approve", no: str = "❌ Reject") -> None:
+    """Send you a message with two buttons. `kind` picks which handler in DECIDERS runs on a tap."""
     if enabled():
         try:
-            api("sendMessage", chat_id=owner_id(), text=text[:3800], reply_markup=_buttons(kind, ref))
+            api("sendMessage", chat_id=owner_id(), text=text[:3800], reply_markup=_buttons(kind, ref, yes, no))
         except Exception:
             traceback.print_exc()
 
 
-def _buttons(kind: str, ref: int) -> str:
+def _buttons(kind: str, ref: int, yes: str = "✅ Approve", no: str = "❌ Reject") -> str:
     import json
-    return json.dumps({"inline_keyboard": [[{"text": "✅ Join" if kind == "campaign" else "✅ Approve", "callback_data": f"{kind}:approve:{ref}"},
-                                            {"text": "⏭ Skip" if kind == "campaign" else "❌ Reject", "callback_data": f"{kind}:reject:{ref}"}]]})
+    return json.dumps({"inline_keyboard": [[{"text": yes, "callback_data": f"{kind}:approve:{ref}"},
+                                            {"text": no, "callback_data": f"{kind}:reject:{ref}"}]]})
 
 
 # ---- what you can do from your phone ---------------------------------------------------------------
@@ -100,6 +100,7 @@ def handle_message(m: dict) -> None:
     text = (m.get("text") or "").strip()
     if not text:
         return
+    from . import boss  # imported here because the Boss imports the agents, and agents import Relay
     api("sendChatAction", chat_id=m["chat"]["id"], action="typing")
     try:
         reply = boss.chat(text)
