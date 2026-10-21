@@ -7,22 +7,25 @@ import yaml
 from .... import db
 from ....config import CONFIG_DIR
 from ..sources import find_creator
-from . import instagram, tiktok, youtube
+from . import instagram, practice, tiktok, youtube
 
-PLATFORMS = {"tiktok": tiktok, "youtube": youtube, "instagram": instagram}
+PLATFORMS = {"tiktok": tiktok, "youtube": youtube, "instagram": instagram, "practice": practice}
 # TikTok first: it's the top priority.
 ORDER = ["tiktok", "youtube", "instagram"]
 
 
 def load_accounts() -> list[dict]:
+    """accounts.yaml plus the built-in practice account."""
     with open(CONFIG_DIR / "accounts.yaml") as f:
         accounts = (yaml.safe_load(f) or {}).get("accounts") or []
+    accounts = accounts + [practice.account(accounts)]
     return sorted(accounts, key=lambda a: ORDER.index(a["platform"]) if a["platform"] in ORDER else 99)
 
 
 def accounts_for(creator_name: str | None) -> list[dict]:
     allowed = (find_creator(creator_name or "") or {}).get("accounts") or []
-    return [a for a in load_accounts() if a.get("enabled") and (not allowed or a["name"] in allowed)]
+    return [a for a in load_accounts()
+            if a.get("enabled") and (not allowed or a["name"] in allowed or a["platform"] == "practice")]
 
 
 def post_text(clip: dict) -> str:
