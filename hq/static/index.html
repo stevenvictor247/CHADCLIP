@@ -60,6 +60,7 @@
   h2 { font-size:14px; margin:0 0 12px; color:var(--accent); text-transform:uppercase; letter-spacing:.08em; display:flex; align-items:center; gap:8px; }
   h2 .count { background:var(--accent2); color:#2a0d1b; border-radius:999px; padding:0 8px; font-size:12px; letter-spacing:0; }
   .muted { color:var(--muted); font-size:13px; }
+  .bossnote { font-size:13px; padding:6px 8px; border-radius:8px; background:rgba(245,158,11,.14); border:1px solid rgba(245,158,11,.4); }
   .empty { text-align:center; padding:22px 10px; color:var(--muted); }
   .empty .big { font-size:34px; display:block; animation:bob 3s ease-in-out infinite; }
 
@@ -341,9 +342,9 @@ async function refresh() {
   $("nokey").style.display = s.has_llm ? "none" : "block";
   renderChat(s.chat);
   renderLibrary(s.clips);
-  const key = s.pending.map(c => c.id).join(",");
+  const key = JSON.stringify(s.pending.map(c => [c.id, c.boss_note || ""]));  // a new Boss note re-renders too
   if (key !== shownPending) {   // don't re-render while someone may be editing a caption
-    const before = new Set((shownPending || "").split(",").filter(Boolean));
+    const before = new Set(JSON.parse(shownPending || "[]").map(([id]) => String(id)));
     const fresh = s.pending.filter(c => !before.has(String(c.id)));
     if (shownPending !== null && fresh.length) toast(`🎬 <b>${fresh.length} new clip${fresh.length > 1 ? "s" : ""}</b> waiting for you`);
     shownPending = key;
@@ -356,6 +357,7 @@ async function refresh() {
         <input class="title" value="${esc(c.title)}">
         <textarea class="caption">${esc(c.caption)}</textarea>
         <div class="muted">${esc(c.reason)}</div>
+        ${c.boss_note ? `<div class="bossnote">🧐 Boss: ${esc(c.boss_note)}</div>` : ""}
         <div class="row"><button onclick="decide(${c.id}, 'approve')">Approve</button>
         <button class="bad" onclick="decide(${c.id}, 'reject')">Reject</button></div>
       </div>`).join("") : '<div class="empty"><span class="big">🌤️</span>All caught up. Nothing waiting.</div>';

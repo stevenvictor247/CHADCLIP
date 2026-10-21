@@ -52,3 +52,30 @@ def test_library_lists_decided_clips_with_posts():
     assert mine and mine[0]["posts"][0]["platform"] == "tiktok"
     assert all(c["id"] != pend for c in s["clips"])
     assert any(c["id"] == pend for c in s["pending"])
+
+
+def test_boss_review_flags_problem_clips_and_never_approves(tmp_path):
+    from hq import boss, db
+    db.init()
+    good = tmp_path / "good.mp4"
+    good.write_bytes(b"x")
+    ok = db.execute("INSERT INTO clips (creator, source_url, start_s, end_s, path, title, caption, score, reason, "
+                    "captioned, created_at) VALUES ('A', 'https://y/1', 0, 30, ?, 'Big win', "
+                    "'What a moment\n\nCredit: A', 8, 'funny', 1, ?)", str(good), db.now())
+    bad = db.execute("INSERT INTO clips (creator, source_url, start_s, end_s, path, title, caption, score, reason, "
+                     "captioned, created_at) VALUES ('A', 'https://y/1', 10, 40, ?, 'Meh', 'meh', 2, 'filler', 0, ?)",
+                     str(tmp_path / "gone.mp4"), db.now())
+    tid = db.create_task("Chad", "clip", {})
+    db.update_task(tid, "failed", "yt-dlp could not download")
+
+    r = boss.review_chad(24)
+    flagged = {f["clip"]: " | ".join(f["issues"]) for f in r["waiting_for_steven"]["flagged"]}
+    for words in ("missing from disk", "no captions", "no credit", "weak moment", f"overlaps clip #{ok}"):
+        assert words in flagged[bad]
+    assert any(f["task"] == tid for f in r["tasks"]["failed"])
+
+    assert boss.flag_clip(bad, "No captions and a dull moment")["note"]
+    clip = db.rows("SELECT status, boss_note FROM clips WHERE id = ?", bad)[0]
+    assert clip == {"status": "pending_approval", "boss_note": "No captions and a dull moment"}
+    db.set_clip_status(ok, "posted")
+    assert "error" in boss.flag_clip(ok, "too late")

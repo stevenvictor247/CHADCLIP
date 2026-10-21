@@ -43,7 +43,12 @@ cloud server later, see `deploy/cloud/install.sh`.
 Chat with it on the dashboard. It reads `config/vision.md` before every conversation, assigns tasks to
 agents, answers "what's going on", and sends a daily report. Tell it "remember that ..." to add to the
 vision. It only approves or rejects clips when you explicitly tell it to. Without an API key it understands
-`status`, `clip <creator>` and `clip <link>`.
+`status`, `check on chad`, `clip <creator>` and `clip <link>`.
+
+It also checks Chad's work. Say "check on Chad" (and every daily report does it too): it looks at failed or
+stuck tasks, failed posts, and every clip waiting for you, and flags problems like missing captions, no
+credit to the creator, weak moments, near-duplicate clips, clips over 59 seconds or missing video files.
+Flagged clips show a yellow "Boss" note on their approval card. Flagging never approves, rejects or posts.
 
 ## Chad
 

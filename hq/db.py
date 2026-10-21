@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS clips (
     hashtags TEXT,
     score REAL,
     reason TEXT,
+    captioned INTEGER,                           -- 1 if words were burned in, 0 if the clip has no captions
+    boss_note TEXT,                              -- the Boss's review note, shown on the approval card
     status TEXT NOT NULL DEFAULT 'pending_approval', -- pending_approval, approved, rejected, posted, failed
     created_at TEXT NOT NULL
 );
@@ -81,6 +83,11 @@ def connect():
 def init():
     with connect() as c:
         c.executescript(SCHEMA)
+        # Databases made before these columns existed get them added in place.
+        have = {r["name"] for r in c.execute("PRAGMA table_info(clips)")}
+        for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT")):
+            if col not in have:
+                c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
 
 
 def rows(sql: str, *args) -> list[dict]:
