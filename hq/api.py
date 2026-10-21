@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, connections, db, discovery, ledger, settings, setup_check, update
+from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, ledger, settings, setup_check, update
 from .config import CLIPS_DIR, HAS_LLM, PASSWORD, SOURCES_DIR
 
 app = FastAPI(title="Agent HQ")
@@ -135,6 +135,7 @@ def state():
         "spend": ledger.summary(),
         "campaigns": campaigns.summary(),
         "scout_inbox": discovery.inbox(),
+        "creator_picks": creators.pending(),
         "approvals": approvals.pending(),
         "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at FROM leads "
                          "ORDER BY id DESC LIMIT 50"),
@@ -199,6 +200,26 @@ def scout_inbox(body: InboxIn):
         raise HTTPException(400, "Paste a campaign link or its rules first")
     db.create_task("Scout", "Rate what was pasted into the inbox.", {"discover": True}, created_by="Steven")
     return {"message": f"Added {n} to Scout's inbox. Scout is rating it now."}
+
+
+class PermitIn(BaseModel):
+    how: str
+
+
+@app.post("/api/creators/{pick_id}/skip")
+def skip_creator(pick_id: int):
+    try:
+        return {"message": creators.skip(pick_id)}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/api/creators/{pick_id}/permit")
+def permit_creator(pick_id: int, body: PermitIn):
+    try:
+        return {"message": creators.permit(pick_id, body.how)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/api/campaigns/{campaign_id}/submissions")

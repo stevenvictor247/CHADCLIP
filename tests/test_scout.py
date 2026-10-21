@@ -192,3 +192,67 @@ def test_inbox_api_and_settings_field():
     assert any(i["url"] == "https://a.com/x" for i in client.get("/api/state").json()["scout_inbox"])
     keys = {f["key"] for s in settings._sections() for f in s["fields"]}
     assert {"SCOUT_FEED_URLS", "SCOUT_MIN_SCORE", "SCOUT_MAX_PER_RUN"} <= keys
+
+
+# ---- finding creators -----------------------------------------------------------------------------------
+
+from hq import config as hq_config  # noqa: E402
+from hq import creators  # noqa: E402
+
+STREAMERS = [{"login": "bigsam", "name": "BigSam", "id": "1", "viewers": 90000},
+             {"login": "clipfriendly", "name": "ClipFriendly", "id": "2", "viewers": 3000},
+             {"login": "already", "name": "Already", "id": "3", "viewers": 50000}]
+BIOS = {"1": "Variety streamer.", "2": "Business: biz@example.com. Clippers welcome! discord.gg/x", "3": "hi"}
+
+
+@pytest.fixture
+def twitch_stub(monkeypatch, tmp_path):
+    db.execute("DELETE FROM creator_picks")
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "x")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "y")
+    t = scout_pkg.agent.twitch
+    monkeypatch.setattr(t, "top_streamers", lambda n: STREAMERS)
+    monkeypatch.setattr(t, "profile", lambda i: {"bio": BIOS[i], "type": "partner"})
+    monkeypatch.setattr(t, "top_clips", lambda i, days=1, limit=1: [{"title": "lol", "views": 40000 if i == "1" else 500}])
+    monkeypatch.setattr(t, "permissions", lambda: {"already": "campaign"})
+    streamers = tmp_path / "streamers.yaml"
+    streamers.write_text("# notes\npermissions:\n  # kaicenat: \"x\"\n", encoding="utf-8")
+    monkeypatch.setattr(creators, "CONFIG_DIR", tmp_path)
+    return streamers
+
+
+def test_creator_suggestions_rank_clipper_friendly_first_and_skip_permitted(twitch_stub):
+    out = scout_pkg.Scout().run({"params": '{"creators": 5}'})
+    names = [c["name"] for c in creators.pending()]
+    assert names == ["ClipFriendly", "BigSam"] and "Already" not in names and "2 creator" in out
+    assert "mentions clippers" in creators.pending()[0]["signals"]
+    scout_pkg.Scout().run({"params": '{"creators": 5}'})  # nothing is suggested twice
+    assert len(creators.pending()) == 2
+
+
+def test_creators_need_twitch_keys(monkeypatch):
+    monkeypatch.delenv("TWITCH_CLIENT_ID", raising=False)
+    assert "Twitch keys" in scout_pkg.Scout().run({"params": '{"creators": 5}'})
+
+
+def test_recording_permission_writes_streamers_yaml_for_chad(twitch_stub):
+    scout_pkg.Scout().run({"params": '{"creators": 5}'})
+    pick = creators.pending()[0]
+    with pytest.raises(ValueError):
+        creators.permit(pick["id"], "ok")  # too vague to count as a recorded permission
+    creators.permit(pick["id"], 'clipping program, joined "today"')
+    import yaml
+    assert yaml.safe_load(twitch_stub.read_text())["permissions"]["clipfriendly"] == 'clipping program, joined "today"'
+    assert "# notes" in twitch_stub.read_text() and pick["id"] not in [c["id"] for c in creators.pending()]
+
+
+def test_creator_api(twitch_stub):
+    from fastapi.testclient import TestClient
+
+    from hq.api import app
+    scout_pkg.Scout().run({"params": '{"creators": 5}'})
+    client = TestClient(app)
+    picks = client.get("/api/state").json()["creator_picks"]
+    assert client.post(f"/api/creators/{picks[0]['id']}/skip").status_code == 200
+    assert client.post(f"/api/creators/{picks[1]['id']}/permit", json={"how": "x"}).status_code == 400
+    assert client.post("/api/creators/999999/skip").status_code == 404
