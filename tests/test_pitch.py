@@ -40,7 +40,7 @@ def test_manual_lead_gets_a_draft_waiting_for_approval(_setup):
     lead = db.rows("SELECT * FROM leads")[0]
     assert lead["status"] == "drafted" and "Subject: Clips for your stream" in lead["pitch"]
     pending = approvals.pending()
-    assert len(pending) == 1 and pending[0]["payload"] == {"lead_id": lead["id"]} and pending[0]["yes_label"] == "I'll send it"
+    assert len(pending) == 1 and pending[0]["payload"] == {"lead_id": lead["id"], "email": False} and pending[0]["yes_label"] == "I'll send it"
     assert _setup["asked"], "the phone was asked too"
     assert "already a lead" in run({"lead": {"name": "Sam", "platform": "youtube", "handle": "sam"}})
 
@@ -310,3 +310,11 @@ def test_followup_without_email_stays_a_reminder(gmail):
     before = len([p for p in approvals.pending() if p["kind"] == "followup"])
     assert "Follow up with Disc" in run({"followups": True})
     assert len([p for p in approvals.pending() if p["kind"] == "followup"]) == before
+
+
+def test_a_draft_made_before_gmail_was_set_up_never_emails(monkeypatch, gmail):
+    monkeypatch.delenv("PITCH_EMAIL_APP_PASSWORD")
+    a = _draft()
+    assert a["yes_label"] == "I'll send it" and a["payload"]["email"] is False
+    monkeypatch.setenv("PITCH_EMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")  # set up after the card was shown
+    assert "Send this to" in approvals.decide(a["id"], "approve") and gmail == []
