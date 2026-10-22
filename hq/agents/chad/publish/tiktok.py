@@ -10,6 +10,8 @@ import time
 
 import requests
 
+from .... import tiktok_auth
+
 API = "https://open.tiktokapis.com/v2"
 MIN_CHUNK, MAX_CHUNK = 5 * 1024 * 1024, 64 * 1024 * 1024
 CHUNK = 10 * 1024 * 1024
@@ -23,7 +25,8 @@ def _chunks(size: int) -> tuple[int, int]:
 
 
 def publish(clip: dict, account: dict) -> tuple[str, str | None]:
-    token = os.environ[account["access_token_env"]]
+    # A connected TikTok (Settings page) renews itself; a token pasted into the account's field is used as before.
+    token = tiktok_auth.access_token() or os.environ[account["access_token_env"]]
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8"}
     path = clip["path"]
     size = os.path.getsize(path)

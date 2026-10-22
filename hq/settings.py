@@ -139,7 +139,8 @@ def describe() -> dict:
                       "test": f"account:{a.get('name')}",
                       "fields": [{"key": k, "help": "", "example": "", **_value(k)} for k in keys if k not in listed]})
     last = {name: {"ok": r["ok"], "message": r["message"]} for name, r in tests.items()}
-    return {"sections": sections, "accounts": accts, "tests": last, "pitch": pitch_describe()}
+    from . import tiktok_auth
+    return {"tiktok": tiktok_auth.status(), "sections": sections, "accounts": accts, "tests": last, "pitch": pitch_describe()}
 
 
 def save(values: dict) -> list[str]:

@@ -112,9 +112,14 @@ def twitch(values=None) -> dict:
 
 
 def tiktok(account: dict, values=None) -> dict:
+    from . import tiktok_auth
     token = _v(account.get("access_token_env", ""), values)
+    try:
+        token = token or tiktok_auth.access_token() or ""
+    except tiktok_auth.TikTokError as e:
+        return _bad(str(e))
     if not token:
-        return _bad(f"No access token for {account['name']} yet.")
+        return _bad(f"No access token for {account['name']} yet. Use Connect TikTok on this page.")
     try:
         r = requests.get("https://open.tiktokapis.com/v2/user/info/", timeout=TIMEOUT,
                          params={"fields": "display_name"}, headers={"Authorization": f"Bearer {token}"})
