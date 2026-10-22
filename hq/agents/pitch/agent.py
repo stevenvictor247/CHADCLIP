@@ -67,7 +67,7 @@ def _unsent(lead: dict, why: str) -> str:
     """The email didn't go: put the same draft back in the queue so one tap tries again."""
     approvals.request("Pitch", "pitch", f"Pitch to {lead['name']} ({lead['platform']}): NOT SENT",
                       f"Not sent: {why}\nContact: {lead['contact']}\n\n{lead['pitch']}",
-                      {"lead_id": lead["id"]}, yes="Try again", no="Drop")
+                      {"lead_id": lead["id"], "email": True}, yes="Try again", no="Drop")
     return f"Not sent: {why} I put {lead['name']}'s draft back in Waiting for your OK."
 
 
@@ -99,7 +99,7 @@ def _handle_pitch_decision(payload: dict, decision: str) -> str:
     cfg = settings()
     days = float(cfg.get("followup_days", 4))
     to = mailer.address_in(lead["contact"])
-    if to and mailer.configured():
+    if to and mailer.configured() and payload.get("email"):  # only if the card said "Send email" when Steven read it
         if mailer.blocked(to):
             db.execute("UPDATE leads SET status = 'do_not_contact', updated_at = ? WHERE id = ?", db.now(), lead["id"])
             return f"{to} is on your do-not-contact list, so nothing was sent."
@@ -290,7 +290,7 @@ class Pitch(Agent):
         how = (f"Pressing Send email sends this from {mailer.credentials()[0]} to {to}.\n" if by_email else "")
         approvals.request("Pitch", "pitch", f"Pitch to {lead['name']} ({lead['platform']})",
                           f"{draft['why_this_lead']}\n{how}Contact: {lead.get('contact')}\n\n{text}",
-                          {"lead_id": lid}, yes="Send email" if by_email else "I'll send it", no="Drop")
+                          {"lead_id": lid, "email": by_email}, yes="Send email" if by_email else "I'll send it", no="Drop")
         return f"{lead['name']} (lead #{lid})"
 
     # ---- keeping track ----
