@@ -131,3 +131,100 @@ def test_api_test_buttons_setup_card_and_try_chad(monkeypatch):
 def test_boss_can_say_whats_left_to_set_up():
     out, is_error = boss.run_tool("setup_status", {})
     assert not is_error and "Claude API key" in out
+
+
+# ---- Connect TikTok ----------------------------------------------------------------------------------
+
+def _tt(monkeypatch, tmp_path):
+    from hq import tiktok_auth
+    monkeypatch.setattr(tiktok_auth, "TOKENS_PATH", tmp_path / "tt.json")
+    monkeypatch.setattr(tiktok_auth, "STATE_PATH", tmp_path / "state.txt")
+    for k, v in (("TIKTOK_CLIENT_KEY", "ck"), ("TIKTOK_CLIENT_SECRET", "cs"), ("TIKTOK_REDIRECT_URI", "https://me.github.io/callback.html")):
+        monkeypatch.setenv(k, v)
+    return tiktok_auth
+
+
+class _Resp:
+    def __init__(self, body):
+        self.body, self.text = body, str(body)
+
+    def json(self):
+        return self.body
+
+
+def test_tiktok_login_link_and_pasted_answer(monkeypatch, tmp_path):
+    from urllib.parse import parse_qs, urlparse
+    tt = _tt(monkeypatch, tmp_path)
+    q = parse_qs(urlparse(tt.authorize_url()).query)
+    assert q["client_key"] == ["ck"] and q["scope"] == ["user.info.basic,video.upload"]
+    assert q["redirect_uri"] == ["https://me.github.io/callback.html"]
+    state = q["state"][0]
+    assert tt.parse_answer(f"https://me.github.io/callback.html?code=abc%2Adef&scopes=x&state={state}") == "abc*def"
+    assert tt.parse_answer("rawcode123") == "rawcode123"
+    with pytest.raises(tt.TikTokError, match="newest link"):
+        tt.parse_answer("https://me.github.io/callback.html?code=abc&state=someoneelse")
+    with pytest.raises(tt.TikTokError, match="said no"):
+        tt.parse_answer("https://me.github.io/callback.html?error=access_denied&error_description=You+said+no")
+    with pytest.raises(tt.TikTokError):
+        tt.parse_answer("https://me.github.io/callback.html?scopes=x&code2=1")
+
+
+def test_tiktok_connects_and_renews_by_itself(monkeypatch, tmp_path):
+    tt = _tt(monkeypatch, tmp_path)
+    sent = []
+
+    def post(url, data=None, **k):
+        sent.append(data)
+        if data["grant_type"] == "authorization_code":
+            return _Resp({"access_token": "A1", "refresh_token": "R1", "expires_in": 86400, "refresh_expires_in": 31536000, "open_id": "o"})
+        return _Resp({"access_token": "A2", "refresh_token": "R2", "expires_in": 86400, "refresh_expires_in": 31536000})
+    monkeypatch.setattr(tt.requests, "post", post)
+    assert tt.access_token() is None and not tt.connected()
+    assert "connected" in tt.connect("thecode")
+    assert sent[0]["code"] == "thecode" and sent[0]["redirect_uri"] == "https://me.github.io/callback.html"
+    assert tt.access_token() == "A1" and len(sent) == 1  # still fresh: no extra call
+    stored = tt._load()
+    stored["expires_at"] = 0  # a day later
+    tt._save(stored)
+    assert tt.access_token() == "A2" and sent[1]["refresh_token"] == "R1"
+    assert tt._load()["refresh_token"] == "R2" and tt.status()["connected"]
+    tt.disconnect()
+    assert not tt.connected()
+
+
+def test_tiktok_errors_are_plain_and_posting_uses_the_connected_token(monkeypatch, tmp_path):
+    tt = _tt(monkeypatch, tmp_path)
+    monkeypatch.setattr(tt.requests, "post", lambda *a, **k: _Resp({"error": "invalid_grant", "error_description": "Authorization code expired"}))
+    with pytest.raises(tt.TikTokError, match="code expired"):
+        tt.connect("old")
+    monkeypatch.delenv("TIKTOK_CLIENT_KEY")
+    with pytest.raises(tt.TikTokError, match="Settings first"):
+        tt.authorize_url()
+    from hq.agents.chad.publish import tiktok as pub
+    monkeypatch.setattr(pub.tiktok_auth, "access_token", lambda: "CONNECTED")
+    seen = {}
+
+    def boom(url, headers=None, **k):
+        seen["auth"] = headers["Authorization"]
+        raise RuntimeError("stop here")
+    monkeypatch.setattr(pub.requests, "post", boom)
+    f = tmp_path / "c.mp4"
+    f.write_bytes(b"x")
+    with pytest.raises(RuntimeError):
+        pub.publish({"path": str(f), "post_text": "t"}, {"access_token_env": "NOPE"})
+    assert seen["auth"] == "Bearer CONNECTED"
+
+
+def test_tiktok_api_needs_the_hq_page_and_settings_show_it(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from hq.api import app
+    _tt(monkeypatch, tmp_path)
+    c = TestClient(app)
+    assert c.get("/api/tiktok/login").status_code == 403
+    assert c.get("/api/tiktok/login", headers={"X-HQ": "1"}).json()["url"].startswith("https://www.tiktok.com/v2/auth/authorize/")
+    assert c.post("/api/tiktok/connect", json={"answer": ""}, headers={"X-HQ": "1"}).status_code == 400
+    s = c.get("/api/settings").json()
+    assert s["tiktok"]["configured"] and not s["tiktok"]["connected"]
+    keys = {f["key"] for sec in s["sections"] for f in sec["fields"]}
+    assert {"TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET", "TIKTOK_REDIRECT_URI"} <= keys

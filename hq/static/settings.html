@@ -94,9 +94,44 @@ function field(f) {
   return `<div class="field" id="k-${f.key}"><label for="${id}">${esc(f.key)}</label>${input}${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}${testRow(f.test)}</div>`;
 }
 
+function tiktokSection(t) {
+  const state = t.connected ? `<span class="tag">Connected · signed in for about ${t.days_left} more days, renewed automatically</span>`
+                            : `<span class="tag no">Not connected</span>`;
+  const steps = !t.configured
+    ? `<p class="help">First save <b>TIKTOK_CLIENT_KEY</b>, <b>TIKTOK_CLIENT_SECRET</b> and <b>TIKTOK_REDIRECT_URI</b> above and press
+       "Save and restart HQ". Then come back here.</p>`
+    : `<p class="help" style="margin:8px 0">1. Press <b>Open TikTok login</b> and approve. 2. TikTok sends you to your redirect page, which shows an address.
+       Copy it. 3. Paste it below and press <b>Connect</b>.</p>
+       <div class="row"><button class="plain" id="tt-login" type="button">Open TikTok login</button></div>
+       <div class="row" style="margin-top:8px"><input id="tt-answer" placeholder="Paste the address from the page TikTok sent you to"><button class="plain" id="tt-connect" type="button">Connect</button></div>`;
+  return `<section id="tiktok"><h2>Connect TikTok</h2><div class="row">${state}${t.connected ? `<button class="link" id="tt-off" type="button">Disconnect</button>` : ""}</div>
+    ${steps}<div class="result" id="tt-msg"></div></section>`;
+}
+
+async function tiktokCall(path, body) {
+  const r = await fetch(path, {method: body === undefined ? "GET" : "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"},
+    body: body === undefined ? undefined : JSON.stringify(body)});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || "Something went wrong");
+  return data;
+}
+function wireTikTok() {
+  const msg = t => { const m = $("tt-msg"); if (m) m.textContent = t; };
+  if ($("tt-login")) $("tt-login").onclick = async () => {
+    try { window.open((await tiktokCall("/api/tiktok/login")).url, "_blank"); msg("Approve it in the new tab, then paste the address it ends on."); }
+    catch (e) { msg("⚠️ " + e.message); }
+  };
+  if ($("tt-connect")) $("tt-connect").onclick = async () => {
+    try { const r = await tiktokCall("/api/tiktok/connect", {answer: $("tt-answer").value}); msg("✅ " + r.message); setTimeout(load, 800); }
+    catch (e) { msg("⚠️ " + e.message); }
+  };
+  if ($("tt-off")) $("tt-off").onclick = async () => { await tiktokCall("/api/tiktok/disconnect", {}); load(); };
+}
+
 function render(d) {
   lastTests = d.tests || {};
   let html = d.sections.map(s => `<section><h2>${esc(s.title)}</h2>${s.fields.map(field).join("")}</section>`).join("");
+  if (d.tiktok) html += tiktokSection(d.tiktok);
   if (d.accounts.length) {
     html += `<section id="accounts"><h2>Posting accounts</h2><p class="help" style="margin:0 0 6px">Turn an account on once its keys are saved above. Chad only posts to accounts that are on.</p>` +
       d.accounts.map(a => `<label class="switch"><input type="checkbox" data-account="${esc(a.name)}" ${a.enabled ? "checked" : ""}>
@@ -114,6 +149,7 @@ function render(d) {
       }).join("") + `</section>`;
   }
   $("sections").innerHTML = html;
+  wireTikTok();
   document.querySelectorAll("[data-pitch]").forEach(el => el.addEventListener("input", () => {
     if (el.value !== (el.dataset.orig ?? "")) { pitchChanges[el.dataset.pitch] = el.value; el.classList.add("changed"); }
     else { delete pitchChanges[el.dataset.pitch]; el.classList.remove("changed"); }
@@ -179,7 +215,10 @@ $("save").onclick = async () => {
   }
 };
 
-fetch("/api/settings").then(r => r.json()).then(render).catch(() => { $("sections").textContent = "Couldn't load settings. Is HQ running?"; });
+function load() {
+  fetch("/api/settings").then(r => r.json()).then(render).catch(() => { $("sections").textContent = "Couldn't load settings. Is HQ running?"; });
+}
+load();
 </script>
 </body>
 </html>

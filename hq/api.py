@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, ledger, money, settings, setup_check, update
+from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, ledger, money, settings, setup_check, tiktok_auth, update
 from .config import CLIPS_DIR, HAS_LLM, PASSWORD, SOURCES_DIR
 
 app = FastAPI(title="Agent HQ")
@@ -336,6 +336,38 @@ def test_connection(name: str, body: TestIn, request: Request):
     """One harmless call to a service (the Test buttons). Typed-but-unsaved keys are tested as typed."""
     _from_hq_page(request)
     return connections.run(name, body.values)
+
+
+class TikTokIn(BaseModel):
+    answer: str
+
+
+@app.get("/api/tiktok/login")
+def tiktok_login(request: Request):
+    _from_hq_page(request)
+    try:
+        return {"url": tiktok_auth.authorize_url()}
+    except tiktok_auth.TikTokError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/tiktok/connect")
+def tiktok_connect(body: TikTokIn, request: Request):
+    _from_hq_page(request)
+    try:
+        message = tiktok_auth.connect(body.answer)
+    except tiktok_auth.TikTokError as e:
+        raise HTTPException(400, str(e))
+    db.log("Steven", "Connected TikTok")
+    return {"message": message, **tiktok_auth.status()}
+
+
+@app.post("/api/tiktok/disconnect")
+def tiktok_disconnect(request: Request):
+    _from_hq_page(request)
+    tiktok_auth.disconnect()
+    db.log("Steven", "Disconnected TikTok")
+    return tiktok_auth.status()
 
 
 @app.get("/api/setup")
