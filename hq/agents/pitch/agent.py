@@ -50,6 +50,7 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
+MAX_PROFILE_CHECKS = 150  # most Twitch profiles one find run looks at
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 STATUSES = ("new", "drafted", "pitched", "replied", "client", "dead", "dropped", "do_not_contact")
 
@@ -240,15 +241,19 @@ class Pitch(Agent):
             return problem
         cfg = settings()
         known = {r["handle"].lower() for r in db.rows("SELECT handle FROM leads WHERE platform = 'twitch'")}
+        only_email = bool(cfg.get("require_email"))
         candidates = [s for s in twitch.small_streamers(int(cfg.get("min_viewers", 50)), int(cfg.get("max_viewers", 2000)),
-                                                         cfg.get("language", "en"))
+                                                         cfg.get("language", "en"), max_pages=20 if only_email else 8)
                       if s["login"].lower() not in known]
-        made = []
+        made, checked = [], 0
         for s in candidates:
-            if len(made) >= n:
+            if len(made) >= n or checked >= MAX_PROFILE_CHECKS:
                 break
+            checked += 1
             info = twitch.profile(s["id"])
             email = next(iter(EMAIL.findall(info["bio"])), None)
+            if only_email and not email:
+                continue
             clips = twitch.top_clips(s["id"], days=14, limit=1)
             facts = [f"Streams {s['game'] or 'various games'} on Twitch, about {s['viewers']} live viewers right now."]
             if info["bio"]:
@@ -260,6 +265,9 @@ class Pitch(Agent):
                                         "Discord or X; don't spam)", "notes": " ".join(facts)}
             made.append(self.draft_lead(lead, quiet=True))
         if not made:
+            if only_email:
+                return (f"None of the {checked} streamers I checked had an email in their bio. Try again later, widen the "
+                        "viewer range, or turn off 'Only streamers with an email' in Settings.")
             return "No new streamers matched your viewer range. Widen min_viewers/max_viewers in config/pitch.yaml."
         return f"Drafted {len(made)} pitch(es). Approve the ones you'll send: " + ", ".join(made)
 
