@@ -155,6 +155,13 @@ CREATE TABLE IF NOT EXISTS pitch_sent (
     subject TEXT,
     sent_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS followup_sent (
+    lead_id INTEGER NOT NULL,
+    n INTEGER NOT NULL,                          -- 1 for the first follow-up, 2 for the second
+    email TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    PRIMARY KEY (lead_id, n)
+);
 CREATE TABLE IF NOT EXISTS relay_sent (
     kind TEXT NOT NULL,
     ref_id INTEGER NOT NULL,
