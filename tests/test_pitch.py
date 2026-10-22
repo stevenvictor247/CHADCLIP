@@ -318,3 +318,33 @@ def test_a_draft_made_before_gmail_was_set_up_never_emails(monkeypatch, gmail):
     assert a["yes_label"] == "I'll send it" and a["payload"]["email"] is False
     monkeypatch.setenv("PITCH_EMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")  # set up after the card was shown
     assert "Send this to" in approvals.decide(a["id"], "approve") and gmail == []
+
+
+def test_gmail_falls_back_to_port_587_and_explains_failures(monkeypatch):
+    import smtplib as sm
+    monkeypatch.setenv("PITCH_EMAIL_ADDRESS", "a@gmail.com")
+    monkeypatch.setenv("PITCH_EMAIL_APP_PASSWORD", "pw")
+    calls = []
+
+    class Blocked:
+        def __init__(self, *a, **k): calls.append("465"); raise OSError("timed out")
+
+    class Fine:
+        def __init__(self, host, port, timeout): calls.append(str(port))
+        def starttls(self, context=None): pass
+        def login(self, u, p): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def quit(self): pass
+
+    monkeypatch.setattr(sm, "SMTP_SSL", Blocked)
+    monkeypatch.setattr(sm, "SMTP", Fine)
+    mailer.check_login()
+    assert calls == ["465", "587"]
+
+    class AllBlocked(Fine):
+        def __init__(self, *a, **k): raise OSError("timed out")
+    monkeypatch.setattr(sm, "SMTP", AllBlocked)
+    with pytest.raises(mailer.SendError) as e:
+        mailer.check_login()
+    assert "timed out" in str(e.value) and "antivirus" in str(e.value)
