@@ -171,6 +171,30 @@ simpler agent on Haiku 5.5 (about 40 times cheaper than Opus). Change any of the
 The dashboard's money tile (the Ledger) shows what Claude cost today and this month, per agent. Set
 `HQ_DAILY_BUDGET=2` in `.env` to stop scheduled agent work for the day once spending reaches $2.
 
+## Sweep (the janitor)
+
+Sweep is the janitor in HQ Town. It never calls Claude itself, so it costs nothing, and it keeps working on a day
+when the Claude budget is spent. Every few hours it checks what Claude is costing and tidies up after the other
+agents; once a day (around `HQ_SWEEP_REPORT_HOUR`, 8 by default) it sends one report to the **Sweep** card on the
+dashboard and to your phone through Relay.
+
+What it fixes by itself, always logged in Activity and either undoable or harmless:
+
+- a job stuck on "running" after a crash goes back in the queue once, then is closed as failed
+- a job that failed on a network or overload error is retried once
+- source downloads older than a week, rejected clips, old practice posts and logs over 5 MB go to
+  `data/sweep/trash` (the **Put back** button restores them for 7 days, then they are deleted)
+- an idle Boss conversation that has grown huge is closed, so the next chat starts small (the old one stays saved)
+
+What it only reports: a budget nearly or fully spent, a day costing double the usual, an agent making a burst of
+calls (a possible loop), the same job failing again and again, prompts that aren't being cached, a model with no
+price on file, and a nearly full disk. If a small job runs on a pricier model than it needs, Sweep asks in
+**Waiting for your OK** before changing that agent's model, and you can change it back in Settings. Sweep never
+posts, emails, spends money or changes settings or keys without your approval.
+
+The Boss's chat also uses prompt caching now, so the unchanged start of each conversation is billed at a tenth of the
+price.
+
 ## Safe defaults
 
 - Nothing posts until you approve it (`HQ_REQUIRE_APPROVAL=true`).

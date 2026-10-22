@@ -49,7 +49,7 @@ def run_next_task() -> bool:
 def queue_scheduled(state: dict):
     now = time.time()
     for agent in agents.AGENTS.values():
-        if ledger.over_budget(agent.village):
+        if ledger.over_budget(agent.village) and not agent.free:
             continue  # that village's Claude budget is spent: nothing new starts on its own there until tomorrow
         for every_hours, instructions, params in agent.schedule:
             key = f"sched:{agent.name}:{instructions}"

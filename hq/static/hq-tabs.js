@@ -1,4 +1,4 @@
-// Splits the dashboard into tabs (Home, Approvals, Boss, Campaigns, Pitch, Clips, Activity) so nothing needs a long scroll.
+// Splits the dashboard into tabs (Home, Approvals, Boss, Campaigns, Pitch, Clips, Warrior Village, Sweep, Activity) so nothing needs a long scroll.
 // The money strip and header stay above the tabs on every page. The last tab is remembered, and links like /#approvals open a tab.
 (function () {
   // Each tab lists the ids of things inside the sections it shows. A section is found from any element inside it.
@@ -12,6 +12,7 @@
      empty: "No leads or creators to clip yet. Pitch and Scout put them here when they find some."},
     {id: "clips", icon: "🎞️", label: "Clips", has: ["library"]},
     {id: "football", icon: "🏈", label: "Warrior Village", has: ["fbworld", "football"]},
+    {id: "sweep", icon: "🧹", label: "Sweep", has: ["sweep"]},
     {id: "activity", icon: "📜", label: "Activity", has: ["activity"]},
   ];
   const css = `
@@ -55,7 +56,7 @@
     let last = null;
     for (const id of t.has) {
       const el = document.getElementById(id);
-      const sec = el && (el.matches("section, #football") ? el : el.closest("section"));
+      const sec = el && (el.matches("section, #football, #sweep") ? el : el.closest("section"));
       if (sec) { sec.dataset.tab = t.id; last = sec; }
     }
     if (t.empty && last) {
@@ -109,7 +110,7 @@
   // The "Waiting for you" number in the header opens Approvals.
   const waiting = document.getElementById("s-pending");
   if (waiting) { waiting.style.cursor = "pointer"; waiting.title = "Open Approvals"; waiting.onclick = () => show("approvals"); }
-  // Number keys 1-8 switch tabs, unless you're typing.
+  // Number keys 1-9 switch tabs, unless you're typing.
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input, textarea, select, [contenteditable]")) return;
     const t = TABS[+e.key - 1];

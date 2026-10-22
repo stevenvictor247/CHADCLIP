@@ -283,6 +283,7 @@
     </section>
   </div>
 </main>
+<div id="sweep"></div>
 <div id="football"></div>
 <div id="toasts"></div>
 <script src="/money-bar.js"></script>
@@ -290,6 +291,7 @@
 <script src="/football-town.js"></script>
 <script src="/hq-bar.js"></script>
 <script src="/setup-card.js"></script>
+<script src="/sweep-panel.js"></script>
 <script src="/football-panel.js"></script>
 <script src="/hq-tabs.js"></script>
 <script>
@@ -307,6 +309,7 @@ const LOOKS = {
   Chad: {color: "#ff6fa8", prop: "✂️", hat: "cap"},
   Scout: {color: "#2dd4bf", prop: "🔎", hat: null},
   Pitch: {color: "#a78bfa", prop: "✉️", hat: null},
+  Sweep: {color: "#4f8fe8", prop: "🧹", hat: "janitor"},
   // Warrior Village, in Wayne State green and gold
   Captain: {color: "#0C5449", prop: "🏈", hat: "headset"},
   Clock: {color: "#FFCC33", prop: "⏰", hat: null},
@@ -327,6 +330,7 @@ window.hqLook = look;   // HQ Town draws the agents with the same colours
 function critter({color, hat}) {
   const hats = {
     crown: `<path d="M22 14 L27 3 L36 11 L45 3 L50 14 Z" fill="#ffd34d" stroke="#b8860b" stroke-width="1.5"/>`,
+    janitor: `<path d="M18 20 Q36 2 54 20 Z" fill="#2b5fb8"/><rect x="44" y="17" width="18" height="4" rx="2" fill="#2b5fb8"/><rect x="31" y="8" width="10" height="3" rx="1.5" fill="#ffd34d"/>`,
     cap: `<path d="M18 20 Q36 2 54 20 Z" fill="#2a2233"/><rect x="44" y="17" width="18" height="4" rx="2" fill="#2a2233"/>`,
     headset: `<path d="M18 20 Q36 2 54 20 Z" fill="#0C5449" stroke="#FFCC33" stroke-width="1.5"/><rect x="44" y="17" width="18" height="4" rx="2" fill="#0C5449"/>
       <path d="M12 38 Q12 12 36 12 Q60 12 60 38" stroke="#1d1426" stroke-width="3" fill="none"/><rect x="8" y="34" width="7" height="12" rx="3" fill="#1d1426"/><rect x="57" y="34" width="7" height="12" rx="3" fill="#1d1426"/>`,

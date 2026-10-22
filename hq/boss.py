@@ -217,7 +217,7 @@ def _chat(text: str) -> str:
     db.log("Steven", text[:200])
 
     for _ in range(25):
-        response = llm.create(BOSS_MODEL, SYSTEM, messages, tools=TOOLS, effort="medium", agent="Boss")
+        response = llm.create(BOSS_MODEL, SYSTEM, messages, tools=TOOLS, effort="medium", agent="Boss", cache=True)
         content = [b.model_dump(mode="json", exclude_none=True) for b in response.content]
         messages.append({"role": "assistant", "content": content})
         _save(conv, "assistant", content)
