@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from . import db
-from .config import DAILY_BUDGET, PRICES, UNKNOWN_PRICE
+from .config import DAILY_BUDGET, FOOTBALL_AGENTS, FOOTBALL_DAILY_BUDGET, PRICES, UNKNOWN_PRICE
 
 
 def cost_of(model: str, input_tokens: int, output_tokens: int, cache_read: int = 0, cache_write: int = 0) -> float:
@@ -28,9 +28,14 @@ def record(agent: str, model: str, usage) -> float:
         return 0.0
 
 
-def _since(start_iso: str) -> float:
-    r = db.rows("SELECT COALESCE(SUM(cost_usd), 0) c FROM llm_usage WHERE created_at >= ?", start_iso)
-    return r[0]["c"]
+def _since(start_iso: str, village: str | None = None) -> float:
+    """Spending since a time. village "football" counts only the football agents, "business" everyone else."""
+    sql, args = "SELECT COALESCE(SUM(cost_usd), 0) c FROM llm_usage WHERE created_at >= ?", [start_iso]
+    if village:
+        marks = ", ".join("?" for _ in FOOTBALL_AGENTS)
+        sql += f" AND LOWER(agent) {'IN' if village == 'football' else 'NOT IN'} ({marks})"
+        args += [a.lower() for a in FOOTBALL_AGENTS]
+    return db.rows(sql, *args)[0]["c"]
 
 
 def _start_of_today() -> str:
@@ -38,12 +43,14 @@ def _start_of_today() -> str:
         .astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
-def spent_today() -> float:
-    return _since(_start_of_today())
+def spent_today(village: str | None = None) -> float:
+    return _since(_start_of_today(), village)
 
 
-def over_budget() -> bool:
-    return DAILY_BUDGET > 0 and spent_today() >= DAILY_BUDGET
+def over_budget(village: str = "business") -> bool:
+    """Each village has its own daily cap: hitting one never pauses the other."""
+    cap = FOOTBALL_DAILY_BUDGET if village == "football" else DAILY_BUDGET
+    return cap > 0 and spent_today(village) >= cap
 
 
 def summary() -> dict:
@@ -54,4 +61,6 @@ def summary() -> dict:
     by_agent = db.rows("SELECT agent, ROUND(SUM(cost_usd), 4) usd, COUNT(*) calls FROM llm_usage "
                        "WHERE created_at >= ? GROUP BY agent ORDER BY usd DESC", month)
     return {"today_usd": round(_since(today), 4), "month_usd": round(_since(month), 4),
-            "daily_budget_usd": DAILY_BUDGET or None, "over_budget": over_budget(), "month_by_agent": by_agent}
+            "daily_budget_usd": DAILY_BUDGET or None, "over_budget": over_budget(), "month_by_agent": by_agent,
+            "football_today_usd": round(_since(today, "football"), 4),
+            "football_budget_usd": FOOTBALL_DAILY_BUDGET or None, "football_over_budget": over_budget("football")}

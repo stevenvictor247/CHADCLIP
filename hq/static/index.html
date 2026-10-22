@@ -181,6 +181,16 @@
   .world-tip { position:absolute; display:none; pointer-events:none; max-width:220px; background:#fff; color:#2a2233; border-radius:10px;
                padding:6px 9px; font-size:12px; font-weight:700; box-shadow:0 6px 18px rgba(0,0,0,.35); }
   @media (max-width:960px) { .world { margin:14px 14px 0; } .world-hud .chip { font-size:10px; padding:3px 8px; } }
+  /* both villages on screen at once: side by side on wide screens, stacked on narrow ones */
+  .towns { display:grid; grid-template-columns:1fr; gap:14px; margin:18px 22px 0; position:relative; z-index:1; }
+  .towns .world { margin:0; }
+  .world.fb { box-shadow:0 0 0 2px rgba(255,204,51,.45); }
+  .world.fb .chip { border-color:rgba(255,204,51,.35); }
+  .world.fb .world-ticker { border-color:#FFCC33; }
+  .world.fb .world-hud, .world.fb .world-hud .world-title { justify-content:flex-start; margin-right:0; }   /* keep the scoreboard clear */
+  @media (min-width:1100px) { .towns { grid-template-columns:1fr 1fr; } .towns .world-hud .chip { font-size:11px; padding:3px 9px; } }
+  @media (max-width:960px) { .towns { margin:14px 14px 0; } }
+  .camp .tag.village-football { border-color:rgba(255,204,51,.6); color:#FFCC33; }
   @media (max-width:600px) { .world-title { display:none; } .world-hud { justify-content:flex-end; } }
 
   @media (prefers-reduced-motion: reduce) {
@@ -201,12 +211,20 @@
     <div class="stat" id="s-spend" title="What Claude has cost today"><span class="ico">💵</span><b id="c-spend">$0.00</b><span id="spend-sub">Spent today</span></div>
   </div>
 </header>
+<div class="towns">
 <section class="world" id="world">
   <canvas id="worldcanvas" aria-label="HQ Town: your agents at work"></canvas>
-  <div class="world-hud"><span class="chip world-title">🏘️ HQ Town</span><span class="chip" id="worldclock"></span><button class="chip" id="worldmode" title="Change the time of day">🕒 Real time</button></div>
+  <div class="world-hud"><span class="chip world-title">🏘️ HQ Town</span><span class="chip" id="worldclock"></span><button class="chip" id="worldmode" title="Change the time of day (both villages)">🕒 Real time</button></div>
   <div class="world-ticker" id="worldticker"></div>
   <div class="world-tip" id="worldtip"></div>
 </section>
+<section class="world fb" id="fbworld">
+  <canvas id="fbcanvas" aria-label="Warrior Village: your football agents at work"></canvas>
+  <div class="world-hud"><span class="chip world-title">🏈 Warrior Village · Wayne State</span><span class="chip" id="fbcountdown"></span></div>
+  <div class="world-ticker" id="fbticker"></div>
+  <div class="world-tip" id="fbtip"></div>
+</section>
+</div>
 <main>
   <div>
     <section>
@@ -226,7 +244,8 @@
   </div>
   <div>
     <section id="apprsection" style="display:none">
-      <h2>Waiting for your OK <span class="count" id="apprcount"></span></h2>
+      <h2>Waiting for your OK <span class="count" id="apprcount"></span>
+        <select id="apprfilter" aria-label="Which village"><option value="">Both villages</option><option value="business">🏘️ HQ Town</option><option value="football">🏈 Warrior Village</option></select></h2>
       <div id="approvals"></div>
     </section>
     <section id="campsection">
@@ -264,11 +283,14 @@
     </section>
   </div>
 </main>
+<div id="football"></div>
 <div id="toasts"></div>
 <script src="/money-bar.js"></script>
 <script src="/world.js"></script>
+<script src="/football-town.js"></script>
 <script src="/hq-bar.js"></script>
 <script src="/setup-card.js"></script>
+<script src="/football-panel.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -284,6 +306,12 @@ const LOOKS = {
   Chad: {color: "#ff6fa8", prop: "✂️", hat: "cap"},
   Scout: {color: "#2dd4bf", prop: "🔎", hat: null},
   Pitch: {color: "#a78bfa", prop: "✉️", hat: null},
+  // Warrior Village, in Wayne State green and gold
+  Captain: {color: "#0C5449", prop: "🏈", hat: "headset"},
+  Clock: {color: "#FFCC33", prop: "⏰", hat: null},
+  Ref: {color: "#f1f5f9", prop: "🚩", hat: "stripes"},
+  Tells: {color: "#2bb59a", prop: "📊", hat: null},
+  Scribe: {color: "#f5deb3", prop: "📓", hat: null},
 };
 const PALETTE = ["#7cc4ff", "#4ade80", "#c084fc", "#facc15", "#fb923c", "#2dd4bf"];
 const PROPS = ["💡", "📈", "🛒", "🎨", "📦", "🔎"];
@@ -299,6 +327,9 @@ function critter({color, hat}) {
   const hats = {
     crown: `<path d="M22 14 L27 3 L36 11 L45 3 L50 14 Z" fill="#ffd34d" stroke="#b8860b" stroke-width="1.5"/>`,
     cap: `<path d="M18 20 Q36 2 54 20 Z" fill="#2a2233"/><rect x="44" y="17" width="18" height="4" rx="2" fill="#2a2233"/>`,
+    headset: `<path d="M18 20 Q36 2 54 20 Z" fill="#0C5449" stroke="#FFCC33" stroke-width="1.5"/><rect x="44" y="17" width="18" height="4" rx="2" fill="#0C5449"/>
+      <path d="M12 38 Q12 12 36 12 Q60 12 60 38" stroke="#1d1426" stroke-width="3" fill="none"/><rect x="8" y="34" width="7" height="12" rx="3" fill="#1d1426"/><rect x="57" y="34" width="7" height="12" rx="3" fill="#1d1426"/>`,
+    stripes: `<g fill="#1d1426"><rect x="21" y="53" width="3.5" height="8"/><rect x="30" y="54" width="3.5" height="10"/><rect x="39" y="54" width="3.5" height="10"/><rect x="48" y="53" width="3.5" height="8"/></g>`,
   };
   return `<svg viewBox="0 0 72 72" aria-hidden="true">
     <ellipse cx="36" cy="68" rx="20" ry="3.5" fill="rgba(0,0,0,.35)"/>
@@ -364,10 +395,14 @@ function setCount(key, value) {
 }
 
 function renderAgents(list) {
+  list = list.filter(a => (a.village || "business") === "business");   // the football team is in the Warrior Village panel
   const key = list.map(a => a.name + "|" + (a.doing || "")).join(";");
   if (key === shownAgents) return;   // keep the animations running smoothly
   shownAgents = key;
-  $("agents").innerHTML = list.map(a => {
+  $("agents").innerHTML = rooms(list);
+}
+function rooms(list) {
+  return list.map(a => {
     const l = look(a.name);
     return `<div class="room ${a.doing ? "busy" : ""}" style="--c:${l.color}" title="${esc(a.doing || a.role)}">
       <span class="tag">${a.doing ? "working" : "idle"}</span>
@@ -379,6 +414,7 @@ function renderAgents(list) {
     </div>`;
   }).join("");
 }
+window.hqRooms = rooms;   // the Warrior Village panel draws its team the same way
 
 function renderActivity(items) {
   const newest = items[0]?.id;
@@ -414,6 +450,8 @@ async function refresh() {
   renderActivity(s.activity);
   try { window.HQMoney?.update(s.money); } catch (err) { console.error("Money strip:", err); }
   try { window.HQWorld?.update(s); } catch (err) { console.error("HQ Town:", err); }   // the town never breaks the dashboard
+  try { window.FootballTown?.update(s); } catch (err) { console.error("Warrior Village:", err); }
+  try { window.HQFootball?.update(s); } catch (err) { console.error("Football panel:", err); }
   $("nokey").style.display = s.has_llm ? "none" : "block";
   renderChat(s.chat);
   renderLibrary(s.clips);
@@ -500,18 +538,35 @@ function renderCampaigns(list) {
       ${(c.flags || []).length ? `<div class="warn">⚠ ${esc(c.flags.join("; "))}</div>` : ""}${earned}${buttons}</div>`;
   }).join("");
 }
-let shownApprovals = null;
+let shownApprovals = null, allApprovals = [];
+const VILLAGE = {business: "🏘️ HQ Town", football: "🏈 Warrior Village"};
 function renderApprovals(list) {
+  allApprovals = list;
   $("apprsection").style.display = list.length ? "" : "none";
+  const villages = new Set(list.map(a => a.village || "business"));
+  $("apprfilter").style.display = villages.size > 1 || $("apprfilter").value ? "" : "none";
+  const want = $("apprfilter").value;
+  list = list.filter(a => !want || (a.village || "business") === want);
   $("apprcount").textContent = list.length;
-  const key = JSON.stringify(list);
+  const key = want + JSON.stringify(list);
   if (key === shownApprovals) return;
   shownApprovals = key;
-  $("approvals").innerHTML = list.map(a => `<div class="camp"><h3>${esc(a.title)} <span class="tag">${esc(a.agent)}</span></h3>
+  $("approvals").innerHTML = (list.length || !want ? "" : `<div class="muted">Nothing waiting in ${esc(VILLAGE[want])}.</div>`) +
+    list.map(a => `<div class="camp"><h3>${esc(a.title)} <span class="tag">${esc(a.agent)}</span>${villages.size > 1 || a.village === "football"
+      ? `<span class="tag village-${esc(a.village || "business")}">${VILLAGE[a.village || "business"]}</span>` : ""}</h3>
     <pre>${esc(a.preview)}</pre>
     <div class="row"><button onclick="decideApproval(${a.id}, 'approve')">${esc(a.yes_label)}</button>
     <button class="ghost" onclick="decideApproval(${a.id}, 'reject')">${esc(a.no_label)}</button></div></div>`).join("");
 }
+$("apprfilter").onchange = () => renderApprovals(allApprovals);
+// Warrior Village's Mailroom shows its own items. Says whether anything is waiting there.
+window.hqShowApprovals = village => {
+  if (!allApprovals.some(a => (a.village || "business") === village)) return false;
+  $("apprfilter").value = village;
+  renderApprovals(allApprovals);
+  $("apprsection").scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"});
+  return true;
+};
 async function decideApproval(id, decision) {
   const r = await (await fetch(`/api/approvals/${id}/${decision}`, {method: "POST"})).json();
   toast(esc((r.message || "Done").split("\n")[0]));
@@ -621,6 +676,7 @@ $("chatform").onsubmit = async e => {
   shownChat = null;   // let the next refresh take over from the server's copy
   refresh();
 };
+window.hqRefresh = refresh;
 $("newconv").onclick = async () => { await fetch("/api/conversation/new", {method: "POST"}); shownChat = null; refresh(); };
 
 refresh();

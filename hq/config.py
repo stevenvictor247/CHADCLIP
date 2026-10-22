@@ -42,6 +42,7 @@ DEFAULT_MODELS = {
     "boss": "claude-opus-5-5",      # takes direction and delegates, so it gets the strongest model
     "chad": "claude-sonnet-5-5",    # picks moments from transcripts
     "pitch": "claude-sonnet-5-5",   # writes the messages to potential clients, so wording matters
+    "captain": "claude-sonnet-5-5", # runs the football village and answers football questions in your terms
 }
 SIMPLE_MODEL = "claude-haiku-5-5"   # every other agent: sorting, drafting, summarising
 
@@ -65,6 +66,30 @@ UNKNOWN_PRICE = (5.00, 25.00)  # for a model not listed above, assume a pricey o
 
 # Stop scheduled work for the rest of the day once Claude spending reaches this many US dollars. 0 means no limit.
 DAILY_BUDGET = float(os.getenv("HQ_DAILY_BUDGET", "0") or 0)
+
+# The football village (Warrior Village). Its agents, its own daily Claude budget, and where its files live.
+# Its spending never counts against HQ_DAILY_BUDGET, and the business side's never counts against this one.
+FOOTBALL_AGENTS = ("Captain", "Clock", "Ref", "Tells", "Scribe")
+FOOTBALL_DAILY_BUDGET = float(os.getenv("HQ_FOOTBALL_DAILY_BUDGET", "1") or 0)
+# Your private football data (rulebook, notebook overrides) always stays in data/football.
+FOOTBALL_DATA = DATA_DIR / "football"
+# Inbox (files you drop in) and Outbox (what HQ makes for you). Point this at a Google Drive folder to use it from any computer.
+FOOTBALL_DIR = Path(os.getenv("HQ_FOOTBALL_DIR", "").strip() or FOOTBALL_DATA)
+FOOTBALL_INBOX = FOOTBALL_DIR / "Inbox"
+FOOTBALL_OUTBOX = FOOTBALL_DIR / "Outbox"
+# Hour (local time) Clock sends the day's football reminders to your phone.
+FOOTBALL_REMINDER_HOUR = int(os.getenv("HQ_FOOTBALL_REMINDER_HOUR", "8") or 8)
+
+for d in (FOOTBALL_DATA, FOOTBALL_INBOX, FOOTBALL_OUTBOX):
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError:  # a Drive folder that isn't there yet shouldn't stop HQ starting
+        pass
+
+
+def village_of(agent: str) -> str:
+    return "football" if agent.lower() in {a.lower() for a in FOOTBALL_AGENTS} else "business"
+
 
 # Without an API key the system still runs, using simple rules instead of Claude.
 HAS_LLM = bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))

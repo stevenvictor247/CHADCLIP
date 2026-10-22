@@ -3,6 +3,8 @@ fastapi
 uvicorn
 python-dotenv
 pyyaml
+openpyxl
+python-docx
 requests
 yt-dlp
 faster-whisper

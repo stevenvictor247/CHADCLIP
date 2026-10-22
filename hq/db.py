@@ -187,6 +187,35 @@ CREATE TABLE IF NOT EXISTS money_entries (
     day TEXT NOT NULL,                           -- YYYY-MM-DD, your local date
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS football_checklist (
+    opponent TEXT NOT NULL,
+    item TEXT NOT NULL,                          -- e.g. Scouting report
+    done_at TEXT NOT NULL,
+    PRIMARY KEY (opponent, item)
+);
+CREATE TABLE IF NOT EXISTS football_files (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,                   -- file name in the football Inbox
+    status TEXT NOT NULL DEFAULT 'new',          -- new, checking, checked, failed
+    summary TEXT,                                -- Ref's one-line result
+    fix INTEGER NOT NULL DEFAULT 0,
+    check_count INTEGER NOT NULL DEFAULT 0,
+    result TEXT,                                 -- JSON: Ref's full list of flags
+    ref_copy TEXT,                               -- Outbox file with the flags marked
+    modified REAL,                               -- the file's modified time when Ref last read it
+    added_at TEXT NOT NULL,
+    checked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS football_notes (
+    id INTEGER PRIMARY KEY,
+    day TEXT NOT NULL,                           -- YYYY-MM-DD the note was learned
+    tab TEXT NOT NULL,                           -- notebook section, e.g. Fronts
+    entry TEXT NOT NULL,                         -- the short notebook entry
+    raw TEXT,                                    -- what you typed, word for word
+    source TEXT NOT NULL DEFAULT 'nb',           -- nb, import, boss
+    status TEXT NOT NULL DEFAULT 'active',       -- active, replaced
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,
