@@ -48,6 +48,7 @@ class TaskIn(BaseModel):
 class SettingsIn(BaseModel):
     values: dict[str, str] = {}
     accounts: dict[str, bool] = {}
+    pitch: dict[str, str] = {}
 
 
 def _from_hq_page(request: Request):
@@ -320,7 +321,7 @@ def get_settings():
 def save_settings(body: SettingsIn, request: Request):
     _from_hq_page(request)
     try:
-        changed = settings.save(body.values)
+        changed = settings.save(body.values) + settings.save_pitch(body.pitch)
         for name, enabled in body.accounts.items():
             settings.set_account_enabled(name, enabled)
     except (ValueError, KeyError) as e:
