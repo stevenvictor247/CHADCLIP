@@ -54,9 +54,11 @@ def test_ledger_records_and_budget_stops_scheduled_work(monkeypatch):
     assert ledger.over_budget()
     from hq import worker
     state = {}
-    queued = db.rows("SELECT COUNT(*) n FROM tasks")[0]["n"]
+    queued = db.rows("SELECT COUNT(*) n FROM tasks WHERE agent != 'Sweep'")[0]["n"]
     worker.queue_scheduled(state)
-    assert db.rows("SELECT COUNT(*) n FROM tasks")[0]["n"] == queued and state == {}
+    # Sweep (the janitor) costs no Claude money, so it keeps working; everyone else waits for tomorrow
+    assert db.rows("SELECT COUNT(*) n FROM tasks WHERE agent != 'Sweep'")[0]["n"] == queued
+    assert set(state) == {"sched:Sweep:Tidy up and check what Claude is costing."}
 
 
 def test_create_records_usage_and_skips_fallback_for_haiku(monkeypatch):

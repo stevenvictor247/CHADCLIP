@@ -33,9 +33,12 @@ def supports_fallback(model: str) -> bool:
 
 def create(model: str, system: str, messages: list, tools: list | None = None,
            effort: str = "medium", max_tokens: int = 16000, output_schema: dict | None = None,
-           agent: str = "Boss"):
+           agent: str = "Boss", cache: bool = False):
     """One Messages API call. Where the model allows it, a safety decline is retried on another model.
-    `agent` is who is paying, so the Ledger can show spending per agent."""
+    `agent` is who is paying, so the Ledger can show spending per agent.
+    `cache=True` lets the API reuse the unchanged start of the prompt (tools, system and earlier turns) at a tenth
+    of the price. Only worth it when the same start is sent again soon, as in the Boss's chat: a one-off call would
+    pay 25% extra to write a cache nobody reads."""
     kwargs = dict(
         model=model,
         max_tokens=max_tokens,
@@ -46,6 +49,8 @@ def create(model: str, system: str, messages: list, tools: list | None = None,
     )
     if supports_fallback(model):
         kwargs.update(betas=[FALLBACK_BETA], fallbacks="default")
+    if cache:
+        kwargs["cache_control"] = {"type": "ephemeral"}
     if tools:
         kwargs["tools"] = tools
     if output_schema:

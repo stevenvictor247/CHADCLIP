@@ -16,6 +16,9 @@ class Agent:
     # Send the task's result to your phone when it finishes (football asks can take a minute).
     notify_when_done: bool = False
 
+    # Housekeeping agents that cost nothing in Claude: their scheduled jobs still run when the day's budget is spent.
+    free: bool = False
+
     def run(self, task: dict) -> str:
         """Do one task and return a short summary for the Boss."""
         raise NotImplementedError

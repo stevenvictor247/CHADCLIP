@@ -10,9 +10,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, ledger, money, settings, setup_check, tiktok_auth, update
+from . import sweep_api
 from .config import CLIPS_DIR, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
 app = FastAPI(title="Agent HQ")
+app.include_router(sweep_api.router)
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
 STATIC = Path(__file__).parent / "static"
 SESSION_COOKIE = "hq_session"

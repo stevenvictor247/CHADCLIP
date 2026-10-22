@@ -28,20 +28,40 @@ const B = {
   tower:  {x: 842, y: 14, w: 72, h: 156, door: 878, label: "Broadcast Tower", icon: "📡"},
 };
 for (const b of Object.values(B)) b.front = {x: b.door, y: b.y + b.h + 20};
-const PLOTS = [0, 1, 2].map(i => ({x: 616 + i * 106, y: 300, w: 86, h: 72, agent: null}));
+const PLOTS = [0, 1, 2, 3].map(i => ({x: 566 + i * 96, y: 300, w: 84, h: 72, agent: null}));   // four cottages since Sweep moved in
 for (const p of PLOTS) p.front = {x: p.x + p.w / 2, y: p.y - 8};
+const LITTER = [];   // bits of mess for Sweep to clean up: one per open problem Sweep has found
+let messShown = null;
 const POND = {x: 150, y: 342, rx: 95, ry: 44};
 const PLAZA = {x: 480, y: 348, r: 68};
 const MAILBOX = {x: 784, y: 178};
 const TRASH = {x: 620, y: 178};
 const BEACON = {x: 878, y: 12};
-const TREES = [[30, 128], [292, 74], [345, 160], [612, 44], [806, 104], [298, 318], [338, 400], [612, 404], [948, 330],
+const TREES = [[30, 128], [292, 74], [345, 160], [612, 44], [806, 104], [298, 318], [338, 400], [612, 404], [952, 404],
                [28, 402], [262, 404], [946, 120], [372, 300]].map(([x, y], i) => ({x, y, i, kind: i % 4 === 2 ? "blossom" : i % 3 === 1 ? "dark" : "green"}));
 const LAMPS = [[40, 214], [330, 214], [598, 214], [930, 214], [394, 306], [566, 306]].map(([x, y]) => ({x, y}));
 const BENCHES = [{x: 430, y: 292}, {x: 530, y: 292}];
 const SPOTS = [{x: 150, y: 288}, {x: 274, y: 352}, {x: 60, y: 300}, {x: 430, y: 296, bench: true}, {x: 530, y: 296, bench: true},
                {x: 480, y: 404}, {x: 418, y: 372}, {x: 542, y: 372}, {x: 330, y: 250}, {x: 600, y: 252}, {x: 100, y: 252},
                {x: 860, y: 252}, {x: 900, y: 392}, {x: 760, y: 252}];
+
+function setMess(n) {   // called by the Sweep card; pieces only change when the number of open problems changes
+  n = Math.min(8, Math.max(0, n | 0));
+  if (n === messShown) return;
+  messShown = n;
+  const rr = seeded(99);
+  LITTER.length = 0;
+  for (let tries = 0; LITTER.length < n && tries < 400; tries++) {
+    const x = 30 + rr() * (W - 60), y = 270 + rr() * (H - 290);
+    if (!blocked(x, y, 8) && !LITTER.some(l => Math.hypot(l.x - x, l.y - y) < 40)) LITTER.push({x, y, kind: LITTER.length % 3});
+  }
+}
+function drawLitter(l) {
+  ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(l.x + 1, l.y + 2, 6, 2, 0, 0, 7); ctx.fill();
+  if (l.kind === 0) { ctx.fillStyle = "#f4f0e6"; ctx.beginPath(); ctx.ellipse(l.x, l.y, 5, 4, .4, 0, 7); ctx.fill(); ctx.strokeStyle = "#b9b2a0"; ctx.lineWidth = 1; ctx.stroke(); }
+  else if (l.kind === 1) { ctx.fillStyle = "#d8453b"; roundRect(ctx, l.x - 3, l.y - 6, 6, 8, 2); ctx.fill(); ctx.fillStyle = "#e8e8e8"; ctx.fillRect(l.x - 3, l.y - 6, 6, 2); }
+  else { ctx.fillStyle = "#f2d04a"; ctx.beginPath(); ctx.ellipse(l.x, l.y, 6, 3, -.3, 0, 7); ctx.fill(); ctx.fillStyle = "#8a5a22"; ctx.fillRect(l.x + 2, l.y - 1, 2, 2); }
+}
 
 // ---------- canvas sizing ----------
 let scale = 1, terrain = null;
@@ -232,6 +252,7 @@ const workSpot = a => ({x: a.home.front.x + (a.key === "boss" ? -26 : 0), y: a.h
 
 const CHATTER = ["Nice day for clips ☀️", "☕ coffee break", "Anything trending?", "🎵 la la la", "Stretching 🙆", "Vibes are good ✨", "Who moved my chair?"];
 const NIGHT_CHATTER = ["Night shift 🌙", "Still grinding 💪", "The stars are out ✨"];
+const SWEEP_SAY = ["Squeaky clean ✨", "Who dropped this? 🧹", "Spotless!", "Mopping up 🪣", "Every cent counts 💰"];
 const BOSS_PRAISE = ["Looking good, {n}! 👏", "Keep it up, {n}! 🔥", "How's it going, {n}?", "Proud of you, {n} 👑"];
 
 function think(a, now) {
@@ -269,6 +290,17 @@ function think(a, now) {
   if (a.key === "boss" && busy.length && Math.random() < .45) {
     const o = pick(busy), s = workSpot(o);
     a.actions.push({at: {x: s.x + 26, y: s.y + 4}, do: () => { a.facing = -1; say(a, pick(BOSS_PRAISE).replace("{n}", o.name), 3.5); }, wait: 4});
+    return;
+  }
+  if (a.key === "sweep" && LITTER.length) {   // the janitor goes to the nearest bit of mess and sweeps it up
+    const l = LITTER.reduce((best, o) => Math.hypot(o.x - a.x, o.y - a.y) < Math.hypot(best.x - a.x, best.y - a.y) ? o : best);
+    a.actions.push({at: {x: l.x - 12, y: l.y + 4}, wait: 2.2, do: () => {
+      a.facing = 1; a.jumpT = .3;
+      burst(l.x, l.y - 4, 12, "smoke", ["#d8cdb4", "#e9e1cc"], {min: 8, max: 30, g: -10, up: 6});
+      burst(l.x, l.y - 6, 5, "spark", ["#fff8c4", "#9bd1ff"], {min: 15, max: 40, g: 20, life: .8});
+      const i = LITTER.indexOf(l); if (i >= 0) LITTER.splice(i, 1);
+      say(a, pick(SWEEP_SAY), 3);
+    }});
     return;
   }
   const spot = pick(SPOTS);
@@ -546,6 +578,7 @@ function drawPlot(p) {
   const lit = SKY.dk > .15;
   ctx.fillStyle = lit ? "#ffd56b" : "#a9dcff"; ctx.fillRect(hx + 4, hy + hh - 16, 10, 8); ctx.fillRect(hx + hw - 14, hy + hh - 16, 10, 8);
   if (lit) lights.push({x: p.x + p.w / 2, y: hy + hh - 12, r: 40, warm: .8});
+  if (a?.key === "sweep") { emoji("🪣", p.x + 10, p.y + p.h - 6, 15); emoji("🧹", p.x + p.w - 8, p.y + p.h - 16, 17, .35); }   // the janitor's shed
 }
 
 function drawAgent(a, t) {
@@ -579,11 +612,16 @@ function drawAgent(a, t) {
   else if ((a.key === "boss" && thinking) || a.face === "o") { ctx.ellipse(x + ex, by + 4, 1.6, 2, 0, 0, 7); }
   else ctx.arc(x + ex, by + 2, 3.2, Math.PI * .15, Math.PI * .85);
   ctx.stroke();
+  if (a.hat === "janitor") { ctx.fillStyle = "#ff9f1c"; ctx.fillRect(x - 11, by + 6, 22, 3); ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fillRect(x - 11, by + 7, 22, 1); }   // hi-vis stripe
   // hat
   if (a.hat === "crown") {
     ctx.fillStyle = "#ffd34d"; ctx.strokeStyle = "#b8860b"; ctx.lineWidth = 1;
     ctx.beginPath(); const hy = by - 11;
     ctx.moveTo(x - 8, hy); ctx.lineTo(x - 7, hy - 8); ctx.lineTo(x - 3, hy - 4); ctx.lineTo(x, hy - 10); ctx.lineTo(x + 3, hy - 4); ctx.lineTo(x + 7, hy - 8); ctx.lineTo(x + 8, hy); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (a.hat === "janitor") {
+    ctx.fillStyle = "#2b5fb8"; ctx.beginPath(); ctx.ellipse(x, by - 9, 11, 6, 0, Math.PI, 0); ctx.fill();
+    ctx.fillRect(f > 0 ? x + 4 : x - 14, by - 10, 10, 2.6);
+    ctx.fillStyle = "#ffd34d"; ctx.fillRect(x - 3, by - 14, 6, 2.2);
   } else if (a.hat === "cap") {
     ctx.fillStyle = "#2a2233"; ctx.beginPath(); ctx.ellipse(x, by - 9, 11, 6, 0, Math.PI, 0); ctx.fill();
     ctx.fillRect(f > 0 ? x + 4 : x - 14, by - 10, 10, 2.6);
@@ -819,6 +857,7 @@ function draw(t) {
     ...LAMPS.map(o => ({y: o.y, d: () => drawLamp(o)})),
     ...BENCHES.map(o => ({y: o.y - 2, d: () => drawBench(o)})),
     ...PLOTS.map(o => ({y: o.y + 40, d: () => drawPlot(o)})),
+    ...LITTER.map(o => ({y: o.y, d: () => drawLitter(o)})),
     ...[...agents.values()].map(a => ({y: a.y, d: () => drawAgent(a, t)})),
   ].sort((p, q) => p.y - q.y);
   for (const th of things) th.d();
@@ -914,7 +953,7 @@ canvas.addEventListener("mousemove", e => {
     const a = h.agent;
     text = `${a.name}: ${a.busy ? "working on " + a.busy : a.role || ""}`;
   } else if (h?.building) { const v = TIPS[h.building]; text = typeof v === "function" ? v() : v; }
-  else if (h?.plot) text = h.plot.agent ? `${h.plot.agent}'s cottage` : "An empty plot for your next agent.";
+  else if (h?.plot) text = h.plot.agent ? (h.plot.agent === "Sweep" ? "Sweep's shed: the janitor lives here. Click for today's cost report." : `${h.plot.agent}'s cottage`) : "An empty plot for your next agent.";
   tip.textContent = text;
   tip.style.display = text ? "block" : "none";
   if (text) {
@@ -933,9 +972,11 @@ canvas.addEventListener("click", e => {
     a.jumpT = .5;
     say(a, a.busy ? `Working on: ${a.busy}` : (a.key === "boss" ? "Need something? Click HQ or the Boss tab to chat 👑" : `Hi! I'm ${a.name} 👋`), 3.5);
     burst(a.x, a.y - 30, 6, "emoji", ["💖"], {min: 10, max: 40, g: -10});
+    if (a.key === "sweep") document.getElementById("sweep")?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"});
   } else if (h.building === "post") goTo("pending");
   else if (h.building === "tower" || h.building === "studio") goTo("library");
   else if (h.building === "hq") { goTo("chatlog"); setTimeout(() => document.getElementById("chatinput")?.focus({preventScroll: true}), 400); }
+  else if (h.plot?.agent === "Sweep") document.getElementById("sweep")?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"});
   else if (h.plot && !h.plot.agent) floatText(h.plot.x + h.plot.w / 2, h.plot.y, "Coming soon 🌱", "#e8ffd8", 12);
 });
 
@@ -950,6 +991,7 @@ window.HQWorld = {
     prev = {...c};
     if (calm) draw(performance.now());
   },
+  setMess,
   sky: () => sky(),   // Warrior Village follows the same time of day (and the same day/night button)
   bossThinking(on) {
     thinking = on;
