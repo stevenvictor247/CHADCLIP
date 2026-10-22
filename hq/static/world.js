@@ -858,7 +858,7 @@ canvas.addEventListener("click", e => {
 // ---------- public API ----------
 window.HQWorld = {
   update(s) {
-    syncAgents(s.agents || []);
+    syncAgents((s.agents || []).filter(a => (a.village || "business") === "business"));   // Warrior Village draws the football agents
     const c = s.counts || {};
     if (prev) react(c);
     chatter(s.activity || []);
@@ -866,6 +866,7 @@ window.HQWorld = {
     prev = {...c};
     if (calm) draw(performance.now());
   },
+  sky: () => sky(),   // Warrior Village follows the same time of day (and the same day/night button)
   bossThinking(on) {
     thinking = on;
     const boss = agents.get("boss");

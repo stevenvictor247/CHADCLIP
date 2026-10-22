@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from . import agents, boss, db, ledger, llm
 from .agents.chad.publish import publish_approved
-from .config import DATA_DIR, REQUIRE_APPROVAL
+from .config import DATA_DIR, FOOTBALL_REMINDER_HOUR, REQUIRE_APPROVAL
 
 STATE_PATH = DATA_DIR / "worker_state.json"
 REPORT_HOUR = int(os.getenv("HQ_REPORT_HOUR", "9"))  # local time for the Boss's daily report
@@ -37,16 +37,20 @@ def run_next_task() -> bool:
         db.log(task["agent"], f"Finished task #{task['id']}: {result[:200]}")
     except Exception as e:
         traceback.print_exc()
+        result = f"Task #{task['id']} failed: {e}"
         db.update_task(task["id"], "failed", str(e)[:1000])
-        db.log(task["agent"], f"Task #{task['id']} failed: {e}")
+        db.log(task["agent"], result)
+    if agent and agent.notify_when_done:
+        from . import relay
+        relay.notify(f"{agent.name}: {result}")
     return True
 
 
 def queue_scheduled(state: dict):
-    if ledger.over_budget():
-        return  # today's Claude budget is spent: nothing new starts on its own until tomorrow
     now = time.time()
     for agent in agents.AGENTS.values():
+        if ledger.over_budget(agent.village):
+            continue  # that village's Claude budget is spent: nothing new starts on its own there until tomorrow
         for every_hours, instructions, params in agent.schedule:
             key = f"sched:{agent.name}:{instructions}"
             if now - state.get(key, 0) >= every_hours * 3600:
@@ -66,6 +70,18 @@ def daily_report(state: dict):
         relay.notify("Daily report\n\n" + report)
 
 
+def football_tick():
+    """Warrior Village's own rounds: Ref checks new sheets in the football Inbox, Clock sends the morning reminder."""
+    from .football import files, season
+    try:
+        for name in files.scan():
+            db.create_task("Ref", f"Check {name}", {"file": name}, created_by="Inbox")
+        season.remind_if_due(FOOTBALL_REMINDER_HOUR)
+    except Exception as e:  # never let the football side stop the business side
+        traceback.print_exc()
+        db.log("HQ", f"Football rounds failed: {e}")
+
+
 def daily_backup(state: dict):
     today = datetime.now().strftime("%Y-%m-%d")
     if state.get("last_backup") != today:
@@ -80,6 +96,7 @@ def daily_backup(state: dict):
 def tick():
     state = _state()
     queue_scheduled(state)
+    football_tick()
     if not REQUIRE_APPROVAL:
         db.execute("UPDATE clips SET status = 'approved' WHERE status = 'pending_approval'")
     while run_next_task():

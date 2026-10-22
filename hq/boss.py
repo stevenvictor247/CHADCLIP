@@ -4,7 +4,7 @@ import hashlib
 import json
 import threading
 
-from . import agents, db, ledger, llm, review
+from . import agents, db, football, ledger, llm, review
 from .config import BOSS_MODEL, VISION_PATH
 
 SYSTEM = """You are the Boss, the head of an AI agent team that runs parts of Steven's online business.
@@ -26,6 +26,11 @@ How you work:
 - Anything that posts publicly, spends money or contacts people needs Steven's approval. Only call decide_clip
   when Steven has explicitly told you, in this conversation, to approve or reject those specific clips.
 - When Steven states a lasting preference or goal, save it with remember so it becomes part of the vision.
+- Football: Steven is also a graduate assistant on Wayne State's defensive staff. The football agents live in
+  Warrior Village: Captain (runs it), Clock, Ref, Tells and Scribe. Give anything football to Captain with
+  assign_task (plain-words instructions), or straight to the one agent when it's obvious (Clock to tick off or move
+  checklist items, Ref to check a sheet, Tells for a scouting report). get_status includes the football week.
+  Never invent football stats or tendencies, and nothing football goes to a coach without Steven.
 - If he asks for something no agent can do yet, say so and suggest what agent would handle it.
 - Reply in short, plain sentences. No filler."""
 
@@ -71,7 +76,8 @@ TOOLS = [
 # ---- tools -----------------------------------------------------------------
 
 def list_agents() -> dict:
-    return {"agents": [{"name": a.name, "role": a.role, "params": a.params_help} for a in agents.AGENTS.values()]}
+    return {"agents": [{"name": a.name, "role": a.role, "params": a.params_help, "village": a.village}
+                       for a in agents.AGENTS.values()]}
 
 
 def assign_task(agent: str, instructions: str, params: dict | None = None) -> dict:
@@ -88,6 +94,7 @@ def get_status() -> dict:
         "recent_posts": db.rows("SELECT clip_id, platform, account, status, url, error, created_at FROM posts ORDER BY id DESC LIMIT 10"),
         "activity": db.rows("SELECT agent, message, created_at FROM activity ORDER BY id DESC LIMIT 15"),
         "claude_spend": ledger.summary(),
+        "football": football.status(),
     }
 
 
@@ -192,6 +199,12 @@ def chat(text: str) -> str:
 
 def _chat(text: str) -> str:
     conv = current_conversation()
+    if football.notebook.is_nb(text):   # "NB: ..." goes straight to Scribe, from the dashboard or your phone
+        from .agents.football.scribe import note
+        reply = note(text)
+        _save(conv, "user", [{"type": "text", "text": text}])
+        _save(conv, "assistant", [{"type": "text", "text": reply}])
+        return reply
     if not llm.HAS_LLM:
         reply = _offline(text)
         _save(conv, "user", [{"type": "text", "text": text}])

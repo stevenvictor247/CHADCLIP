@@ -5,12 +5,12 @@ import hmac
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, ledger, money, settings, setup_check, tiktok_auth, update
-from .config import CLIPS_DIR, HAS_LLM, PASSWORD, SOURCES_DIR
+from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, ledger, money, settings, setup_check, tiktok_auth, update
+from .config import CLIPS_DIR, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
 app = FastAPI(title="Agent HQ")
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
@@ -133,6 +133,16 @@ def world():
     return FileResponse(STATIC / "world.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/football-town.js")
+def football_town():
+    return FileResponse(STATIC / "football-town.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/football-panel.js")
+def football_panel():
+    return FileResponse(STATIC / "football-panel.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/api/state")
 def state():
     running = {r["agent"]: r["instructions"] for r in db.rows("SELECT agent, instructions FROM tasks WHERE status = 'running'")}
@@ -143,11 +153,13 @@ def state():
         "campaigns": campaigns.summary(),
         "scout_inbox": discovery.inbox(),
         "creator_picks": creators.pending(),
-        "approvals": approvals.pending(),
+        "approvals": [{**a, "village": village_of(a["agent"])} for a in approvals.pending()],
+        "football": football.state(),
         "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at FROM leads "
                          "ORDER BY id DESC LIMIT 50"),
-        "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None}] +
-                  [{"name": a.name, "role": a.role, "doing": running.get(a.name)} for a in agents.AGENTS.values()],
+        "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None, "village": "business"}] +
+                  [{"name": a.name, "role": a.role, "doing": running.get(a.name), "village": a.village}
+                   for a in agents.AGENTS.values()],
         "counts": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},
         "pending": db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY score DESC, id"),
         "clips": _library(),
@@ -401,6 +413,112 @@ def try_chad(request: Request, video: UploadFile = File(...)):
     task_id = db.create_task("Chad", f"Clip {name} (your own video, to try HQ out)",
                              {"file": str(dest), "creator": "You"}, created_by="Steven")
     return {"task_id": task_id}
+
+
+# ---- Warrior Village (football) ----------------------------------------------------------------------
+
+class FootballItemIn(BaseModel):
+    item: str
+    done: bool = True
+    opponent: str | None = None
+
+
+class FootballReportIn(BaseModel):
+    opponent: str | None = None
+
+
+class TextIn(BaseModel):
+    text: str
+
+
+def _football_file(file_id: int) -> str:
+    rows = db.rows("SELECT name FROM football_files WHERE id = ?", file_id)
+    if not rows:
+        raise HTTPException(404, f"No football file #{file_id}")
+    return rows[0]["name"]
+
+
+@app.post("/api/football/upload")
+def football_upload(request: Request, file: UploadFile = File(...)):
+    _from_hq_page(request)
+    from .football import files
+    try:
+        result = files.save_upload(file.filename, file.file)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if result["kind"] == "sheet":
+        for name in files.scan():
+            db.create_task("Ref", f"Check {name}", {"file": name}, created_by="Steven")
+    return result
+
+
+@app.post("/api/football/files/{file_id}/check")
+def football_check(file_id: int, request: Request):
+    _from_hq_page(request)
+    name = _football_file(file_id)
+    db.execute("UPDATE football_files SET status = 'new' WHERE id = ?", file_id)
+    return {"task_id": db.create_task("Ref", f"Check {name}", {"file": name}, created_by="Steven")}
+
+
+@app.post("/api/football/files/{file_id}/report")
+def football_report(file_id: int, body: FootballReportIn, request: Request):
+    _from_hq_page(request)
+    name = _football_file(file_id)
+    params = {"file": name, **({"opponent": body.opponent.strip()} if body.opponent and body.opponent.strip() else {})}
+    return {"task_id": db.create_task("Tells", f"Scouting report from {name}", params, created_by="Steven")}
+
+
+@app.post("/api/football/checklist")
+def football_checklist(body: FootballItemIn, request: Request):
+    _from_hq_page(request)
+    from .football import season
+    try:
+        return {"message": season.mark(body.item, body.done, body.opponent)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/football/note")
+def football_note(body: TextIn, request: Request):
+    _from_hq_page(request)
+    from .agents.football.scribe import note
+    text = body.text.strip()
+    return {"message": note(text if football.notebook.is_nb(text) else "NB: " + text, source="dashboard")}
+
+
+@app.get("/api/football/notebook")
+def football_notebook():
+    return [{"id": n["id"], "tab": n["tab"], "text": football.notebook.shown(n)} for n in football.notebook.notes()]
+
+
+@app.get("/api/football/notebook.md")
+def football_notebook_md():
+    return Response(football.notebook.export_markdown(), media_type="text/markdown",
+                    headers={"Content-Disposition": 'attachment; filename="Coaching Notebook.md"'})
+
+
+@app.get("/api/football/rulebook")
+def football_rulebook():
+    return {"loaded": football.rulebook.loaded(), "text": football.rulebook.text() if football.rulebook.loaded() else ""}
+
+
+@app.post("/api/football/rulebook")
+def football_rulebook_save(body: TextIn, request: Request):
+    _from_hq_page(request)
+    try:
+        football.rulebook.save(body.text)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    db.log("Steven", "Updated the football rulebook")
+    return {"message": "Rulebook saved."}
+
+
+@app.get("/api/football/outbox/{name}")
+def football_outbox_file(name: str):
+    path = (FOOTBALL_OUTBOX / Path(name).name).resolve()
+    if path.parent != FOOTBALL_OUTBOX.resolve() or not path.is_file():
+        raise HTTPException(404, "Not in the football Outbox")
+    return FileResponse(path, filename=path.name)
 
 
 @app.get("/api/update")

@@ -1,0 +1,45 @@
+# Clock's season: Wayne State's 2026 games and the work due each game week.
+# Change anything by telling the Boss (for example "the Davenport game kicks off at 1 pm" or "the itinerary is due
+# Thursday"). Your changes are saved in data/football/season.json, so updates never overwrite them.
+
+team: Wayne State
+season_ends: 2026-11-14
+
+# confirmed: true = the date is in your Coaching Notebook. false = worked out from the order of the schedule.
+games:
+  - {opponent: Northwood, date: 2026-09-05, confirmed: false}
+  - {opponent: Hillsdale, date: 2026-09-12, site: away, confirmed: true}
+  - {opponent: Wisconsin-La Crosse, date: 2026-09-19, confirmed: true}
+  - {opponent: Quincy, date: 2026-09-26, site: away, confirmed: true}
+  - {opponent: Grand Valley State, date: 2026-10-03, confirmed: true}
+  - {opponent: Roosevelt, date: 2026-10-10, confirmed: true}
+  - {opponent: Saginaw Valley State, date: 2026-10-17, confirmed: true}
+  - {opponent: Davenport, date: 2026-10-24, confirmed: false}
+  - {opponent: Northern Michigan, date: 2026-10-31, confirmed: false}
+  - {opponent: Ferris State, date: 2026-11-07, confirmed: false}
+  - {opponent: Michigan Tech, date: 2026-11-14, confirmed: false}
+
+# Each game week's checklist. days_before = how many days before game day it's due (a Saturday game:
+# 6 = Sunday, 5 = Monday, 4 = Tuesday, 3 = Wednesday). These are first guesses; change them to fit your week.
+items:
+  - {name: Defensive self-scout, days_before: 6}
+  - {name: Scouting report, days_before: 5}
+  - {name: Birds and Rabbits, days_before: 5}
+  - {name: Personnel sheet, days_before: 4}
+  - {name: Stunt/blitz sheet, days_before: 4}
+  - {name: Scout cards for Wednesday, days_before: 4}
+  - {name: Teamworks itinerary, days_before: 3}
+
+# Short names you might use in file names, so Tells knows which opponent a sheet is for.
+nicknames:
+  Northwood: [NU, NORTHWOOD]
+  Hillsdale: [HC, HILLSDALE]
+  Wisconsin-La Crosse: [UWL, LA CROSSE, LACROSSE]
+  Quincy: [QU, QUINCY]
+  Grand Valley State: [GV, GVSU, GRAND VALLEY]
+  Roosevelt: [RU, ROOSEVELT]
+  Saginaw Valley State: [SV, SVSU, SAGINAW]
+  Davenport: [DU, DAVENPORT]
+  Northern Michigan: [NMU, NORTHERN]
+  Ferris State: [FSU, FERRIS]
+  Michigan Tech: [MTU, MICH TECH, TECH]
