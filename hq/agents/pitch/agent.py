@@ -26,6 +26,19 @@ Rules:
 - Sign with the sender name you're given.
 The subject line (for email) is short and not clickbait."""
 
+FOLLOWUP_SYSTEM = """You write a short follow-up from Steven, a clipper, to a streamer or podcaster he emailed a few days ago
+and who has not replied. 2 to 3 short lines. Friendly, no pressure, no guilt, no pretending they saw the first email.
+Do not repeat the whole pitch, invent facts, or mention a price. Offer to answer questions or send the free sample
+clip only if the original offered one. Finish with the opt-out line you're given, word for word, then sign with the
+sender name you're given."""
+
+FOLLOWUP_SCHEMA = {
+    "type": "object",
+    "properties": {"message": {"type": "string"}},
+    "required": ["message"],
+    "additionalProperties": False,
+}
+
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -127,7 +140,49 @@ def set_status(lead_id: int, status: str, note: str = "") -> None:
                status, f"\n[{db.now()[:10]}] {note}" if note else "", db.now(), lead_id)
 
 
+def _unsent_followup(lead: dict, n: int, pitch: str, why: str) -> str:
+    approvals.request("Pitch", "followup", f"Follow-up to {lead['name']} ({lead['platform']}): NOT SENT",
+                      f"Not sent: {why}\nContact: {lead['contact']}\n\n{pitch}",
+                      {"lead_id": lead["id"], "n": n, "pitch": pitch}, yes="Try again", no="Skip")
+    return f"Not sent: {why} I put the follow-up back in Waiting for your OK."
+
+
+def _handle_followup_decision(payload: dict, decision: str) -> str:
+    lead = db.rows("SELECT * FROM leads WHERE id = ?", payload["lead_id"])[0]
+    if decision == "reject":
+        return f"Skipped the follow-up to {lead['name']}."
+    n, pitch = int(payload["n"]), payload["pitch"]
+    if lead["status"] != "pitched":  # they replied, said no, or became a client since the draft was made
+        return f"{lead['name']} is now {lead['status']}, so no follow-up was sent."
+    to = mailer.address_in(lead["contact"])
+    if not to or not mailer.configured():
+        return f"Can't email {lead['name']}: copy the follow-up and send it yourself.\n\n{pitch}"
+    if mailer.blocked(to):
+        db.execute("UPDATE leads SET status = 'do_not_contact', updated_at = ? WHERE id = ?", db.now(), lead["id"])
+        return f"{to} is on your do-not-contact list, so nothing was sent."
+    cfg = settings()
+    blocker = _email_blocker(cfg)
+    if blocker:
+        return _unsent_followup(lead, n, pitch, blocker)
+    with db.connect() as c:  # claim this follow-up number first, so a double tap can never send it twice
+        claimed = c.execute("INSERT OR IGNORE INTO followup_sent (lead_id, n, email, sent_at) VALUES (?, ?, ?, ?)",
+                            (lead["id"], n, to, db.now())).rowcount == 1
+    if not claimed:
+        return f"Follow-up {n} to {lead['name']} was already sent."
+    try:
+        mailer.send(mailer.build(cfg, to, pitch))
+    except mailer.SendError as e:
+        db.execute("DELETE FROM followup_sent WHERE lead_id = ? AND n = ?", lead["id"], n)
+        return _unsent_followup(lead, n, pitch, str(e))
+    except Exception as e:
+        db.execute("DELETE FROM followup_sent WHERE lead_id = ? AND n = ?", lead["id"], n)
+        return _unsent_followup(lead, n, pitch, f"something went wrong ({e.__class__.__name__}).")
+    db.log("Pitch", f"Emailed follow-up {n} to {lead['name']} at {to}")
+    return f"Emailed follow-up {n} to {lead['name']} at {to}."
+
+
 approvals.HANDLERS["pitch"] = _handle_pitch_decision
+approvals.HANDLERS["followup"] = _handle_followup_decision
 
 
 class Pitch(Agent):
@@ -261,12 +316,35 @@ class Pitch(Agent):
                 continue
             db.execute("UPDATE leads SET followups = followups + 1, followup_at = ?, updated_at = ? WHERE id = ?",
                        _iso(days), db.now(), lead["id"])
-            lines.append(f"Follow up with {lead['name']} ({lead['contact']}): a short, friendly nudge, no pressure.")
+            if self._draft_followup(lead, lead["followups"] + 1, cfg):
+                lines.append(f"Follow-up email to {lead['name']} is ready in Waiting for your OK.")
+            else:
+                lines.append(f"Follow up with {lead['name']} ({lead['contact']}): a short, friendly nudge, no pressure.")
         if not lines:
             return "No follow-ups due."
         text = "\n".join(lines)
         relay.notify(text)
         return text
+
+    def _draft_followup(self, lead: dict, n: int, cfg: dict) -> bool:
+        """Draft a follow-up email for approval. False means Steven follows up by hand (no email, no Gmail, no Claude)."""
+        to = mailer.address_in(lead["contact"])
+        if not (to and mailer.configured() and llm.HAS_LLM and not mailer.blocked(to)):
+            return False
+        subject = mailer.split_pitch(lead["pitch"])[0]
+        facts = (f"Creator: {lead['name']}\nThis is follow-up number {n}.\nOriginal email:\n{lead['pitch']}\n"
+                 f"Opt-out line: {cfg.get('opt_out_line')}\nSign as: {cfg.get('sender_name')}\n"
+                 + ("The original offered a free sample clip." if cfg.get("free_sample") else "No free sample was offered."))
+        try:
+            message = llm.ask_json(model_for("pitch"), FOLLOWUP_SYSTEM, facts, FOLLOWUP_SCHEMA, effort="low",
+                                   agent="Pitch")["message"]
+        except Exception:
+            return False
+        text = f"Subject: {subject if subject.lower().startswith('re:') else 'Re: ' + subject}\n\n{message}"
+        approvals.request("Pitch", "followup", f"Follow-up {n} to {lead['name']} ({lead['platform']})",
+                          f"Pressing Send follow-up emails this from {mailer.credentials()[0]} to {to}.\n\n{text}",
+                          {"lead_id": lead["id"], "n": n, "pitch": text}, yes="Send follow-up", no="Skip")
+        return True
 
     def report(self) -> str:
         counts = {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM leads GROUP BY status")}

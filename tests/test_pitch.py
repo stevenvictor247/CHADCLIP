@@ -249,3 +249,62 @@ def test_gmail_connection_test_never_sends(monkeypatch):
     monkeypatch.setattr(mailer, "check_login", lambda: None)
     assert connections.run("pitch_email", {"PITCH_EMAIL_ADDRESS": "a@gmail.com", "PITCH_EMAIL_APP_PASSWORD": "x y"})["ok"]
     assert not connections.run("pitch_email", {})["ok"]
+
+
+# ---- one-click follow-ups ----
+
+def _pitched(gmail, handle="sam", contact="sam@example.com"):
+    approvals.decide(_draft(handle, contact)["id"], "approve")
+    db.execute("UPDATE leads SET followup_at = '2000-01-01T00:00:00+00:00' WHERE handle = ?", handle)
+
+
+def _followup_card():
+    return next(p for p in approvals.pending() if p["kind"] == "followup")
+
+
+def test_followup_email_is_drafted_for_approval_not_sent(monkeypatch, gmail):
+    monkeypatch.setattr(llm, "ask_json", lambda m, s, p, schema, **k: {"message": "Just checking in.\nSay no and I stop.\nSteven"}
+                        if "message" in schema["properties"] and "subject" not in schema["properties"] else dict(DRAFT))
+    _pitched(gmail)
+    sent_before = len(gmail)
+    assert "ready in Waiting for your OK" in run({"followups": True})
+    assert len(gmail) == sent_before  # drafting a follow-up never sends
+    card = _followup_card()
+    assert card["yes_label"] == "Send follow-up" and "Re: Clips for your stream" in card["preview"]
+    out = approvals.decide(card["id"], "approve")
+    assert "Emailed follow-up 1" in out and len(gmail) == sent_before + 1
+    m = gmail[-1]
+    assert m["To"] == "sam@example.com" and m["Subject"] == "Re: Clips for your stream"
+    assert "PO Box 1" in m.get_content()
+    assert approvals.decide(card["id"], "approve") == "Already approved."
+    assert len(gmail) == sent_before + 1
+
+
+def test_followup_not_sent_if_they_replied_or_opted_out(monkeypatch, gmail):
+    monkeypatch.setattr(llm, "ask_json", lambda m, s, p, schema, **k: {"message": "Hi again. Say no and I stop."}
+                        if "subject" not in schema["properties"] else dict(DRAFT))
+    _pitched(gmail)
+    run({"followups": True})
+    card = _followup_card()
+    lid = db.rows("SELECT id FROM leads")[0]["id"]
+    run({"mark": {"lead_id": lid, "status": "replied"}})
+    sent_before = len(gmail)
+    assert "now replied" in approvals.decide(card["id"], "approve") and len(gmail) == sent_before
+
+
+def test_followup_double_send_and_cap_are_blocked(monkeypatch, gmail):
+    monkeypatch.setattr(pitch_mod, "settings", lambda: {**CFG, "postal_address": "PO Box 1", "daily_send_cap": 1})
+    _pitched(gmail)  # uses the one email allowed today
+    payload = {"lead_id": db.rows("SELECT id FROM leads")[0]["id"], "n": 1, "pitch": "Subject: Re: x\n\nHi"}
+    out = pitch_mod._handle_followup_decision(payload, "approve")
+    assert "limit" in out and len(gmail) == 1
+    db.execute("DELETE FROM pitch_sent")
+    monkeypatch.setattr(pitch_mod, "settings", lambda: {**CFG, "postal_address": "PO Box 1", "daily_send_cap": 5})
+    assert "Emailed follow-up 1" in pitch_mod._handle_followup_decision(payload, "approve")
+    assert "already sent" in pitch_mod._handle_followup_decision(payload, "approve") and len(gmail) == 2
+
+
+def test_followup_without_email_stays_a_reminder(gmail):
+    _pitched(gmail, "disc", "discord: sam#1234")
+    assert "Follow up with Disc" in run({"followups": True})
+    assert not [p for p in approvals.pending() if p["kind"] == "followup"]

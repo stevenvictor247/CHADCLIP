@@ -142,7 +142,7 @@ type how you're allowed to. That is saved in `config/streamers.yaml`, which is w
 
 Pitch finds streamers and podcasters who might pay you to clip for them and drafts a short, personal message for each.
 It only drafts: every message waits in "Waiting for your OK" (dashboard and phone). Tap "I'll send it", copy the text,
-and send it yourself. Pitch then reminds you to follow up after 4 days (twice at most) and keeps a Leads list.
+and send it yourself. Pitch then reminds you to follow up after 4 days (twice at most) and keeps a Leads list. With Gmail set up, a follow-up for a lead with an email is drafted for you and waits for "Send follow-up"; nothing sends without your tap.
 
 Fill in `config/pitch.yaml` first (your name, one honest line about you, what you offer, price). Then ask the Boss
 "have Pitch find 5 streamers", or give it someone you found: `{"lead": {"name": ..., "platform": ..., "handle": ...,

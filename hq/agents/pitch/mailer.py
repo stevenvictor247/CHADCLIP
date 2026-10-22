@@ -57,7 +57,7 @@ def cap(cfg: dict) -> int:
 
 def sent_last_day() -> int:
     since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(timespec="seconds")
-    return db.rows("SELECT COUNT(*) n FROM pitch_sent WHERE sent_at >= ?", since)[0]["n"]
+    return sum(db.rows(f"SELECT COUNT(*) n FROM {t} WHERE sent_at >= ?", since)[0]["n"] for t in ("pitch_sent", "followup_sent"))
 
 
 def split_pitch(pitch: str) -> tuple[str, str]:
