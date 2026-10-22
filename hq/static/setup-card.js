@@ -80,7 +80,7 @@
       } catch (err) { say("Upload failed. Is HQ running?"); }
     };
     box.querySelectorAll('a[href="/#boss"]').forEach(a => a.onclick = ev => {
-      ev.preventDefault(); document.getElementById("chatinput")?.focus();
+      ev.preventDefault(); window.hqTabs?.show("boss"); document.getElementById("chatinput")?.focus();
     });
   }
 
