@@ -966,17 +966,17 @@ canvas.addEventListener("mouseleave", () => { if (tip) tip.style.display = "none
 canvas.addEventListener("click", e => {
   const h = hit(toWorld(e));
   if (!h) return;
-  const goTo = id => (window.hqTabs?.showFor(id), document.getElementById(id)?.closest("section")?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"}));
+  const goTo = id => (window.hqTabs?.showFor(id), (document.getElementById(id)?.closest("section") || document.getElementById(id))?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"}));
   if (h.agent) {
     const a = h.agent;
     a.jumpT = .5;
     say(a, a.busy ? `Working on: ${a.busy}` : (a.key === "boss" ? "Need something? Click HQ or the Boss tab to chat 👑" : `Hi! I'm ${a.name} 👋`), 3.5);
     burst(a.x, a.y - 30, 6, "emoji", ["💖"], {min: 10, max: 40, g: -10});
-    if (a.key === "sweep") document.getElementById("sweep")?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"});
+    if (a.key === "sweep") goTo("sweep");
   } else if (h.building === "post") goTo("pending");
   else if (h.building === "tower" || h.building === "studio") goTo("library");
   else if (h.building === "hq") { goTo("chatlog"); setTimeout(() => document.getElementById("chatinput")?.focus({preventScroll: true}), 400); }
-  else if (h.plot?.agent === "Sweep") document.getElementById("sweep")?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"});
+  else if (h.plot?.agent === "Sweep") goTo("sweep");
   else if (h.plot && !h.plot.agent) floatText(h.plot.x + h.plot.w / 2, h.plot.y, "Coming soon 🌱", "#e8ffd8", 12);
 });
 
