@@ -164,3 +164,25 @@ def test_update_bar_is_always_shown_and_has_a_check_button():
     js = (Path(__file__).parent.parent / "hq/static/hq-bar.js").read_text(encoding="utf-8")
     assert "HQ is up to date" in js and "hq-recheck" in js and "Couldn't check for updates" in js
     assert 'bar.style.display = "none"' not in js  # a missing bar must never look like a broken updater
+
+
+def test_pitch_settings_save_keeps_comments_and_values(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    import yaml
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    (cfg / "pitch.yaml").write_text('# note\nsender_name: ""   # sign\nprice: ""\ndaily_leads: 5   # per run\nfree_sample: true\n')
+    monkeypatch.setattr(hq.settings, "CONFIG_DIR", cfg)
+    assert {f["key"]: f["value"] for f in hq.settings.pitch_describe()}["daily_leads"] == "5"
+    hq.settings.save_pitch({"sender_name": 'Steven "S"', "price": "$150 a month", "daily_leads": "8",
+                            "free_sample": "false", "language": "en"})
+    text = (cfg / "pitch.yaml").read_text()
+    data = yaml.safe_load(text)
+    assert data["sender_name"] == 'Steven "S"' and data["price"] == "$150 a month"
+    assert data["daily_leads"] == 8 and data["free_sample"] is False and data["language"] == "en"
+    assert "# note" in text and "# sign" in text and "# per run" in text
+    import pytest
+    with pytest.raises(ValueError):
+        hq.settings.save_pitch({"daily_leads": "lots"})
+    with pytest.raises(ValueError):
+        hq.settings.save_pitch({"evil": "x"})

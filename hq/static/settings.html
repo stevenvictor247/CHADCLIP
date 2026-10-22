@@ -67,7 +67,7 @@
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-const changes = {}, accounts = {};
+const changes = {}, accounts = {}, pitchChanges = {};
 let lastTests = {};
 
 function testRow(name) {
@@ -103,7 +103,22 @@ function render(d) {
         ${esc(a.name)} <span class="help" style="grid-column:auto">(${esc(a.platform)})</span></label>${a.fields.map(field).join("")}
         <div class="field acct" id="a-${esc(a.name)}" style="border-top:0;padding-top:0">${testRow(a.test)}</div>`).join("") + `</section>`;
   }
+  if (d.pitch && d.pitch.length) {
+    html += `<section id="pitch"><h2>Pitch (finding clients)</h2><p class="help" style="margin:0 0 6px">Pitch only writes drafts. You approve and send every message yourself.</p>` +
+      d.pitch.map(f => {
+        const id = "p-" + f.key;
+        const input = f.kind === "yesno"
+          ? `<select id="${id}" data-pitch="${f.key}" data-orig="${esc(f.value)}"><option value="true" ${f.value === "true" ? "selected" : ""}>Yes</option><option value="false" ${f.value !== "true" ? "selected" : ""}>No</option></select>`
+          : `<input id="${id}" data-pitch="${f.key}" data-orig="${esc(f.value)}" value="${esc(f.value)}" ${f.kind === "number" ? 'inputmode="numeric"' : ""}>`;
+        return `<div class="field" id="k-${f.key}"><label for="${id}">${esc(f.label)}</label>${input}<div class="help">${esc(f.help)}</div></div>`;
+      }).join("") + `</section>`;
+  }
   $("sections").innerHTML = html;
+  document.querySelectorAll("[data-pitch]").forEach(el => el.addEventListener("input", () => {
+    if (el.value !== (el.dataset.orig ?? "")) { pitchChanges[el.dataset.pitch] = el.value; el.classList.add("changed"); }
+    else { delete pitchChanges[el.dataset.pitch]; el.classList.remove("changed"); }
+    update();
+  }));
   document.querySelectorAll("[data-key]").forEach(el => el.addEventListener("input", () => {
     const orig = el.dataset.orig ?? "";
     if (el.type === "password" ? el.value.trim() : el.value !== orig) { changes[el.dataset.key] = el.value; el.classList.add("changed"); }
@@ -145,7 +160,7 @@ async function runTest(btn) {
 }
 
 function update() {
-  const n = Object.keys(changes).length + Object.keys(accounts).length;
+  const n = Object.keys(changes).length + Object.keys(accounts).length + Object.keys(pitchChanges).length;
   $("save").disabled = !n;
   $("status").textContent = n ? `${n} change${n === 1 ? "" : "s"} not saved yet.` : "Nothing changed yet.";
 }
@@ -153,7 +168,7 @@ function update() {
 $("save").onclick = async () => {
   $("save").disabled = true; $("status").textContent = "Saving…";
   const r = await fetch("/api/settings", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"},
-                                          body: JSON.stringify({values: changes, accounts})});
+                                          body: JSON.stringify({values: changes, accounts, pitch: pitchChanges})});
   if (!r.ok) { $("status").textContent = "Couldn't save: " + ((await r.json()).detail || r.status); $("save").disabled = false; return; }
   $("status").textContent = "Saved. Restarting HQ…";
   await fetch("/api/restart", {method: "POST", headers: {"X-HQ": "1"}});
