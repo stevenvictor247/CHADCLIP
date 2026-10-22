@@ -550,6 +550,7 @@ function drawPlot(p) {
 
 function drawAgent(a, t) {
   if (a.sleeping) return;
+  if (a.key === "boss") return drawBoss(a, t);
   const walking = a.path.length > 0;
   let bob = walking ? -Math.abs(Math.sin(a.phase)) * 3 : Math.sin(t / 500 + a.seed) * 1.2;
   if (a.working && !walking) bob = -Math.abs(Math.sin(t / 140)) * 4;
@@ -592,8 +593,91 @@ function drawAgent(a, t) {
   emoji(a.prop, x + f * 14, by + 5, 11, swing);
   if (a.carry) emoji(a.carry, x, by - 26 + Math.sin(t / 150) * 1.5, 15);
 }
+// The Boss is a full person (taller than the round agents) so he stands out: suit, tie, cape, crown.
+const BOSS_SCALE = 1.4;
+function drawBoss(a, t) {
+  const walking = a.path.length > 0;
+  let bob = walking ? -Math.abs(Math.sin(a.phase)) * 3 : Math.sin(t / 500 + a.seed) * 1.2;
+  if (a.working && !walking) bob = -Math.abs(Math.sin(t / 140)) * 3;
+  if (a.jumpT > 0) bob -= Math.sin((1 - a.jumpT / .7) * Math.PI) * 12;
+  const x = 0, y = 0, f = a.facing, step = walking ? Math.sin(a.phase) * 4 : 0;
+  ctx.save(); ctx.translate(a.x, a.y); ctx.scale(BOSS_SCALE, BOSS_SCALE);
+  const SKIN = "#e9b48a", SUIT = "#2b2f6b", SUIT_HI = "#3d438f";
+  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.ellipse(x, y, 15, 4.5, 0, 0, 7); ctx.fill();
+  // gold glow so he pops off the grass
+  const g = ctx.createRadialGradient(x, y - 26 + bob, 4, x, y - 26 + bob, 40);
+  g.addColorStop(0, "rgba(255,215,90,.28)"); g.addColorStop(1, "rgba(255,215,90,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y - 26 + bob, 40, 0, 7); ctx.fill();
+  // cape (behind the body)
+  const sway = Math.sin(t / 350 + a.seed) * 2 - f * (walking ? 3 : 1);
+  ctx.fillStyle = "#b3202a";
+  ctx.beginPath(); ctx.moveTo(x - 10, y - 37 + bob); ctx.lineTo(x + 10, y - 37 + bob);
+  ctx.quadraticCurveTo(x + 15 + sway, y - 18 + bob, x + 13 + sway, y - 6); ctx.lineTo(x - 13 + sway, y - 6);
+  ctx.quadraticCurveTo(x - 15 + sway, y - 18 + bob, x - 10, y - 37 + bob); ctx.fill();
+  // legs + shoes
+  ctx.strokeStyle = "#1c1f45"; ctx.lineWidth = 5.5; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(x - 4, y - 18 + bob); ctx.lineTo(x - 4 + step, y - 4);
+  ctx.moveTo(x + 4, y - 18 + bob); ctx.lineTo(x + 4 - step, y - 4); ctx.stroke();
+  ctx.fillStyle = "#15121c";
+  ctx.beginPath(); ctx.ellipse(x - 4 + step + f * 1.5, y - 2, 4.2, 2.4, 0, 0, 7); ctx.ellipse(x + 4 - step + f * 1.5, y - 2, 4.2, 2.4, 0, 0, 7); ctx.fill();
+  // suit jacket
+  const ty = y - 38 + bob;
+  ctx.fillStyle = SUIT; roundRect(ctx, x - 11, ty, 22, 23, 6); ctx.fill();
+  ctx.fillStyle = SUIT_HI; ctx.fillRect(x - 9, ty + 2, 3, 18);
+  // shirt V, tie, buttons
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(x - 5, ty); ctx.lineTo(x + 5, ty); ctx.lineTo(x, ty + 10); ctx.fill();
+  ctx.fillStyle = "#d4282f"; ctx.beginPath(); ctx.moveTo(x - 1.6, ty + 1); ctx.lineTo(x + 1.6, ty + 1); ctx.lineTo(x + 2.4, ty + 9); ctx.lineTo(x, ty + 12); ctx.lineTo(x - 2.4, ty + 9); ctx.fill();
+  ctx.fillStyle = "#ffd34d"; for (const by of [ty + 14, ty + 18]) { ctx.beginPath(); ctx.arc(x, by, 1.1, 0, 7); ctx.fill(); }
+  // arms (wave when he's praising someone, pump when working)
+  const swing = walking ? Math.sin(a.phase) * 5 : a.working ? Math.sin(t / 120) * 4 : Math.sin(t / 700 + a.seed) * 1.5;
+  const waving = a.say && performance.now() < a.sayUntil;
+  ctx.strokeStyle = SUIT; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(x - 10, ty + 4); ctx.lineTo(x - 13 - swing * .3, ty + 18 + swing * .2);
+  if (waving) { ctx.moveTo(x + 10 * f, ty + 4); ctx.lineTo(x + 18 * f, ty - 6 + Math.sin(t / 110) * 2); }
+  else { ctx.moveTo(x + 10, ty + 4); ctx.lineTo(x + 13 + swing * .3, ty + 18 - swing * .2); }
+  ctx.stroke();
+  ctx.fillStyle = SKIN; ctx.beginPath();
+  ctx.arc(x - 13 - swing * .3, ty + 19 + swing * .2, 2.8, 0, 7);
+  if (waving) ctx.arc(x + 18 * f, ty - 8 + Math.sin(t / 110) * 2, 3, 0, 7); else ctx.arc(x + 13 + swing * .3, ty + 19 - swing * .2, 2.8, 0, 7);
+  ctx.fill();
+  // neck + head
+  const hy = ty - 10;
+  ctx.fillStyle = SKIN; ctx.fillRect(x - 3, ty - 4, 6, 5);
+  ctx.beginPath(); ctx.ellipse(x, hy, 10, 11, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x - 10 * f, hy + 1, 2, 3, 0, 0, 7); ctx.fill();   // ear
+  // hair
+  ctx.fillStyle = "#3b2a20";
+  ctx.beginPath(); ctx.ellipse(x - f * 1, hy - 6, 10.5, 6, 0, Math.PI, 0); ctx.fill();
+  ctx.fillRect(x - 10.5, hy - 7, 3, 7); ctx.fillRect(x + 7.5, hy - 7, 3, 7);
+  // face
+  const ex = f * 2.5, blink = (t + a.seed * 7) % 4200 < 130;
+  ctx.fillStyle = "#1d1426";
+  for (const dx of [-3.8, 3.8]) {
+    if (blink) ctx.fillRect(x + dx + ex - 1.6, hy, 3.2, 1.2);
+    else { ctx.beginPath(); ctx.ellipse(x + dx + ex, hy + .5, 1.5, 2, 0, 0, 7); ctx.fill(); }
+  }
+  ctx.strokeStyle = "#3b2a20"; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(x - 6 + ex, hy - 3.5); ctx.lineTo(x - 2 + ex, hy - 3); ctx.moveTo(x + 2 + ex, hy - 3); ctx.lineTo(x + 6 + ex, hy - 3.5); ctx.stroke();
+  ctx.fillStyle = "rgba(230,110,110,.35)"; ctx.beginPath(); ctx.arc(x - 6 + ex, hy + 4.5, 2, 0, 7); ctx.arc(x + 6 + ex, hy + 4.5, 2, 0, 7); ctx.fill();
+  ctx.fillStyle = "#3b2a20"; ctx.beginPath(); ctx.ellipse(x + ex, hy + 5.6, 4.5, 1.5, 0, Math.PI, 0); ctx.fill();   // moustache
+  ctx.strokeStyle = "#7a3a2a"; ctx.lineWidth = 1.3; ctx.beginPath();
+  if (a.face === "sad") ctx.arc(x + ex, hy + 10, 2.4, Math.PI * 1.15, Math.PI * 1.85);
+  else if (thinking || a.face === "o") ctx.ellipse(x + ex, hy + 8, 1.3, 1.6, 0, 0, 7);
+  else ctx.arc(x + ex, hy + 6.5, 2.6, Math.PI * .15, Math.PI * .85);
+  ctx.stroke();
+  // crown
+  ctx.fillStyle = "#ffd34d"; ctx.strokeStyle = "#b8860b"; ctx.lineWidth = 1;
+  const cy = hy - 10;
+  ctx.beginPath(); ctx.moveTo(x - 8, cy); ctx.lineTo(x - 8, cy - 8); ctx.lineTo(x - 4, cy - 4); ctx.lineTo(x, cy - 10); ctx.lineTo(x + 4, cy - 4); ctx.lineTo(x + 8, cy - 8); ctx.lineTo(x + 8, cy); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#d4282f"; ctx.beginPath(); ctx.arc(x, cy - 3, 1.5, 0, 7); ctx.fill();
+  if (a.carry) emoji(a.carry, x, cy - 20 + Math.sin(t / 150) * 1.5, 15);
+  ctx.restore();
+}
 function drawNames() {
-  for (const a of agents.values()) if (!a.sleeping) outlinedText(a.name, a.x, a.y + 10, 9, "#fff");
+  for (const a of agents.values()) if (!a.sleeping) {
+    if (a.key === "boss") outlinedText("👑 " + a.name, a.x, a.y + 14, 12, "#ffd34d");
+    else outlinedText(a.name, a.x, a.y + 10, 9, "#fff");
+  }
 }
 function drawBubble(a, t) {
   if (a.sleeping) return;
@@ -607,7 +691,7 @@ function drawBubble(a, t) {
   let s = text;
   if (ctx.measureText(s).width > 170) { while (s.length > 1 && ctx.measureText(s + "…").width > 170) s = s.slice(0, -1); s += "…"; }
   const w = ctx.measureText(s).width + (dots ? 22 : 0) + 14, h = 18;
-  const bx = clamp(a.x - w / 2, 4, W - w - 4), by = a.y - (a.carry ? 70 : 52) + Math.sin(t / 400 + a.seed) * 1;
+  const bx = clamp(a.x - w / 2, 4, W - w - 4), by = a.y - (a.carry ? 70 : 52) - (a.key === "boss" ? 46 : 0) + Math.sin(t / 400 + a.seed) * 1;
   ctx.fillStyle = "rgba(0,0,0,.18)"; roundRect(ctx, bx + 1, by + 2, w, h, 8); ctx.fill();
   ctx.fillStyle = "#fff"; roundRect(ctx, bx, by, w, h, 8); ctx.fill();
   ctx.beginPath(); ctx.moveTo(a.x - 4, by + h - 1); ctx.lineTo(a.x + 4, by + h - 1); ctx.lineTo(a.x, by + h + 5); ctx.fill();
@@ -808,7 +892,7 @@ function toWorld(e) {
   return {x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H};
 }
 function hit(p) {
-  for (const a of agents.values()) if (!a.sleeping && Math.hypot(p.x - a.x, p.y - (a.y - 14)) < 18) return {agent: a};
+  for (const a of agents.values()) if (!a.sleeping && (a.key === "boss" ? Math.abs(p.x - a.x) < 22 && p.y > a.y - 86 && p.y < a.y + 4 : Math.hypot(p.x - a.x, p.y - (a.y - 14)) < 18)) return {agent: a};
   for (const [k, b] of Object.entries(B)) if (p.x > b.x - 8 && p.x < b.x + b.w + 8 && p.y > b.y - 10 && p.y < b.y + b.h + 4) return {building: k};
   if (Math.hypot(p.x - MAILBOX.x, p.y - (MAILBOX.y - 18)) < 18) return {building: "post"};
   for (const pl of PLOTS) if (p.x > pl.x && p.x < pl.x + pl.w && p.y > pl.y && p.y < pl.y + pl.h) return {plot: pl};
