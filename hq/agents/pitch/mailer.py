@@ -86,29 +86,50 @@ def build(cfg: dict, to: str, pitch: str) -> EmailMessage:
     return msg
 
 
-def send(msg: EmailMessage) -> None:
+def _connect() -> smtplib.SMTP:
+    """A logged-in Gmail connection. Tries port 465, then 587 (some networks and antivirus programs block one)."""
     address, password = credentials()
-    try:
-        with smtplib.SMTP_SSL(HOST, PORT, timeout=30, context=ssl.create_default_context()) as s:
+    errors = []
+    for port in (465, 587):
+        try:
+            if port == 465:
+                s = smtplib.SMTP_SSL(HOST, port, timeout=30, context=ssl.create_default_context())
+            else:
+                s = smtplib.SMTP(HOST, port, timeout=30)
+                s.starttls(context=ssl.create_default_context())
             s.login(address, password)
+            return s
+        except smtplib.SMTPAuthenticationError:
+            raise
+        except (smtplib.SMTPException, OSError) as e:
+            errors.append(f"port {port}: {e.__class__.__name__} {e}".strip())
+    raise ConnectionError("; ".join(errors))
+
+
+def _explain(e: Exception) -> SendError:
+    if isinstance(e, smtplib.SMTPAuthenticationError):
+        return SendError("Gmail didn't accept the address or app password. Make a new app password at "
+                         "myaccount.google.com/apppasswords (2-Step Verification must be on) and paste it in Settings.")
+    detail = str(e)
+    hint = (" Something on this computer or network is blocking the connection to Gmail: check that your antivirus or "
+            "firewall allows Python, and that you're not on a work or school network.")
+    return SendError(f"Couldn't reach Gmail ({detail}).{hint}")
+
+
+def send(msg: EmailMessage) -> None:
+    try:
+        with _connect() as s:
             s.send_message(msg)
-    except smtplib.SMTPAuthenticationError:
-        raise SendError("Gmail didn't accept the address or app password. Make a new app password at "
-                        "myaccount.google.com/apppasswords and paste it in Settings.")
     except smtplib.SMTPRecipientsRefused:
         raise SendError("Gmail says that email address doesn't exist or refuses mail.")
     except (smtplib.SMTPException, OSError) as e:
-        raise SendError(f"Couldn't reach Gmail ({e.__class__.__name__}). Check this computer is online and try again.")
+        raise _explain(e)
 
 
 def check_login() -> None:
     """Log in without sending anything (the Settings page's Test button)."""
-    address, password = credentials()
     try:
-        with smtplib.SMTP_SSL(HOST, PORT, timeout=20, context=ssl.create_default_context()) as s:
-            s.login(address, password)
-    except smtplib.SMTPAuthenticationError:
-        raise SendError("Gmail didn't accept this address and app password. Use an app password from "
-                        "myaccount.google.com/apppasswords, not your normal password (2-Step Verification must be on).")
-    except (smtplib.SMTPException, OSError):
-        raise SendError("Couldn't reach Gmail. Check this computer is online, then try again.")
+        with _connect():
+            pass
+    except (smtplib.SMTPException, OSError) as e:
+        raise _explain(e)
