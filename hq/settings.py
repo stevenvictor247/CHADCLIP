@@ -62,6 +62,8 @@ PITCH_FIELDS = [
     ("portfolio_url", "Link to your clips", "text", "Your clipping account or best clips. Blank means no link."),
     ("free_sample", "Offer a free sample clip", "yesno", "Each message offers to make one clip for free."),
     ("opt_out_line", "Opt-out line", "text", "Added word for word to every message. Please keep one."),
+    ("postal_address", "Postal address", "text", "Required to send email: spam law wants a real mailing address in the message (a PO box is fine)."),
+    ("daily_send_cap", "Most emails per day", "number", "Pitch won't send more than this in 24 hours (never above 20). Keeps Gmail happy."),
     ("daily_leads", "New pitches per run", "number", "How many streamers to draft pitches for each time."),
     ("min_viewers", "Smallest streamer (viewers)", "number", "Live viewers, lowest to look for."),
     ("max_viewers", "Biggest streamer (viewers)", "number", "Live viewers, highest to look for."),

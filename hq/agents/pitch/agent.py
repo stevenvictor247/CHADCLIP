@@ -10,6 +10,7 @@ from ... import approvals, db, llm, relay
 from ...config import CONFIG_DIR, model_for
 from ..base import Agent
 from ..chad import twitch
+from . import mailer
 
 SYSTEM = """You write the first message from Steven, a clipper, to a streamer or podcaster who might pay him to clip
 their content for TikTok, YouTube Shorts and Instagram Reels.
@@ -37,7 +38,7 @@ SCHEMA = {
 }
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
-STATUSES = ("new", "drafted", "pitched", "replied", "client", "dead", "dropped")
+STATUSES = ("new", "drafted", "pitched", "replied", "client", "dead", "dropped", "do_not_contact")
 
 
 def settings() -> dict:
@@ -49,17 +50,81 @@ def _iso(days: float = 0) -> str:
     return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat(timespec="seconds")
 
 
+def _unsent(lead: dict, why: str) -> str:
+    """The email didn't go: put the same draft back in the queue so one tap tries again."""
+    approvals.request("Pitch", "pitch", f"Pitch to {lead['name']} ({lead['platform']}): NOT SENT",
+                      f"Not sent: {why}\nContact: {lead['contact']}\n\n{lead['pitch']}",
+                      {"lead_id": lead["id"]}, yes="Try again", no="Drop")
+    return f"Not sent: {why} I put {lead['name']}'s draft back in Waiting for your OK."
+
+
+def _claim(lead_id: int) -> bool:
+    """Take the lead from drafted to sending in one step, so a double tap can never send twice."""
+    with db.connect() as c:
+        return c.execute("UPDATE leads SET status = 'sending', updated_at = ? WHERE id = ? AND status = 'drafted'",
+                         (db.now(), lead_id)).rowcount == 1
+
+
+def _email_blocker(cfg: dict) -> str | None:
+    if not str(cfg.get("sender_name") or "").strip():
+        return "fill in your name on the Settings page (Pitch section)."
+    if not str(cfg.get("postal_address") or "").strip():
+        return "fill in your postal address in the Pitch section of the Settings page (spam law needs one; a PO box is fine)."
+    if mailer.sent_last_day() >= mailer.cap(cfg):
+        return f"you've reached today's limit of {mailer.cap(cfg)} emails. Try again tomorrow."
+    return None
+
+
 def _handle_pitch_decision(payload: dict, decision: str) -> str:
     lead = db.rows("SELECT * FROM leads WHERE id = ?", payload["lead_id"])[0]
     if decision == "reject":
-        db.execute("UPDATE leads SET status = 'dropped', updated_at = ? WHERE id = ?", db.now(), lead["id"])
+        db.execute("UPDATE leads SET status = 'dropped', updated_at = ? WHERE id = ? AND status = 'drafted'",
+                   db.now(), lead["id"])
         return f"Dropped {lead['name']}."
-    days = float(settings().get("followup_days", 4))
+    if lead["status"] != "drafted":
+        return f"{lead['name']} is already {lead['status']}, so nothing was sent."
+    cfg = settings()
+    days = float(cfg.get("followup_days", 4))
+    to = mailer.address_in(lead["contact"])
+    if to and mailer.configured():
+        if mailer.blocked(to):
+            db.execute("UPDATE leads SET status = 'do_not_contact', updated_at = ? WHERE id = ?", db.now(), lead["id"])
+            return f"{to} is on your do-not-contact list, so nothing was sent."
+        blocker = _email_blocker(cfg)
+        if blocker:
+            return _unsent(lead, blocker)
+        if not _claim(lead["id"]):
+            return f"{lead['name']} is already being handled, so nothing was sent."
+        try:
+            mailer.send(mailer.build(cfg, to, lead["pitch"]))
+        except mailer.SendError as e:
+            db.execute("UPDATE leads SET status = 'drafted', updated_at = ? WHERE id = ?", db.now(), lead["id"])
+            return _unsent(lead, str(e))
+        except Exception as e:  # never leave a lead stuck in 'sending' without telling Steven
+            db.execute("UPDATE leads SET status = 'drafted', updated_at = ? WHERE id = ?", db.now(), lead["id"])
+            return _unsent(lead, f"something went wrong ({e.__class__.__name__}).")
+        db.execute("INSERT OR IGNORE INTO pitch_sent (lead_id, email, subject, sent_at) VALUES (?, ?, ?, ?)",
+                   lead["id"], to, mailer.split_pitch(lead["pitch"])[0], db.now())
+        db.execute("UPDATE leads SET status = 'pitched', followup_at = ?, updated_at = ? WHERE id = ?",
+                   _iso(days), db.now(), lead["id"])
+        db.log("Pitch", f"Emailed {lead['name']} at {to}")
+        return f"Emailed {lead['name']} at {to}. I'll remind you to follow up in {days:g} days."
     db.execute("UPDATE leads SET status = 'pitched', followup_at = ?, updated_at = ? WHERE id = ?",
                _iso(days), db.now(), lead["id"])
     text = f"Send this to {lead['name']} ({lead['platform']}). Contact: {lead['contact']}\n\n{lead['pitch']}"
     relay.notify(text)
     return f"Marked as pitched. I'll remind you to follow up in {days:g} days.\n\n{text}"
+
+
+def set_status(lead_id: int, status: str, note: str = "") -> None:
+    """Change a lead's status. do_not_contact also blocks their email address for good."""
+    rows = db.rows("SELECT contact FROM leads WHERE id = ?", lead_id)
+    if not rows:
+        raise KeyError(lead_id)
+    if status == "do_not_contact" and (email := mailer.address_in(rows[0]["contact"])):
+        mailer.add_do_not_contact(email, note)
+    db.execute("UPDATE leads SET status = ?, notes = COALESCE(notes, '') || ?, updated_at = ? WHERE id = ?",
+               status, f"\n[{db.now()[:10]}] {note}" if note else "", db.now(), lead_id)
 
 
 approvals.HANDLERS["pitch"] = _handle_pitch_decision
@@ -74,7 +139,8 @@ class Pitch(Agent):
             params_help='{"find": 5} to find and draft pitches for new Twitch streamers (needs config/pitch.yaml filled in); '
                         '{"lead": {"name": "...", "platform": "youtube", "handle": "...", "contact": "email or link", '
                         '"notes": "what you know about them"}} to draft a pitch for someone you found; {"followups": true}; '
-                        '{"mark": {"lead_id": 1, "status": "replied|client|dead", "note": "..."}}; {"report": true}.',
+                        '{"mark": {"lead_id": 1, "status": "replied|client|dead|do_not_contact", "note": "..."}}; '
+                        '{"do_not_contact": "email@example.com"}; {"report": true}.',
             schedule=self._schedule(),
         )
 
@@ -95,6 +161,9 @@ class Pitch(Agent):
             return self.find(int(params["find"]))
         if params.get("lead"):
             return self.draft_lead(params["lead"])
+        if params.get("do_not_contact"):
+            mailer.add_do_not_contact(str(params["do_not_contact"]).strip(), "added by Steven")
+            return f"{params['do_not_contact']} is on the do-not-contact list. Pitch will never email it."
         if params.get("mark"):
             return self.mark(params["mark"])
         if params.get("followups"):
@@ -161,9 +230,12 @@ class Pitch(Agent):
         lid = db.execute("INSERT INTO leads (name, platform, handle, followers, contact, notes, pitch, status, created_at, "
                          "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'drafted', ?, ?)", lead["name"], lead["platform"],
                          lead["handle"], lead.get("followers"), lead.get("contact"), lead.get("notes"), text, ts, ts)
+        to = mailer.address_in(lead.get("contact"))
+        by_email = bool(to and mailer.configured())
+        how = (f"Pressing Send email sends this from {mailer.credentials()[0]} to {to}.\n" if by_email else "")
         approvals.request("Pitch", "pitch", f"Pitch to {lead['name']} ({lead['platform']})",
-                          f"{draft['why_this_lead']}\nContact: {lead.get('contact')}\n\n{text}",
-                          {"lead_id": lid}, yes="I'll send it", no="Drop")
+                          f"{draft['why_this_lead']}\n{how}Contact: {lead.get('contact')}\n\n{text}",
+                          {"lead_id": lid}, yes="Send email" if by_email else "I'll send it", no="Drop")
         return f"{lead['name']} (lead #{lid})"
 
     # ---- keeping track ----
@@ -171,8 +243,10 @@ class Pitch(Agent):
     def mark(self, m: dict) -> str:
         if m.get("status") not in STATUSES:
             return f"status must be one of {', '.join(STATUSES)}"
-        db.execute("UPDATE leads SET status = ?, notes = COALESCE(notes, '') || ?, updated_at = ? WHERE id = ?",
-                   m["status"], f"\n[{db.now()[:10]}] {m['note']}" if m.get("note") else "", db.now(), int(m["lead_id"]))
+        try:
+            set_status(int(m["lead_id"]), m["status"], m.get("note") or "")
+        except KeyError:
+            return f"No lead #{m['lead_id']}."
         return f"Lead #{m['lead_id']} is now {m['status']}."
 
     def followups(self) -> str:

@@ -137,12 +137,23 @@ CREATE TABLE IF NOT EXISTS leads (
     contact TEXT,
     notes TEXT,
     pitch TEXT,
-    status TEXT NOT NULL DEFAULT 'new',          -- new, drafted, pitched, replied, client, dead, dropped
+    status TEXT NOT NULL DEFAULT 'new',          -- new, drafted, sending, pitched, replied, client, dead, dropped, do_not_contact
     followups INTEGER NOT NULL DEFAULT 0,
     followup_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE (platform, handle)
+);
+CREATE TABLE IF NOT EXISTS do_not_contact (
+    email TEXT PRIMARY KEY,
+    reason TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pitch_sent (
+    lead_id INTEGER PRIMARY KEY,                 -- one email per lead, ever
+    email TEXT NOT NULL,
+    subject TEXT,
+    sent_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS relay_sent (
     kind TEXT NOT NULL,

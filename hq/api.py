@@ -286,10 +286,13 @@ class LeadIn(BaseModel):
 
 @app.post("/api/leads/{lead_id}")
 def update_lead(lead_id: int, body: LeadIn):
-    from .agents.pitch.agent import STATUSES
+    from .agents.pitch.agent import STATUSES, set_status
     if body.status not in STATUSES:
         raise HTTPException(400, f"status must be one of {', '.join(STATUSES)}")
-    db.execute("UPDATE leads SET status = ?, updated_at = ? WHERE id = ?", body.status, db.now(), lead_id)
+    try:
+        set_status(lead_id, body.status)
+    except KeyError:
+        raise HTTPException(404, f"No lead #{lead_id}")
     return {"ok": True}
 
 
