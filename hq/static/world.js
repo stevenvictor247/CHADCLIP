@@ -927,11 +927,11 @@ canvas.addEventListener("mouseleave", () => { if (tip) tip.style.display = "none
 canvas.addEventListener("click", e => {
   const h = hit(toWorld(e));
   if (!h) return;
-  const goTo = id => document.getElementById(id)?.closest("section")?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"});
+  const goTo = id => (window.hqTabs?.showFor(id), document.getElementById(id)?.closest("section")?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"}));
   if (h.agent) {
     const a = h.agent;
     a.jumpT = .5;
-    say(a, a.busy ? `Working on: ${a.busy}` : (a.key === "boss" ? "Need something? Chat with me below 👇" : `Hi! I'm ${a.name} 👋`), 3.5);
+    say(a, a.busy ? `Working on: ${a.busy}` : (a.key === "boss" ? "Need something? Click HQ or the Boss tab to chat 👑" : `Hi! I'm ${a.name} 👋`), 3.5);
     burst(a.x, a.y - 30, 6, "emoji", ["💖"], {min: 10, max: 40, g: -10});
   } else if (h.building === "post") goTo("pending");
   else if (h.building === "tower" || h.building === "studio") goTo("library");

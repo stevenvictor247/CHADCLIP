@@ -123,6 +123,11 @@ def setup_card():
     return FileResponse(STATIC / "setup-card.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/hq-tabs.js")
+def hq_tabs():
+    return FileResponse(STATIC / "hq-tabs.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/money-bar.js")
 def money_bar():
     return FileResponse(STATIC / "money-bar.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
