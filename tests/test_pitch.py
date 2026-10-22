@@ -145,6 +145,7 @@ def gmail(monkeypatch):
     monkeypatch.setenv("PITCH_EMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")
     monkeypatch.setattr(pitch_mod, "settings", lambda: {**CFG, "postal_address": "PO Box 1, Austin TX 78701"})
     db.execute("DELETE FROM pitch_sent")
+    db.execute("DELETE FROM followup_sent")
     db.execute("DELETE FROM do_not_contact")
     outbox = []
     monkeypatch.setattr(mailer, "send", outbox.append)
