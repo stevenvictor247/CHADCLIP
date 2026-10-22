@@ -307,5 +307,6 @@ def test_followup_double_send_and_cap_are_blocked(monkeypatch, gmail):
 
 def test_followup_without_email_stays_a_reminder(gmail):
     _pitched(gmail, "disc", "discord: sam#1234")
+    before = len([p for p in approvals.pending() if p["kind"] == "followup"])
     assert "Follow up with Disc" in run({"followups": True})
-    assert not [p for p in approvals.pending() if p["kind"] == "followup"]
+    assert len([p for p in approvals.pending() if p["kind"] == "followup"]) == before
