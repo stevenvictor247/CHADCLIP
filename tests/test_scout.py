@@ -256,3 +256,29 @@ def test_creator_api(twitch_stub):
     assert client.post(f"/api/creators/{picks[0]['id']}/skip").status_code == 200
     assert client.post(f"/api/creators/{picks[1]['id']}/permit", json={"how": "x"}).status_code == 400
     assert client.post("/api/creators/999999/skip").status_code == 404
+
+
+def test_creators_already_pitched_are_not_suggested(twitch_stub):
+    db.execute("DELETE FROM leads")
+    ts = db.now()
+    db.execute("INSERT INTO leads (name, platform, handle, status, created_at, updated_at) "
+               "VALUES ('BigSam', 'twitch', 'BigSam', 'pitched', ?, ?)", ts, ts)
+    scout_pkg.Scout().run({"params": '{"creators": 5}'})
+    assert [c["name"] for c in creators.pending()] == ["ClipFriendly"]
+    db.execute("DELETE FROM leads")
+
+
+def test_they_said_yes_records_permission_and_marks_client(twitch_stub):
+    from hq.agents.pitch.agent import they_said_yes
+    db.execute("DELETE FROM leads")
+    ts = db.now()
+    lid = db.execute("INSERT INTO leads (name, platform, handle, status, created_at, updated_at) "
+                     "VALUES ('BigSam', 'twitch', 'BigSam', 'pitched', ?, ?)", ts, ts)
+    they_said_yes(lid, "replied to my email, OK to clip")
+    assert "bigsam: \"replied to my email, OK to clip\"" in twitch_stub.read_text()
+    assert db.rows("SELECT status FROM leads WHERE id = ?", lid)[0]["status"] == "client"
+    kick = db.execute("INSERT INTO leads (name, platform, handle, status, created_at, updated_at) "
+                      "VALUES ('K', 'kick', 'k', 'pitched', ?, ?)", ts, ts)
+    with pytest.raises(ValueError):
+        they_said_yes(kick, "yes")
+    db.execute("DELETE FROM leads")

@@ -141,6 +141,22 @@ def set_status(lead_id: int, status: str, note: str = "") -> None:
                status, f"\n[{db.now()[:10]}] {note}" if note else "", db.now(), lead_id)
 
 
+def they_said_yes(lead_id: int, how: str = "") -> str:
+    """A pitched streamer agreed. Record the permission where Chad reads it, and mark the lead a client."""
+    from ... import creators
+    rows = db.rows("SELECT * FROM leads WHERE id = ?", lead_id)
+    if not rows:
+        raise KeyError(lead_id)
+    lead = rows[0]
+    if lead["platform"] != "twitch":
+        raise ValueError("Chad only clips Twitch channels so far; this lead isn't on Twitch")
+    how = " ".join(how.split()) or f"said yes to my pitch, {db.now()[:10]}"
+    creators.record_permission(lead["handle"], how)
+    set_status(lead_id, "client", f"Said yes: {how}")
+    db.log("Steven", f"Permission recorded for {lead['name']}: {how}")
+    return f"Saved. Chad can now clip {lead['name']}."
+
+
 def _unsent_followup(lead: dict, n: int, pitch: str, why: str) -> str:
     approvals.request("Pitch", "followup", f"Follow-up to {lead['name']} ({lead['platform']}): NOT SENT",
                       f"Not sent: {why}\nContact: {lead['contact']}\n\n{pitch}",

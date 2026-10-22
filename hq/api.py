@@ -296,6 +296,21 @@ def update_lead(lead_id: int, body: LeadIn):
     return {"ok": True}
 
 
+class YesIn(BaseModel):
+    how: str = ""
+
+
+@app.post("/api/leads/{lead_id}/yes")
+def lead_said_yes(lead_id: int, body: YesIn):
+    from .agents.pitch.agent import they_said_yes
+    try:
+        return {"ok": True, "message": they_said_yes(lead_id, body.how)}
+    except KeyError:
+        raise HTTPException(404, f"No lead #{lead_id}")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/api/clips/{clip_id}/{decision}")
 def decide(clip_id: int, decision: str):
     if decision not in ("approve", "reject"):
