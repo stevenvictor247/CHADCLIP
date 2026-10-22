@@ -59,15 +59,12 @@ def skip(pick_id: int) -> str:
     return f"Skipped {rows[0]['name']}."
 
 
-def permit(pick_id: int, how: str) -> str:
-    """Steven says how he's allowed to clip this creator. It goes into config/streamers.yaml, which Chad reads."""
+def record_permission(login: str, how: str) -> None:
+    """Write "login: how" into config/streamers.yaml, the file Chad reads. Raises ValueError if it can't be saved."""
     how = " ".join((how or "").split())
-    rows = db.rows("SELECT * FROM creator_picks WHERE id = ?", pick_id)
-    if not rows:
-        raise ValueError(f"No creator suggestion #{pick_id}")
+    login = login.lower()
     if len(how) < 5:
         raise ValueError("Say how you're allowed to clip them, for example \"clipping program, joined today\"")
-    login = rows[0]["login"]
     path = CONFIG_DIR / "streamers.yaml"
     original = path.read_text(encoding="utf-8") if path.exists() else "permissions:\n"
     updated = original.rstrip("\n") + f"\n  {login}: {json.dumps(how)}\n"
@@ -76,6 +73,14 @@ def permit(pick_id: int, how: str) -> str:
     if (yaml.safe_load(updated)["permissions"] or {}).get(login) != how:
         raise ValueError("Couldn't save that into config/streamers.yaml")
     path.write_text(updated, encoding="utf-8")
+
+
+def permit(pick_id: int, how: str) -> str:
+    """Steven says how he's allowed to clip this creator. It goes into config/streamers.yaml, which Chad reads."""
+    rows = db.rows("SELECT * FROM creator_picks WHERE id = ?", pick_id)
+    if not rows:
+        raise ValueError(f"No creator suggestion #{pick_id}")
+    record_permission(rows[0]["login"], how)
     db.execute("UPDATE creator_picks SET status = 'permitted' WHERE id = ?", pick_id)
-    db.log("Steven", f"Permission recorded for {rows[0]['name']}: {how}")
+    db.log("Steven", f"Permission recorded for {rows[0]['name']}: {' '.join(how.split())}")
     return f"Saved. Chad can now clip {rows[0]['name']}."

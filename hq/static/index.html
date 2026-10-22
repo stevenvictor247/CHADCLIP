@@ -528,7 +528,16 @@ function renderLeads(list) {
   $("leads").innerHTML = list.map(l => `<div class="leadrow"><b>${esc(l.name)}</b><span class="meta">${esc(l.platform)}</span>
     <select onchange="setLead(${l.id}, this.value)" aria-label="Status of ${esc(l.name)}">${LEAD_STATUSES.map(s =>
       `<option ${s === l.status ? "selected" : ""}>${s}</option>`).join("")}</select>
+    ${l.platform === "twitch" && l.status !== "client" ? `<button onclick="leadYes(${l.id})">They said yes</button>` : ""}
     <span class="meta">${esc(l.contact || "")}</span></div>`).join("");
+}
+async function leadYes(id) {
+  const how = prompt("How did they say yes? (for example: replied to my email, OK to clip) Leave blank to use today's date.", "");
+  if (how === null) return;
+  const r = await fetch(`/api/leads/${id}/yes`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({how})});
+  const d = await r.json().catch(() => ({}));
+  alert(r.ok ? d.message : (d.detail || "Couldn't save that"));
+  shownLeads = null; refresh();
 }
 async function setLead(id, status) {
   await fetch(`/api/leads/${id}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({status})});

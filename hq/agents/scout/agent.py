@@ -72,8 +72,7 @@ class Scout(Agent):
                         'posted clips that need submitting; {"record": {"submission_id": 1, "views": 5000, '
                         '"earned_usd": 7.5, "status": "paid"}}; {"report": true} for earnings so far.',
             schedule=[(6, "Find posted campaign clips that still need submitting.", {"sync": True}),
-                      (6, "Look for new campaigns in the inbox and the feeds.", {"discover": True}),
-                      (168, "Suggest creators worth clipping.", {"creators": 5})],
+                      (6, "Look for new campaigns in the inbox and the feeds.", {"discover": True})],
         )
 
     def run(self, task: dict) -> str:
@@ -179,9 +178,10 @@ class Scout(Agent):
         if not (os.getenv("TWITCH_CLIENT_ID") and os.getenv("TWITCH_CLIENT_SECRET")):
             return "To suggest creators Scout needs the Twitch keys (TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET) on the Settings page."
         perms = twitch.permissions()
+        pitched = {r["handle"].lower() for r in db.rows("SELECT handle FROM leads WHERE platform = 'twitch'")}
         found = []
         for s in twitch.top_streamers(50):
-            if creators.known(s["login"]) or perms.get(s["login"].lower()):
+            if creators.known(s["login"]) or perms.get(s["login"].lower()) or s["login"].lower() in pitched:
                 continue
             info = twitch.profile(s["id"])
             clips = twitch.top_clips(s["id"], days=1, limit=1)
