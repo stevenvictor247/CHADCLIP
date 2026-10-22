@@ -519,7 +519,7 @@ async function decideApproval(id, decision) {
 }
 
 let shownLeads = null;
-const LEAD_STATUSES = ["drafted", "pitched", "replied", "client", "dead", "dropped"];
+const LEAD_STATUSES = ["drafted", "pitched", "replied", "client", "dead", "dropped", "do_not_contact"];
 function renderLeads(list) {
   $("leadsection").style.display = list.length ? "" : "none";
   const key = JSON.stringify(list);

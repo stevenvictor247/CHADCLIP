@@ -131,3 +131,121 @@ def test_dashboard_api_for_approvals_and_leads():
     lid = next(l["id"] for l in s["leads"] if l["handle"] == "sam2")
     assert c.post(f"/api/leads/{lid}", json={"status": "replied"}).status_code == 200
     assert c.post(f"/api/leads/{lid}", json={"status": "bogus"}).status_code == 400
+
+
+# ---- one-click email ----
+
+from hq.agents.pitch import mailer  # noqa: E402
+
+
+@pytest.fixture
+def gmail(monkeypatch):
+    """Gmail set up, postal address filled in, and a fake outbox instead of a real connection."""
+    monkeypatch.setenv("PITCH_EMAIL_ADDRESS", "steven@gmail.com")
+    monkeypatch.setenv("PITCH_EMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")
+    monkeypatch.setattr(pitch_mod, "settings", lambda: {**CFG, "postal_address": "PO Box 1, Austin TX 78701"})
+    db.execute("DELETE FROM pitch_sent")
+    db.execute("DELETE FROM do_not_contact")
+    outbox = []
+    monkeypatch.setattr(mailer, "send", outbox.append)
+    return outbox
+
+
+def _draft(handle="sam", contact="sam@example.com"):
+    run({"lead": {"name": handle.title(), "platform": "youtube", "handle": handle, "contact": contact}})
+    return approvals.pending()[-1]
+
+
+def test_email_is_not_sent_until_approved_then_sends_once(gmail):
+    a = _draft()
+    assert a["yes_label"] == "Send email" and "steven@gmail.com" in a["preview"]
+    assert gmail == []  # drafting never sends
+    out = approvals.decide(a["id"], "approve")
+    assert "Emailed Sam" in out and len(gmail) == 1
+    m = gmail[0]
+    assert m["To"] == "sam@example.com" and m["From"].endswith("<steven@gmail.com>")
+    assert m["Subject"] == "Clips for your stream" and "unsubscribe" in m["List-Unsubscribe"]
+    body = m.get_content()
+    assert "Say no and I stop." in body and "PO Box 1, Austin TX 78701" in body
+    assert db.rows("SELECT status FROM leads")[0]["status"] == "pitched"
+    assert approvals.decide(a["id"], "approve") == "Already approved."
+    assert len(gmail) == 1
+
+
+def test_opt_out_line_and_address_are_added_when_the_draft_lacks_them(gmail):
+    db.execute("DELETE FROM leads")
+    msg = mailer.build({**CFG, "postal_address": "PO Box 1"}, "a@b.com", "Subject: Hi\n\nHello there")
+    body = msg.get_content()
+    assert "Say no and I stop." in body and "PO Box 1" in body
+
+
+def test_reject_sends_nothing(gmail):
+    approvals.decide(_draft()["id"], "reject")
+    assert gmail == [] and db.rows("SELECT status FROM leads")[0]["status"] == "dropped"
+
+
+def test_do_not_contact_blocks_the_email(gmail):
+    run({"do_not_contact": "Sam@Example.com"})
+    out = approvals.decide(_draft()["id"], "approve")
+    assert "do-not-contact" in out and gmail == []
+    assert db.rows("SELECT status FROM leads")[0]["status"] == "do_not_contact"
+
+
+def test_marking_do_not_contact_blocks_that_address_for_good(gmail):
+    a = _draft()
+    lid = db.rows("SELECT id FROM leads")[0]["id"]
+    run({"mark": {"lead_id": lid, "status": "do_not_contact", "note": "said no"}})
+    assert mailer.blocked("sam@example.com")
+    run({"lead": {"name": "Sam2", "platform": "twitch", "handle": "sam2", "contact": "SAM@example.com"}})
+    assert "do-not-contact" in approvals.decide(approvals.pending()[-1]["id"], "approve")
+    assert gmail == []
+
+
+def test_missing_postal_address_blocks_sending_and_requeues(monkeypatch, gmail):
+    monkeypatch.setattr(pitch_mod, "settings", lambda: dict(CFG))
+    a = _draft()
+    out = approvals.decide(a["id"], "approve")
+    assert "postal address" in out and gmail == []
+    assert db.rows("SELECT status FROM leads")[0]["status"] == "drafted"
+    assert [p["yes_label"] for p in approvals.pending() if "NOT SENT" in p["title"]] == ["Try again"]
+
+
+def test_daily_cap_stops_sending(monkeypatch, gmail):
+    monkeypatch.setattr(pitch_mod, "settings", lambda: {**CFG, "postal_address": "PO Box 1", "daily_send_cap": 2})
+    for i in range(3):
+        approvals.decide(_draft(f"s{i}", f"s{i}@example.com")["id"], "approve")
+    assert len(gmail) == 2
+    assert db.rows("SELECT status FROM leads WHERE handle = 's2'")[0]["status"] == "drafted"
+    assert mailer.cap({"daily_send_cap": 500}) == mailer.HARD_CAP
+
+
+def test_failed_send_leaves_lead_drafted_and_can_be_retried(monkeypatch, gmail):
+    def boom(msg):
+        raise mailer.SendError("Gmail didn't accept the address or app password.")
+    monkeypatch.setattr(mailer, "send", boom)
+    out = approvals.decide(_draft()["id"], "approve")
+    assert "Not sent" in out and db.rows("SELECT status FROM leads")[0]["status"] == "drafted"
+    assert not db.rows("SELECT * FROM pitch_sent")
+    monkeypatch.setattr(mailer, "send", gmail.append)
+    retry = next(p for p in approvals.pending() if "NOT SENT" in p["title"])
+    assert "Emailed" in approvals.decide(retry["id"], "approve") and len(gmail) == 1
+
+
+def test_contact_without_email_falls_back_to_copy_and_send(gmail):
+    a = _draft("disc", "discord: sam#1234")
+    assert a["yes_label"] == "I'll send it"
+    assert "Send this to" in approvals.decide(a["id"], "approve") and gmail == []
+
+
+def test_without_gmail_keeps_the_manual_flow(monkeypatch, gmail):
+    monkeypatch.delenv("PITCH_EMAIL_APP_PASSWORD")
+    a = _draft()
+    assert a["yes_label"] == "I'll send it"
+    assert "Send this to" in approvals.decide(a["id"], "approve") and gmail == []
+
+
+def test_gmail_connection_test_never_sends(monkeypatch):
+    from hq import connections
+    monkeypatch.setattr(mailer, "check_login", lambda: None)
+    assert connections.run("pitch_email", {"PITCH_EMAIL_ADDRESS": "a@gmail.com", "PITCH_EMAIL_APP_PASSWORD": "x y"})["ok"]
+    assert not connections.run("pitch_email", {})["ok"]

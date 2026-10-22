@@ -12,6 +12,10 @@ portfolio_url: ""               # link to your clipping account or best clips, i
 free_sample: true               # offer to make one clip for them free
 opt_out_line: "If this isn't for you, just say so and I won't message again."
 
+# Sending by email (needs the Gmail settings on the Settings page). You still approve every message first.
+postal_address: ""              # required to send email: spam law wants a real postal address (a PO box is fine)
+daily_send_cap: 10              # most emails Pitch sends in 24 hours (never more than 20)
+
 # Finding streamers on Twitch (needs the Twitch app keys in .env)
 daily_leads: 5                  # how many new pitches to draft per run
 min_viewers: 50

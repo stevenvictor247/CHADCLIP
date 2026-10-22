@@ -149,6 +149,13 @@ Fill in `config/pitch.yaml` first (your name, one honest line about you, what yo
 "contact": ..., "notes": ...}}`. Finding streamers uses the Twitch app keys in `.env`. Messages never send themselves,
 because platforms ban accounts that automate this and spam laws apply to cold email (honest subject, opt-out line).
 
+**One-click email.** Put your Gmail address and an app password (myaccount.google.com/apppasswords) in Settings and fill
+in your postal address. For a lead with an email address the card then says "Send email": nothing is sent until you press
+it, and then HQ sends that one message from your Gmail. Safeguards: one email per lead ever, a daily cap
+(`daily_send_cap`, default 10, never above 20), your opt-out line and postal address added to every message, and a
+do-not-contact list (set a lead to `do_not_contact`, or tell the Boss `{"do_not_contact": "email"}`). If a send fails or
+is blocked, the same draft returns to Waiting for your OK. Leads without an email stay copy-and-send-yourself.
+
 ## Relay (phone)
 
 Relay is a private Telegram bot. Message it to talk to the Boss, get each new clip as a video with Approve and

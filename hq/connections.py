@@ -7,6 +7,7 @@ getting-started checklist can show them without calling every service on each pa
 
 import json
 import os
+import re
 import time
 
 import requests
@@ -111,6 +112,26 @@ def twitch(values=None) -> dict:
                 "New Secret, and paste both again.")
 
 
+def pitch_email(values=None) -> dict:
+    from .agents.pitch import mailer
+    address, password = _v("PITCH_EMAIL_ADDRESS", values), re.sub(r"\s+", "", _v("PITCH_EMAIL_APP_PASSWORD", values))
+    if not address or not password:
+        return _bad("Needs your Gmail address and an app password from myaccount.google.com/apppasswords.")
+    old = {k: os.environ.get(k) for k in ("PITCH_EMAIL_ADDRESS", "PITCH_EMAIL_APP_PASSWORD")}
+    os.environ["PITCH_EMAIL_ADDRESS"], os.environ["PITCH_EMAIL_APP_PASSWORD"] = address, password
+    try:
+        mailer.check_login()
+    except mailer.SendError as e:
+        return _bad(str(e))
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    return _ok("Gmail login works. Pitch can email once you approve a draft.")
+
+
 def tiktok(account: dict, values=None) -> dict:
     from . import tiktok_auth
     token = _v(account.get("access_token_env", ""), values)
@@ -177,8 +198,9 @@ def practice(account: dict, values=None) -> dict:
 
 # Settings keys with a Test button, and which test each one runs.
 KEY_TESTS = {"ANTHROPIC_API_KEY": "claude", "TELEGRAM_BOT_TOKEN": "telegram", "TELEGRAM_OWNER_ID": "telegram",
-             "TWITCH_CLIENT_ID": "twitch", "TWITCH_CLIENT_SECRET": "twitch"}
-SERVICE_TESTS = {"claude": claude, "telegram": telegram, "twitch": twitch}
+             "TWITCH_CLIENT_ID": "twitch", "TWITCH_CLIENT_SECRET": "twitch",
+             "PITCH_EMAIL_ADDRESS": "pitch_email", "PITCH_EMAIL_APP_PASSWORD": "pitch_email"}
+SERVICE_TESTS = {"claude": claude, "telegram": telegram, "twitch": twitch, "pitch_email": pitch_email}
 ACCOUNT_TESTS = {"tiktok": tiktok, "instagram": instagram, "youtube": youtube, "practice": practice}
 
 
