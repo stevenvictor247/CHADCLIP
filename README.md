@@ -53,17 +53,16 @@ Other commands: `python -m hq chat` (talk to the Boss in the terminal), `python 
 
 ## Open HQ from your other computers
 
-Keep HQ running on one computer (your Windows PC) and open its dashboard from anywhere, like your Mac:
+Keep HQ running on your Windows PC and open its dashboard from anywhere, like your Mac:
 
-1. Install [Tailscale](https://tailscale.com/download) on both computers and sign in with the same account.
-2. On the PC, open ⚙️ Settings and set `HQ_PASSWORD` to something long.
-3. On the PC, allow Tailscale devices through the Windows firewall (PowerShell as administrator, once):
-   `New-NetFirewallRule -DisplayName "Agent HQ" -Direction Inbound -Protocol TCP -LocalPort 8000 -RemoteAddress 100.64.0.0/10 -Action Allow`
-4. Double-click `start-hq.bat` instead of running `python -m hq serve`.
-5. On the Mac, open `http://<your PC's name in Tailscale>:8000` and log in.
+1. On the PC, double-click `Setup-Mac-Access.bat` in the CHADCLIP folder. It installs and signs in to
+   [Tailscale](https://tailscale.com/download), asks for an HQ password, lets only your Tailscale devices through the
+   firewall (click Yes on the prompt), keeps the PC awake while plugged in, runs HQ in the background at every sign-in,
+   and saves your Mac address to `Agent HQ on my Mac.txt` on the Desktop.
+2. On the Mac, install Tailscale, sign in with the same account, and open that address.
 
-The PC must stay on and awake (Settings > System > Power > sleep "Never" when plugged in). To start HQ when the PC
-turns on, put a shortcut to `start-hq.bat` in the Startup folder (Win+R, type `shell:startup`).
+HQ then runs in a minimized `start-hq` window. The Agent HQ icon still opens it on the PC, and closing that window
+no longer stops HQ. The PC has to stay on, plugged in and signed in.
 
 Without `HQ_PASSWORD`, HQ only listens on the computer it runs on, exactly as before. `python -m hq backup` zips the
 database and settings into `data/backups`, and HQ does this by itself once a day. To move HQ to an always-on
