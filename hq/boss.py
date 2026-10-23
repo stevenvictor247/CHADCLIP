@@ -235,11 +235,38 @@ def _chat(text: str) -> str:
     return "I hit my step limit on that one. Ask again or break it into smaller asks."
 
 
+REPORT_SYSTEM = """You write Steven's short daily status report for his AI agent team, from the facts you're given.
+Lead with what needs him: failed or stuck tasks, failed posts, flagged clips (with the reason in plain words),
+anything waiting for his approval, and setup steps still blocking money coming in. Then say briefly what went fine.
+Plain short sentences, no filler, no headings, at most about 12 lines. Never invent numbers."""
+
+
 def report() -> str:
-    """A short status report for Steven, used for the daily briefing."""
-    return chat("Give me a short status report: what each agent did since your last report, what is waiting on "
-                "my approval, and anything that failed. Check Chad's work with review_chad and flag any waiting "
-                "clip with a real problem. Use get_status and list_pending_clips too.")
+    """The daily briefing. Gathered straight from the database and written in one call on a mid-priced model, instead
+    of a tool-by-tool chat on the Boss's model: same facts, a fraction of the cost. It still lands in the Boss chat,
+    and clips with a real problem still get a note on their approval card."""
+    from .config import model_for
+    chad = review.review_chad(24)
+    for f in chad["waiting_for_steven"]["flagged"]:   # what the Boss used to do with flag_clip, by rule
+        if not f.get("your_earlier_note"):
+            flag_clip(f["clip"], "; ".join(f["issues"]))
+    facts = {"status": get_status(), "chad_review": chad, "waiting_clips": list_pending_clips()["clips"][:15],
+             "setup": setup_status()}
+    if llm.HAS_LLM:
+        try:
+            response = llm.create(model_for("report"), REPORT_SYSTEM,
+                                  [{"role": "user", "content": json.dumps(facts, default=str)[:60000]}],
+                                  effort="low", max_tokens=3000, agent="Boss")
+            text = llm.text_of(response)
+        except Exception as e:  # a report that can't be written still says the basics
+            text = review.summary(chad) + f"\n(Couldn't write the full report: {e})"
+    else:
+        text = review.summary(chad)
+    with _chat_lock:  # show it in the Boss chat too, where it used to appear
+        conv = current_conversation()
+        _save(conv, "user", [{"type": "text", "text": "Daily report, please."}])
+        _save(conv, "assistant", [{"type": "text", "text": text}])
+    return text
 
 
 def _offline(text: str) -> str:

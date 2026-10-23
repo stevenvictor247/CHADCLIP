@@ -43,6 +43,7 @@ DEFAULT_MODELS = {
     "chad": "claude-sonnet-5-5",    # picks moments from transcripts
     "pitch": "claude-sonnet-5-5",   # writes the messages to potential clients, so wording matters
     "captain": "claude-sonnet-5-5", # runs the football village and answers football questions in your terms
+    "report": "claude-sonnet-5-5",  # the daily report: summarising facts HQ already gathered
 }
 SIMPLE_MODEL = "claude-haiku-5-5"   # every other agent: sorting, drafting, summarising
 
