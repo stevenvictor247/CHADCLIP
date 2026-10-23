@@ -181,15 +181,12 @@
   .world-tip { position:absolute; display:none; pointer-events:none; max-width:220px; background:#fff; color:#2a2233; border-radius:10px;
                padding:6px 9px; font-size:12px; font-weight:700; box-shadow:0 6px 18px rgba(0,0,0,.35); }
   @media (max-width:960px) { .world { margin:14px 14px 0; } .world-hud .chip { font-size:10px; padding:3px 8px; } }
-  /* both villages on screen at once: side by side on wide screens, stacked on narrow ones */
-  .towns { display:grid; grid-template-columns:1fr; gap:14px; margin:18px 22px 0; position:relative; z-index:1; }
-  .towns .world { margin:0; }
+  /* both villages share one big stage (town-kit.js lays it out) */
   .world.fb { box-shadow:0 0 0 2px rgba(255,204,51,.45); }
   .world.fb .chip { border-color:rgba(255,204,51,.35); }
   .world.fb .world-ticker { border-color:#FFCC33; }
   .world.fb .world-hud, .world.fb .world-hud .world-title { justify-content:flex-start; margin-right:0; }   /* keep the scoreboard clear */
-  @media (min-width:1100px) { .towns { grid-template-columns:1fr 1fr; } .towns .world-hud .chip { font-size:11px; padding:3px 9px; } }
-  @media (max-width:960px) { .towns { margin:14px 14px 0; } }
+  @media (min-width:1100px) { .towns .world-hud .chip { font-size:11px; padding:3px 9px; } }
   .camp .tag.village-football { border-color:rgba(255,204,51,.6); color:#FFCC33; }
   @media (max-width:600px) { .world-title { display:none; } .world-hud { justify-content:flex-end; } }
 
@@ -211,15 +208,15 @@
     <div class="stat" id="s-spend" title="What Claude has cost today"><span class="ico">💵</span><b id="c-spend">$0.00</b><span id="spend-sub">Spent today</span></div>
   </div>
 </header>
-<div class="towns">
+<div class="towns" id="towns">
 <section class="world" id="world">
-  <canvas id="worldcanvas" aria-label="HQ Town: your agents at work"></canvas>
-  <div class="world-hud"><span class="chip world-title">🏘️ HQ Town</span><span class="chip" id="worldclock"></span><button class="chip" id="worldmode" title="Change the time of day (both villages)">🕒 Real time</button></div>
+  <canvas id="worldcanvas" aria-label="HQ Town: your agents at work. Click an agent or a building."></canvas>
+  <div class="world-hud"><span class="chip world-title">🏘️ HQ Town</span><button class="chip stat-chip" id="worldwaiting" title="Clips and messages waiting for your OK"></button><span class="chip stat-chip" id="worldposted" title="Approved, posted and failed clips"></span><span class="chip" id="worldclock"></span><button class="chip" id="worldmode" title="Change the time of day (both villages)">🕒 Real time</button></div>
   <div class="world-ticker" id="worldticker"></div>
   <div class="world-tip" id="worldtip"></div>
 </section>
 <section class="world fb" id="fbworld">
-  <canvas id="fbcanvas" aria-label="Warrior Village: your football agents at work"></canvas>
+  <canvas id="fbcanvas" aria-label="Warrior Village: your football agents at work. Click an agent or a building."></canvas>
   <div class="world-hud"><span class="chip world-title">🏈 Warrior Village · Wayne State</span><span class="chip" id="fbcountdown"></span></div>
   <div class="world-ticker" id="fbticker"></div>
   <div class="world-tip" id="fbtip"></div>
@@ -287,6 +284,7 @@
 <div id="football"></div>
 <div id="toasts"></div>
 <script src="/money-bar.js"></script>
+<script src="/town-kit.js"></script>
 <script src="/world.js"></script>
 <script src="/football-town.js"></script>
 <script src="/hq-bar.js"></script>

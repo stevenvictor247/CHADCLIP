@@ -2,8 +2,9 @@
 // The money strip and header stay above the tabs on every page. The last tab is remembered, and links like /#approvals open a tab.
 (function () {
   // Each tab lists the ids of things inside the sections it shows. A section is found from any element inside it.
+  // A section can be on more than one tab (the villages show on Home and, just Warrior Village, on its own tab).
   const TABS = [
-    {id: "home", icon: "🏠", label: "Home", has: ["world", "setup", "agents"]},
+    {id: "home", icon: "🏠", label: "Home", has: ["towns", "setup", "agents"]},
     {id: "approvals", icon: "✅", label: "Approvals", has: ["apprsection", "pending"],
      empty: "Nothing is waiting for your OK."},
     {id: "boss", icon: "👑", label: "Boss", has: ["chatlog"]},
@@ -11,7 +12,7 @@
     {id: "pitch", icon: "✉️", label: "Pitch", has: ["creatorsection", "leadsection"],
      empty: "No leads or creators to clip yet. Pitch and Scout put them here when they find some."},
     {id: "clips", icon: "🎞️", label: "Clips", has: ["library"]},
-    {id: "football", icon: "🏈", label: "Warrior Village", has: ["fbworld", "football"]},
+    {id: "football", icon: "🏈", label: "Warrior Village", has: ["towns", "football"]},
     {id: "sweep", icon: "🧹", label: "Sweep", has: ["sweep"]},
     {id: "activity", icon: "📜", label: "Activity", has: ["activity"]},
   ];
@@ -29,7 +30,7 @@
     #hq-tabs a { margin-left:auto; }
     #hq-tabs a { display:none; }
     body.tabbed main { display:block; max-width:1200px; margin:0 auto; }
-    ${TABS.map(t => `body[data-tab="${t.id}"] [data-tab]:not([data-tab="${t.id}"]) { display:none !important; }`).join("\n    ")}
+    ${TABS.map(t => `body[data-tab="${t.id}"] [data-tab]:not([data-tab~="${t.id}"]) { display:none !important; }`).join("\n    ")}
     body.tabbed .world[data-tab] { margin-bottom:18px; }
     body.tabbed section { scroll-margin-top:64px; }
     @media (max-width:960px) { #hq-tabs { padding:8px 14px; } }
@@ -56,8 +57,8 @@
     let last = null;
     for (const id of t.has) {
       const el = document.getElementById(id);
-      const sec = el && (el.matches("section, #football, #sweep") ? el : el.closest("section"));
-      if (sec) { sec.dataset.tab = t.id; last = sec; }
+      const sec = el && (el.matches("section, #towns, #football, #sweep") ? el : el.closest("section"));
+      if (sec) { sec.dataset.tab = sec.dataset.tab && sec.dataset.tab !== t.id ? sec.dataset.tab + " " + t.id : t.id; last = sec; }
     }
     if (t.empty && last) {
       last.insertAdjacentHTML("afterend", `<section data-tab="${t.id}" class="tab-empty" id="tab-empty-${t.id}">` +
@@ -71,7 +72,7 @@
     for (const t of TABS) {
       const note = document.getElementById("tab-empty-" + t.id);
       if (!note) continue;
-      const others = [...document.querySelectorAll(`[data-tab="${t.id}"]:not(.tab-empty)`)];
+      const others = [...document.querySelectorAll(`[data-tab~="${t.id}"]:not(.tab-empty)`)];
       note.style.display = others.some(shown) ? "none" : "";
     }
     // Approvals badge: approval cards plus clips waiting for a yes or no.
@@ -94,14 +95,14 @@
       if (location.hash !== "#" + id) history.replaceState(null, "", "#" + id);
     }
     // If the page was scrolled down, jump back to the top of the new tab.
-    const first = document.querySelector(`[data-tab="${id}"]`);
+    const first = document.querySelector(`[data-tab~="${id}"]`);
     if (window.scrollY > 0 && first) window.scrollTo({top: Math.max(0, first.getBoundingClientRect().top + window.scrollY - nav.offsetHeight - 10)});
     refresh();
   }
   // Opens the tab holding an element (by id). world.js and the setup card use it before scrolling to something.
   function showFor(elId) {
     const sec = document.getElementById(elId)?.closest("[data-tab]");
-    if (sec && document.body.dataset.tab !== sec.dataset.tab) show(sec.dataset.tab);
+    if (sec && !sec.dataset.tab.split(" ").includes(document.body.dataset.tab)) show(sec.dataset.tab.split(" ")[0]);
   }
   window.hqTabs = {show, showFor};
 
