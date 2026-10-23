@@ -78,3 +78,13 @@ def test_chad_prompt_includes_results(monkeypatch, tmp_path):
     monkeypatch.setattr(llm, "ask_json", fake_ask)
     moments.pick({"segments": [{"start": 0, "end": 20, "text": "hi"}], "words": []}, 60, "Video", {"name": "Kai"}, 1, 15, 59)
     assert "Big win" in seen["prompt"] and "9,000 views" in seen["prompt"]
+
+
+def test_chad_hears_what_steven_approved_and_rejected():
+    db.init()
+    for title, status in (("Clean comeback line", "posted"), ("Long boring intro", "rejected")):
+        db.execute("INSERT INTO clips (creator, start_s, end_s, path, title, status, created_at) "
+                   "VALUES ('TasteTest', 0, 30, 'x.mp4', ?, ?, ?)", title, status, db.now())
+    line = tally.your_taste("TasteTest")
+    assert "approved clips like \"Clean comeback line\"" in line and "rejected clips like \"Long boring intro\"" in line
+    assert tally.your_taste("Nobody-yet")   # falls back to every creator

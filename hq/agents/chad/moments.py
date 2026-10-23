@@ -46,7 +46,7 @@ def pick(transcript: dict | None, duration: float, video_title: str, creator: di
     if llm.HAS_LLM and transcript and transcript["segments"]:
         lines = "\n".join(f"[{s['start']:.1f}-{s['end']:.1f}] {s['text']}" for s in transcript["segments"])
         from ... import tally
-        results = tally.for_chad(creator.get("name"))
+        results = "\n".join(x for x in (tally.for_chad(creator.get("name")), tally.your_taste(creator.get("name"))) if x)
         prompt = (
             f"Video: {video_title}\nCreator: {creator.get('name')}\nCreator notes: {creator.get('notes', '')}\n"
             + (f"{results}\n" if results else "") +

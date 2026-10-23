@@ -121,6 +121,26 @@ def for_chad(creator: str | None) -> str:
     return f"Recent results: {who} clips that got the most views lately were {listed}. Lean toward what worked."
 
 
+def your_taste(creator: str | None = None, days: float = BEST_WINDOW_DAYS) -> str:
+    """One line for Chad: titles Steven approved and rejected lately, so picks drift toward his taste."""
+    since = _ago(days)
+    def titles(statuses: tuple) -> list[str]:
+        marks = ", ".join("?" for _ in statuses)
+        rows = db.rows(f"SELECT title FROM clips WHERE status IN ({marks}) AND created_at >= ? AND title IS NOT NULL "
+                       "AND (? IS NULL OR LOWER(creator) = LOWER(?)) ORDER BY id DESC LIMIT 3",
+                       *statuses, since, creator, creator)
+        return [f"\"{r['title'][:70]}\"" for r in rows]
+    liked, passed = titles(("approved", "posted")), titles(("rejected",))
+    if not liked and not passed and creator:
+        return your_taste(None, days)   # nothing for this creator yet: use all of them
+    parts = []
+    if liked:
+        parts.append("Steven approved clips like " + ", ".join(liked))
+    if passed:
+        parts.append("he rejected clips like " + ", ".join(passed))
+    return ("Steven's taste: " + "; ".join(parts) + ".") if parts else ""
+
+
 def summary() -> dict:
     week = db.rows("SELECT COUNT(*) n, COALESCE(SUM(views), 0) v FROM posts WHERE status = 'posted' AND views IS NOT NULL "
                    "AND created_at >= ?", _ago(7))[0]
