@@ -224,6 +224,7 @@ def state():
         "campaigns": campaigns.summary(),
         "scout_inbox": discovery.inbox(),
         "creator_picks": creators.pending(),
+        "allowed_creators": creators.allowed(),
         "approvals": [{**a, "village": village_of(a["agent"])} for a in approvals.pending()],
         "football": football.state(),
         "tally": _tally_summary(),
@@ -322,6 +323,19 @@ def scout_inbox(body: InboxIn):
 
 class PermitIn(BaseModel):
     how: str
+
+
+class AddCreatorIn(BaseModel):
+    login: str
+    how: str
+
+
+@app.post("/api/creators/add")
+def add_creator(body: AddCreatorIn):
+    try:
+        return {"message": creators.add_allowed(body.login, body.how)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/creators/{pick_id}/skip")

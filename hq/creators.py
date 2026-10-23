@@ -84,3 +84,30 @@ def permit(pick_id: int, how: str) -> str:
     db.execute("UPDATE creator_picks SET status = 'permitted' WHERE id = ?", pick_id)
     db.log("Steven", f"Permission recorded for {rows[0]['name']}: {' '.join(how.split())}")
     return f"Saved. Chad can now clip {rows[0]['name']}."
+
+
+def clean_login(raw: str) -> str:
+    """Twitch login from what Steven typed: a name, @name, or a twitch.tv link."""
+    login = (raw or "").strip().lower().rstrip("/")
+    login = re.sub(r"^(https?://)?(www\.)?twitch\.tv/", "", login).lstrip("@").split("/")[0].split("?")[0]
+    if not re.fullmatch(r"[a-z0-9_]{3,25}", login):
+        raise ValueError("That doesn't look like a Twitch name. Type it like jynxzi, or paste their twitch.tv link")
+    return login
+
+
+def allowed() -> list[dict]:
+    """Streamers Chad may clip right now, from config/streamers.yaml."""
+    path = CONFIG_DIR / "streamers.yaml"
+    data = (yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None) or {}
+    return [{"login": str(k).lower(), "how": str(v or "").strip()}
+            for k, v in (data.get("permissions") or {}).items() if str(v or "").strip()]
+
+
+def add_allowed(raw_login: str, how: str) -> str:
+    """Steven adds a streamer himself, with how he's allowed to clip them. Same file and rule as permit()."""
+    login = clean_login(raw_login)
+    if any(a["login"] == login for a in allowed()):
+        raise ValueError(f"{login} is already on the list")
+    record_permission(login, how)
+    db.log("Steven", f"Permission recorded for {login}: {' '.join(how.split())}")
+    return f"Saved. Chad can now clip {login}."
