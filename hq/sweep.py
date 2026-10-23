@@ -315,7 +315,8 @@ approvals.HANDLERS["sweep_model"] = _apply_model
 # ---- what Sweep fixes by itself --------------------------------------------------------------------------
 
 def fix_stuck_tasks() -> list[str]:
-    """A task still 'running' while Sweep itself is running is a leftover from a crash: the worker does one at a time."""
+    """A task whose 'running' mark hasn't been refreshed for an hour is stuck: the worker refreshes it every minute
+    while the job is really going, so a long clipping job is never mistaken for a stuck one."""
     acts = []
     for t in db.rows("SELECT id, agent, instructions FROM tasks WHERE status = 'running' AND updated_at < ?",
                      _ago(hours=stuck_hours())):

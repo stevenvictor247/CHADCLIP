@@ -231,7 +231,8 @@ def now() -> str:
 
 @contextmanager
 def connect():
-    conn = sqlite3.connect(DB_PATH)
+    # timeout: wait up to 30 s for another thread's write instead of failing with "database is locked"
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -242,6 +243,8 @@ def connect():
 
 def init():
     with connect() as c:
+        # WAL lets the dashboard read while an agent writes. It's a setting of the file, so it sticks once set.
+        c.execute("PRAGMA journal_mode=WAL")
         c.executescript(SCHEMA)
         # Databases made before these columns existed get them added in place.
         have = {r["name"] for r in c.execute("PRAGMA table_info(clips)")}
