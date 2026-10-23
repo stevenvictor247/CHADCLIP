@@ -91,7 +91,7 @@ def test_pause_button_api(monkeypatch, tmp_path):
     monkeypatch.setattr(hq.settings, "SETTINGS_PATH", tmp_path / "settings.json")
     c = TestClient(hq.api.app, headers={"X-HQ": "1"})
     assert c.post("/api/pause", json={"paused": True}).json() == {"paused": True}
-    assert c.get("/api/pause").json() == {"paused": True}
+    assert c.get("/api/pause").json()["paused"] is True
     assert c.get("/api/state").json()["paused"] is True
     assert c.post("/api/pause", json={"paused": False}).json() == {"paused": False}
 
@@ -126,3 +126,28 @@ def test_try_posting_again_button(board):
     assert c.post(f"/api/clips/{a}/retry").status_code == 400      # nothing failed any more
     lib = next(x for x in c.get("/api/state").json()["clips"] if x["id"] == a)
     assert [p["status"] for p in lib["posts"]] == ["retried", "posted"]
+
+
+def test_dashboard_can_tell_when_the_agents_stopped(monkeypatch, tmp_path):
+    import os
+    import time as _time
+
+    from fastapi.testclient import TestClient
+
+    import hq.api
+    monkeypatch.setattr(worker, "ALIVE_PATH", tmp_path / "worker_alive.txt")
+    c = TestClient(hq.api.app)
+    assert c.get("/api/pause").json()["worker_seconds_ago"] is None      # not started yet: no false alarm
+    monkeypatch.delenv("HQ_PAUSED", raising=False)
+    monkeypatch.setattr(worker, "queue_scheduled", lambda state: None)
+    monkeypatch.setattr(worker, "football_tick", lambda: None)
+    monkeypatch.setattr(worker, "run_next_task", lambda *a: False)
+    monkeypatch.setattr(worker, "publish_approved", lambda: [])
+    monkeypatch.setattr(worker, "daily_report", lambda state: None)
+    monkeypatch.setattr(worker, "daily_backup", lambda state: None)
+    monkeypatch.setattr(worker, "STATE_PATH", tmp_path / "state.json")
+    worker.tick()
+    assert c.get("/api/pause").json()["worker_seconds_ago"] <= 2
+    old = _time.time() - 3600
+    os.utime(tmp_path / "worker_alive.txt", (old, old))
+    assert c.get("/api/pause").json()["worker_seconds_ago"] >= 3599

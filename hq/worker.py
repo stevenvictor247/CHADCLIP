@@ -94,8 +94,22 @@ def daily_backup(state: dict):
             db.log("HQ", f"Daily backup failed: {e}")
 
 
+ALIVE_PATH = DATA_DIR / "worker_alive.txt"  # touched every round, so the dashboard can tell if the agents stopped
+
+
+def seconds_since_last_round() -> float | None:
+    try:
+        return max(0.0, time.time() - ALIVE_PATH.stat().st_mtime)
+    except OSError:
+        return None
+
+
 def tick():
     from .agents.chad.publish import paused
+    try:
+        ALIVE_PATH.write_text(datetime.now().isoformat(timespec="seconds"))
+    except OSError:
+        pass
     state = _state()
     if paused():  # Pause All: nothing starts and nothing posts; the Boss still chats and the backup still runs
         daily_backup(state)

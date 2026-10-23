@@ -156,8 +156,11 @@ class PauseIn(BaseModel):
 
 @app.get("/api/pause")
 def pause_status():
+    """Paused or not, and how long since the agents' background loop last went round (None = not started yet)."""
     from .agents.chad.publish import paused
-    return {"paused": paused()}
+    from .worker import seconds_since_last_round
+    ago = seconds_since_last_round()
+    return {"paused": paused(), "worker_seconds_ago": None if ago is None else round(ago)}
 
 
 @app.post("/api/pause")

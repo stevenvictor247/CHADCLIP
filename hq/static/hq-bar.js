@@ -17,13 +17,19 @@
     #hq-update button:disabled { opacity:.6; cursor:wait; }
     #hq-paused { display:none; position:relative; z-index:2; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 22px;
                  background:rgba(251,191,36,.18); border-bottom:1px solid var(--line); }
-    #hq-paused .what { color:var(--muted); font-size:13px; flex:1; min-width:200px; }`;
+    #hq-paused .what { color:var(--muted); font-size:13px; flex:1; min-width:200px; }
+    #hq-stopped { display:none; position:relative; z-index:2; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 22px;
+                  background:rgba(248,113,113,.18); border-bottom:1px solid var(--line); }
+    #hq-stopped .what { color:var(--muted); font-size:13px; flex:1; min-width:200px; }
+    #hq-stopped button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px;
+                         padding:8px 14px; font:inherit; font-weight:800; cursor:pointer; }`;
   document.head.insertAdjacentHTML("beforeend", `<style>${css}</style>`);
 
   const header = document.querySelector("header");
   if (!header) return;
   header.insertAdjacentHTML("beforeend", `<button class="hqbar-btn" id="hq-pause" title="Stop every agent and all posting until you press Resume">⏸ Pause all</button>`);
   header.insertAdjacentHTML("beforeend", `<a class="hqbar-btn" href="/settings" title="API keys, accounts and options">⚙️ Settings</a>`);
+  header.insertAdjacentHTML("afterend", `<div id="hq-stopped"><b>⚠️ The agents haven't checked in for <span id="hq-stopped-min"></span> minutes.</b><span class="what">They may be stuck on a job. Restarting HQ puts any cut-off job back in the queue.</span><button id="hq-restart">Restart HQ</button></div>`);
   header.insertAdjacentHTML("afterend", `<div id="hq-update"></div><div id="hq-paused"><b>⏸ HQ is paused.</b><span class="what">No agent works and nothing posts until you press Resume. The Boss still chats.</span></div>`);
   const bar = document.getElementById("hq-update");
   const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
@@ -97,8 +103,21 @@
     } catch (e) {}
     pauseBtn.disabled = false;
   };
+  // "Agents stopped" warning: the background loop goes round every few seconds; 20 quiet minutes means it's stuck
+  const stoppedBar = document.getElementById("hq-stopped");
+  document.getElementById("hq-restart").onclick = async e => {
+    e.target.disabled = true;
+    try { await fetch("/api/restart", {method: "POST", headers: {"X-HQ": "1"}}); } catch (err) {}
+    if (window.hqWaitForRestart) window.hqWaitForRestart();
+  };
   async function checkPause() {
-    try { showPaused((await (await fetch("/api/pause")).json()).paused); } catch (e) {}
+    try {
+      const s = await (await fetch("/api/pause")).json();
+      showPaused(s.paused);
+      const quiet = s.worker_seconds_ago;
+      stoppedBar.style.display = quiet !== null && quiet !== undefined && quiet > 20 * 60 ? "flex" : "none";
+      if (quiet) document.getElementById("hq-stopped-min").textContent = Math.round(quiet / 60);
+    } catch (e) {}
   }
   checkPause();
   setInterval(checkPause, 30 * 1000);
