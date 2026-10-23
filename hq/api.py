@@ -505,7 +505,16 @@ def youtube_client(body: YouTubeIn, request: Request):
 def youtube_sign_in(body: YouTubeIn, request: Request):
     _from_hq_page(request)
     try:
-        return {"message": youtube_auth.start_sign_in(body.account), "accounts": youtube_auth.status()}
+        return {"url": youtube_auth.start_sign_in(body.account), "accounts": youtube_auth.status()}
+    except youtube_auth.YouTubeError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/youtube/connect")
+def youtube_connect(body: YouTubeIn, request: Request):
+    _from_hq_page(request)
+    try:
+        return {"message": youtube_auth.finish_sign_in(body.account, body.text), "accounts": youtube_auth.status()}
     except youtube_auth.YouTubeError as e:
         raise HTTPException(400, str(e))
 

@@ -1,7 +1,7 @@
-"""Connect YouTube from the Settings page: paste the Google client file, then Sign in with Google."""
+"""Connect YouTube from the Settings page: paste the Google client file, approve in Google, paste back the address."""
 
 import json
-import time
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,7 +10,9 @@ import hq.api
 from hq import youtube_auth
 
 GOOD = json.dumps({"installed": {"client_id": "abc.apps.googleusercontent.com", "client_secret": "s3cret",
-                                 "redirect_uris": ["http://localhost"]}})
+                                 "redirect_uris": ["http://localhost"],
+                                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                                 "token_uri": "https://oauth2.googleapis.com/token"}})
 
 
 @pytest.fixture
@@ -18,7 +20,7 @@ def account(monkeypatch, tmp_path):
     acct = {"name": "youtube_main", "platform": "youtube", "client_secrets_file": str(tmp_path / "client.json"),
             "token_file": str(tmp_path / "token.json")}
     monkeypatch.setattr(youtube_auth, "_accounts", lambda: [acct])
-    youtube_auth._jobs.clear()
+    youtube_auth._pending.clear()
     return acct
 
 
@@ -29,10 +31,10 @@ def test_client_file_is_checked_before_saving(account, tmp_path):
         youtube_auth.save_client("youtube_main", json.dumps({"web": {"client_id": "x"}}))
     with pytest.raises(youtube_auth.YouTubeError, match="No YouTube account"):
         youtube_auth.save_client("nope", GOOD)
-    assert "Sign in with Google" in youtube_auth.save_client("youtube_main", GOOD)
+    assert "Open Google sign-in" in youtube_auth.save_client("youtube_main", GOOD)
     assert json.loads((tmp_path / "client.json").read_text())["installed"]["client_secret"] == "s3cret"
     assert youtube_auth.status() == [{"name": "youtube_main", "has_client": True, "connected": False,
-                                      "signing_in": False, "error": ""}]
+                                      "waiting": False}]
 
 
 def test_sign_in_needs_the_client_file_first(account):
@@ -40,37 +42,38 @@ def test_sign_in_needs_the_client_file_first(account):
         youtube_auth.start_sign_in("youtube_main")
 
 
-def test_sign_in_runs_in_the_background_and_saves_the_token(account, monkeypatch, tmp_path):
+def test_sign_in_link_then_pasted_address_saves_the_token(account, monkeypatch, tmp_path):
     youtube_auth.save_client("youtube_main", GOOD)
+    q = parse_qs(urlparse(youtube_auth.start_sign_in("youtube_main")).query)
+    assert q["client_id"] == ["abc.apps.googleusercontent.com"] and q["access_type"] == ["offline"]
+    assert youtube_auth.status()[0]["waiting"]
+    state = q["state"][0]
 
-    def fake_sign_in(acct):
-        (tmp_path / "token.json").write_text('{"token": "t"}')
-    monkeypatch.setattr(youtube_auth, "_sign_in", fake_sign_in)
-    assert "opened" in youtube_auth.start_sign_in("youtube_main")
-    for _ in range(50):
-        if youtube_auth.status()[0]["connected"] and not youtube_auth.status()[0]["signing_in"]:
-            break
-        time.sleep(0.05)
-    assert youtube_auth.status()[0]["connected"]
+    from google_auth_oauthlib.flow import Flow
+
+    def fake_fetch(self, **kw):
+        assert kw["code"] == "4/abc" and self.code_verifier == youtube_auth._pending["youtube_main"]["verifier"]
+    class C:
+        def to_json(self): return '{"token": "t"}'
+    monkeypatch.setattr(Flow, "fetch_token", fake_fetch)
+    monkeypatch.setattr(Flow, "credentials", C())
+
+    with pytest.raises(youtube_auth.YouTubeError, match="older sign-in"):
+        youtube_auth.finish_sign_in("youtube_main", "http://localhost:8080/?state=old&code=4/abc")
+    with pytest.raises(youtube_auth.YouTubeError, match="Google said no"):
+        youtube_auth.finish_sign_in("youtube_main", "http://localhost:8080/?error=access_denied")
+    assert "connected" in youtube_auth.finish_sign_in("youtube_main", f"http://localhost:8080/?state={state}&code=4/abc")
+    st = youtube_auth.status()[0]
+    assert st["connected"] and not st["waiting"]
+    assert (tmp_path / "token.json").read_text() == '{"token": "t"}'
     youtube_auth.disconnect("youtube_main")
     assert not youtube_auth.status()[0]["connected"]
 
 
-def test_a_timed_out_sign_in_says_so(account, monkeypatch):
+def test_connect_needs_the_sign_in_link_first(account):
     youtube_auth.save_client("youtube_main", GOOD)
-
-    class WSGITimeoutError(Exception):
-        pass
-
-    def slow(acct):
-        raise WSGITimeoutError("timed out")
-    monkeypatch.setattr(youtube_auth, "_sign_in", slow)
-    youtube_auth.start_sign_in("youtube_main")
-    for _ in range(50):
-        if youtube_auth.status()[0]["error"]:
-            break
-        time.sleep(0.05)
-    assert "10 minutes" in youtube_auth.status()[0]["error"]
+    with pytest.raises(youtube_auth.YouTubeError, match="Open Google sign-in first"):
+        youtube_auth.finish_sign_in("youtube_main", "4/abc")
 
 
 def test_api_needs_the_settings_page(account):
