@@ -107,6 +107,11 @@ def _library() -> list[dict]:
     return clips
 
 
+def _tally_summary() -> dict:
+    from . import tally
+    return tally.summary()
+
+
 @app.on_event("startup")
 def _startup():
     db.init()
@@ -221,6 +226,7 @@ def state():
         "creator_picks": creators.pending(),
         "approvals": [{**a, "village": village_of(a["agent"])} for a in approvals.pending()],
         "football": football.state(),
+        "tally": _tally_summary(),
         "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at FROM leads "
                          "ORDER BY id DESC LIMIT 50"),
         "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None, "village": "business"}] +

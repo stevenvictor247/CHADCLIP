@@ -210,3 +210,11 @@ Chad ranks the channels by current viewers, takes each one's most-viewed clips f
 them for your approval. Streamers are only clipped once you record how you're allowed to clip them in
 `config/streamers.yaml`. Kick has no ranking API Chad can rely on: give him individual Kick clip links
 (`{"url": ...}` with a creator that has permission in `creators.yaml`).
+
+## Tally (views)
+
+Tally counts the views on every clip HQ posted, twice a day. It copies them into your campaign submissions (views
+only go up; the pay you typed in is never changed), works out what the campaigns should pay from each campaign's rate,
+and writes a short note of the clips that did best, which Chad reads when he picks moments. It never calls Claude, so
+it costs nothing. YouTube is counted through the same sign-in you make under **Connect YouTube** in ⚙️ Settings.
+TikTok inbox uploads have no video id until you post them in the app, so TikTok views come later.

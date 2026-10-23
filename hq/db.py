@@ -251,6 +251,10 @@ def init():
         for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER")):
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
+        have = {r["name"] for r in c.execute("PRAGMA table_info(posts)")}
+        for col, kind in (("views", "INTEGER"), ("views_at", "TEXT")):   # filled in by Tally
+            if col not in have:
+                c.execute(f"ALTER TABLE posts ADD COLUMN {col} {kind}")
         if "source" not in {r["name"] for r in c.execute("PRAGMA table_info(campaigns)")}:
             c.execute("ALTER TABLE campaigns ADD COLUMN source TEXT")  # inbox, feed or manual
 
