@@ -77,6 +77,11 @@ def _library() -> list[dict]:
     return clips
 
 
+def _tally_summary() -> dict:
+    from . import tally
+    return tally.summary()
+
+
 @app.on_event("startup")
 def _startup():
     db.init()
@@ -148,11 +153,6 @@ def football_town():
 @app.get("/football-panel.js")
 def football_panel():
     return FileResponse(STATIC / "football-panel.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
-
-
-def _tally_summary() -> dict:
-    from . import tally
-    return tally.summary()
 
 
 @app.get("/api/state")
