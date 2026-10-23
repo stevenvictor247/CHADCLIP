@@ -182,13 +182,13 @@ def instagram(account: dict, values=None) -> dict:
 def youtube(account: dict, values=None) -> dict:
     token_file = ROOT / account.get("token_file", "")
     if not account.get("token_file") or not token_file.exists():
-        return _bad(f"{account['name']} isn't signed in to YouTube yet. Run: python -m hq connect-youtube {account['name']}")
+        return _bad(f"{account['name']} isn't signed in to YouTube yet. Use Connect YouTube on the Settings page.")
     try:
         from .agents.chad.publish import youtube as yt
         yt._credentials(account)  # refreshes the sign-in if needed; never opens a browser here
     except Exception as e:
         return _bad(f"The YouTube sign-in no longer works ({str(e)[:120]}). "
-                    f"Run python -m hq connect-youtube {account['name']} again.")
+                    "Press Sign in with Google again under Connect YouTube on the Settings page.")
     return _ok("YouTube sign-in works.")
 
 
