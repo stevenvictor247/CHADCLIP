@@ -952,7 +952,19 @@ function draw(t) {
     ctx.strokeStyle = "#b8860b"; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.font = `900 14px ${FONT}`; ctx.fillStyle = "#4a2a00"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("!", B.post.door, y + 1);
   }
+  kit.glow(ctx, hoverShape(), t);
   for (const a of agents.values()) drawBubble(a, t);
+}
+let hover = null;
+function hoverShape() {   // the outline drawn around what the mouse is over
+  const h = hover;
+  if (!h) return null;
+  const box = b => ({x: b.x - 8, y: b.y - 12, w: b.w + 16, h: b.h + 18});
+  if (h.agent) return h.agent.sleeping ? null : {x: h.agent.x, y: h.agent.y, r: h.agent.key === "boss" ? 24 : 18};
+  if (h.plot) return box(h.plot);
+  if (h.building === "notice") return {x: NOTICE.x - 8, y: NOTICE.y - 18, w: NOTICE.w + 16, h: NOTICE.h + 52};
+  const b = B[h.building] || S[h.building];
+  return b ? box(b) : null;
 }
 
 // ---------- simulation ----------
@@ -1035,6 +1047,7 @@ const tip = document.getElementById("worldtip");
 canvas.addEventListener("mousemove", e => {
   if (canvas.classList.contains("dragging")) { if (tip) tip.style.display = "none"; return; }
   const p = toWorld(e), h = hit(p);
+  hover = h;
   canvas.style.cursor = h ? "pointer" : "";
   if (!tip) return;
   let text = "";
@@ -1051,7 +1064,7 @@ canvas.addEventListener("mousemove", e => {
     tip.style.top = clamp(e.clientY - r.top + 14, 4, r.height - 60) + "px";
   }
 });
-canvas.addEventListener("mouseleave", () => { if (tip) tip.style.display = "none"; });
+canvas.addEventListener("mouseleave", () => { hover = null; if (tip) tip.style.display = "none"; });
 
 // Clicking opens a card on the stage: an agent's status and recent work, Approvals with Approve and Reject buttons,
 // a chat with the Boss, or a short summary of a building. "Follow" on an agent's card keeps the camera on them.

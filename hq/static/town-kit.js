@@ -279,6 +279,22 @@ function night(ctx, cam, dark, sky, lights, t) {
   return true;
 }
 
+// ---------- hover glow ----------
+// A soft pulsing outline around whatever the mouse is over, so it's clear what you can click.
+function glow(ctx, h, t) {
+  if (!h) return;
+  const k = .55 + Math.sin(t / 200) * .25;
+  ctx.save();
+  ctx.strokeStyle = `rgba(255,255,255,${k})`; ctx.lineWidth = 2.5; ctx.setLineDash([7, 5]); ctx.lineDashOffset = -t / 40;
+  ctx.shadowColor = "rgba(255,230,150,.9)"; ctx.shadowBlur = 10;
+  ctx.beginPath();
+  if (h.r) ctx.ellipse(h.x, h.y, h.r, h.r * .42, 0, 0, 7);
+  else { const r = 10; ctx.moveTo(h.x + r, h.y); ctx.arcTo(h.x + h.w, h.y, h.x + h.w, h.y + h.h, r); ctx.arcTo(h.x + h.w, h.y + h.h, h.x, h.y + h.h, r);
+    ctx.arcTo(h.x, h.y + h.h, h.x, h.y, r); ctx.arcTo(h.x, h.y, h.x + h.w, h.y, r); ctx.closePath(); }
+  ctx.stroke();
+  ctx.restore();
+}
+
 // ---------- shared state and helpers ----------
 let state = null;
 const hq = {
@@ -564,7 +580,7 @@ function register(id, cam) {
 }
 
 window.HQTown = {
-  camera, outskirts, night, seeded, register, hint, cams,
+  camera, outskirts, night, seeded, register, hint, cams, glow,
   setState(s) {
     state = s;
     if (stage) stage.classList.toggle("paused", !!s.paused);
