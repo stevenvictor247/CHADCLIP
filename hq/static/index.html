@@ -255,6 +255,13 @@
       </div>
       <div id="campaigns"></div>
     </section>
+    <section id="allowedsection">
+      <h2>Streamers Chad can clip <span class="count" id="allowedcount"></span></h2>
+      <div class="meta" style="margin-bottom:6px">Add a streamer and how you're allowed to clip them (their public clipping policy, a clipping program, or their OK). Chad skips anyone who isn't listed.</div>
+      <div class="row"><input id="allowedlogin" value="jynxzi" placeholder="Twitch name, like jynxzi" style="flex:1"><input id="allowedhow" value="Steven: public open-clipping policy, Oct 23" placeholder="How you're allowed to clip them" style="flex:2"><button onclick="addAllowed()">Add</button></div>
+      <div id="allowed"></div>
+      <div class="row"><button class="ghost" onclick="clipNow()">Clip the top streamers now</button></div>
+    </section>
     <section id="creatorsection" style="display:none">
       <h2>Creators to clip <span class="count" id="creatorcount"></span></h2>
       <div class="meta" style="margin-bottom:6px">Scout's suggestions from Twitch. Chad only clips a creator once you record how you're allowed to (a clipping program or campaign, or their OK).</div>
@@ -448,6 +455,7 @@ async function refresh() {
   renderCampaigns(s.campaigns || []);
   renderInbox(s.scout_inbox || []);
   renderCreators(s.creator_picks || []);
+  renderAllowed(s.allowed_creators || []);
   renderLeads(s.leads || []);
   renderAgents(s.agents);
   renderActivity(s.activity);
@@ -610,6 +618,25 @@ async function leadYes(id) {
 async function setLead(id, status) {
   await fetch(`/api/leads/${id}`, {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"}, body: JSON.stringify({status})});
   shownLeads = null; refresh();
+}
+
+function renderAllowed(list) {
+  $("allowedcount").textContent = list.length || "";
+  $("allowed").innerHTML = list.length ? list.map(a => `<div class="meta"><a href="https://twitch.tv/${esc(a.login)}" target="_blank" rel="noopener">${esc(a.login)}</a> — ${esc(a.how)}</div>`).join("")
+    : `<div class="meta">Nobody yet, so Chad has no one to clip.</div>`;
+}
+async function addAllowed() {
+  const res = await fetch("/api/creators/add", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"},
+    body: JSON.stringify({login: $("allowedlogin").value, how: $("allowedhow").value})});
+  const r = await res.json();
+  toast(esc(r.message || r.detail || "Done"));
+  if (res.ok) { $("allowedlogin").value = ""; $("allowedhow").value = ""; }
+  refresh();
+}
+async function clipNow() {
+  const res = await fetch("/api/tasks", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"},
+    body: JSON.stringify({agent: "Chad", instructions: "Clip the most-viewed recent Twitch clips of streamers I have permission for", params: {twitch_top: 100, days: 7, per_streamer: 3}})});
+  toast(res.ok ? "Chad is on it. Clips will show up in Approvals." : "Couldn't start Chad");
 }
 
 let shownCreators = null;

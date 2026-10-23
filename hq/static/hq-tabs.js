@@ -11,7 +11,7 @@
     {id: "campaigns", icon: "🎯", label: "Campaigns", has: ["campsection"]},
     {id: "pitch", icon: "✉️", label: "Pitch", has: ["creatorsection", "leadsection"],
      empty: "No leads or creators to clip yet. Pitch and Scout put them here when they find some."},
-    {id: "clips", icon: "🎞️", label: "Clips", has: ["library"]},
+    {id: "clips", icon: "🎞️", label: "Clips", has: ["allowedsection", "library"]},
     {id: "football", icon: "🏈", label: "Warrior Village", has: ["towns", "football"]},
     {id: "sweep", icon: "🧹", label: "Sweep", has: ["sweep"]},
     {id: "activity", icon: "📜", label: "Activity", has: ["activity"]},

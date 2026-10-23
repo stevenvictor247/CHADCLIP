@@ -282,3 +282,19 @@ def test_they_said_yes_records_permission_and_marks_client(twitch_stub):
     with pytest.raises(ValueError):
         they_said_yes(kick, "yes")
     db.execute("DELETE FROM leads")
+
+
+def test_steven_can_add_a_streamer_himself(tmp_path, monkeypatch):
+    from hq import creators
+    (tmp_path / "streamers.yaml").write_text("# notes\npermissions:\n  # kaicenat: ''\n")
+    monkeypatch.setattr(creators, "CONFIG_DIR", tmp_path)
+    assert creators.allowed() == []
+    creators.add_allowed("https://www.twitch.tv/Jynxzi/", "public open-clipping policy")
+    assert creators.allowed() == [{"login": "jynxzi", "how": "public open-clipping policy"}]
+    assert "# notes" in (tmp_path / "streamers.yaml").read_text()
+    with pytest.raises(ValueError):
+        creators.add_allowed("@jynxzi", "public open-clipping policy")   # already there
+    with pytest.raises(ValueError):
+        creators.add_allowed("two words", "public open-clipping policy")
+    with pytest.raises(ValueError):
+        creators.add_allowed("someone", "ok")   # too vague to count as permission
