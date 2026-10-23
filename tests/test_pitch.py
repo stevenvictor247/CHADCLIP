@@ -362,4 +362,5 @@ def test_require_email_skips_streamers_without_one(monkeypatch):
     assert [l["handle"] for l in db.rows("SELECT handle FROM leads")] == ["hasemail"]
     monkeypatch.setattr(pitch_mod.twitch, "profile", lambda uid: {"bio": "nothing", "type": ""})
     db.execute("DELETE FROM leads")
+    db.execute("DELETE FROM email_finds")
     assert "public email" in run({"find": 5})
