@@ -80,7 +80,8 @@ def publish_approved() -> list[str]:
         # Every account this clip already went to (or failed on) is finished for this clip: a failure is never
         # retried on its own, because a half-finished upload could post twice.
         tried = {(p["platform"], p["account"]): p["status"] for p in
-                 db.rows("SELECT platform, account, status FROM posts WHERE clip_id = ? ORDER BY id", clip["id"])}
+                 db.rows("SELECT platform, account, status FROM posts WHERE clip_id = ? AND status != 'retried' "
+                         "ORDER BY id", clip["id"])}
         payload = {**clip, "post_text": post_text(clip), "hashtags": json.loads(clip.get("hashtags") or "[]")}
         waiting = 0
         for account in accounts:
@@ -112,3 +113,18 @@ def publish_approved() -> list[str]:
         results = [tried.get((a["platform"], a["name"])) for a in accounts]
         db.set_clip_status(clip["id"], "posted" if "posted" in results else "failed")
     return report
+
+
+def retry(clip_id: int) -> str:
+    """You pressed "Try posting again" on a clip that failed somewhere: the failed accounts get one more go."""
+    rows = db.rows("SELECT status FROM clips WHERE id = ?", clip_id)
+    if not rows:
+        raise ValueError(f"No clip #{clip_id}")
+    failed = db.rows("SELECT platform, account FROM posts WHERE clip_id = ? AND status = 'failed'", clip_id)
+    if not failed:
+        raise ValueError(f"Clip #{clip_id} has no failed posts to try again")
+    db.execute("UPDATE posts SET status = 'retried' WHERE clip_id = ? AND status = 'failed'", clip_id)
+    db.set_clip_status(clip_id, "approved")
+    where = ", ".join(f"{p['platform']} ({p['account']})" for p in failed)
+    db.log("Steven", f"Clip #{clip_id}: try posting again to {where}")
+    return f"Clip #{clip_id} will be posted again to {where}."

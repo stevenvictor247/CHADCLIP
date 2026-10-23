@@ -108,3 +108,21 @@ def test_pause_from_phone(monkeypatch, tmp_path):
     relay.handle_message({"from": {"id": 7}, "chat": {"id": 7}, "text": "resume"})
     assert not publish.paused()
     monkeypatch.delenv("HQ_PAUSED", raising=False)
+
+
+def test_try_posting_again_button(board):
+    board.accounts[0]["broken"] = True
+    a = board.clip()
+    publish.publish_approved()
+    assert _status(a) == "failed"
+    board.accounts[0]["broken"] = False
+    from fastapi.testclient import TestClient
+
+    import hq.api
+    c = TestClient(hq.api.app, headers={"X-HQ": "1"})
+    assert "posted again to tiktok (main)" in c.post(f"/api/clips/{a}/retry").json()["message"]
+    publish.publish_approved()
+    assert _status(a) == "posted" and board.sent == [(a, "main")]
+    assert c.post(f"/api/clips/{a}/retry").status_code == 400      # nothing failed any more
+    lib = next(x for x in c.get("/api/state").json()["clips"] if x["id"] == a)
+    assert [p["status"] for p in lib["posts"]] == ["retried", "posted"]

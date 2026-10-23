@@ -351,6 +351,15 @@ def lead_said_yes(lead_id: int, body: YesIn):
         raise HTTPException(400, str(e))
 
 
+@app.post("/api/clips/{clip_id}/retry")
+def retry_clip(clip_id: int):
+    from .agents.chad.publish import retry
+    try:
+        return {"message": retry(clip_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/api/clips/{clip_id}/{decision}")
 def decide(clip_id: int, decision: str):
     if decision not in ("approve", "reject"):

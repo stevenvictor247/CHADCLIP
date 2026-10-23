@@ -497,10 +497,20 @@ function renderLibrary(clips) {
       <b>${esc(c.title)}</b>
       ${c.posts.map(p => `<div class="muted">${esc(p.platform)} (${esc(p.account)}): ${p.status === "posted"
         ? (p.url ? `<a href="${esc(p.url)}" target="_blank">posted</a>` : "posted")
-        : "failed: " + esc(p.error)}</div>`).join("")}
+        : (p.status === "retried" ? "earlier try failed: " : "failed: ") + esc(p.error)}</div>`).join("")}
+      ${c.status !== "approved" && c.posts.some(p => p.status === "failed")
+        ? `<div><button onclick="retryClip(${c.id}, this)">Try posting again</button></div>` : ""}
     </div>`).join("") : '<div class="empty"><span class="big">🎞️</span>Nothing here yet. Clips you approve move here.</div>';
 }
 $("clipfilter").onchange = () => { shownLibrary = ""; refresh(); };
+
+async function retryClip(id, btn) {
+  // Only after you press it: a failed upload is never retried on its own, because it could post twice.
+  btn.disabled = true;
+  const r = await (await fetch(`/api/clips/${id}/retry`, {method: "POST", headers: {"X-HQ": "1"}})).json();
+  toast(esc(r.message || r.detail || "Couldn't try again."));
+  shownLibrary = ""; refresh();
+}
 
 let shownChat = null;
 function renderChat(msgs) {
