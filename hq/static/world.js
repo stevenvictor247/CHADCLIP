@@ -6,7 +6,7 @@ const canvas = document.getElementById("worldcanvas");
 const kit = window.HQTown;
 if (!canvas || !kit) return;
 const ctx = canvas.getContext("2d");
-const W = 960, H = 416, ROAD_Y = 240;
+const W = 960, H = 720, ROAD_Y = 240, ROAD2_Y = 650, SOUTH = 430;   // Main Street, Market Street, and where one ends and the other begins
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const EMOJI = '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
 const FONT = '"Nunito",system-ui,sans-serif';
@@ -29,6 +29,15 @@ const B = {
   tower:  {x: 842, y: 14, w: 72, h: 156, door: 878, label: "Broadcast Tower", icon: "📡"},
 };
 for (const b of Object.values(B)) b.front = {x: b.door, y: b.y + b.h + 20};
+// The south side of town, on Market Street: where Sweep, Pitch and Scout go to work, and the town notice board.
+const S = {
+  bank:  {x: 56, y: 500, w: 172, h: 130, wall: "#f4ecd6", roof: "#2f855a", door: 142, label: "Bank", icon: "🏦"},
+  pitch: {x: 278, y: 512, w: 136, h: 118, wall: "#efe6ff", roof: "#7c5cd6", door: 346, label: "Pitch Office", icon: "✉️"},
+  scout: {x: 778, y: 504, w: 154, h: 126, wall: "#dcf6f1", roof: "#14a38b", door: 855, label: "Campaign HQ", icon: "🎯"},
+};
+for (const b of Object.values(S)) b.front = {x: b.door, y: b.y + b.h + 18};
+const NOTICE = {x: 590, y: 492, w: 160, h: 100, front: {x: 670, y: ROAD2_Y - 2}};
+const LINKS = [28, 557];   // the paths that join Main Street and Market Street
 const PLOTS = [0, 1, 2, 3].map(i => ({x: 566 + i * 96, y: 300, w: 84, h: 72, agent: null}));   // four cottages since Sweep moved in
 for (const p of PLOTS) p.front = {x: p.x + p.w / 2, y: p.y - 8};
 const LITTER = [];   // bits of mess for Sweep to clean up: one per open problem Sweep has found
@@ -39,12 +48,14 @@ const MAILBOX = {x: 784, y: 178};
 const TRASH = {x: 620, y: 178};
 const BEACON = {x: 878, y: 12};
 const TREES = [[30, 128], [292, 74], [345, 160], [612, 44], [806, 104], [298, 318], [338, 400], [612, 404], [952, 404],
-               [28, 402], [262, 404], [946, 120], [372, 300]].map(([x, y], i) => ({x, y, i, kind: i % 4 === 2 ? "blossom" : i % 3 === 1 ? "dark" : "green"}));
-const LAMPS = [[40, 214], [330, 214], [598, 214], [930, 214], [394, 306], [566, 306]].map(([x, y]) => ({x, y}));
-const BENCHES = [{x: 430, y: 292}, {x: 530, y: 292}];
+               [104, 452], [262, 404], [946, 120], [372, 300], [250, 470], [764, 456], [940, 486], [22, 708], [190, 712], [330, 706],
+               [700, 712], [866, 708], [950, 714], [436, 470], [530, 712]].map(([x, y], i) => ({x, y, i, kind: i % 4 === 2 ? "blossom" : i % 3 === 1 ? "dark" : "green"}));
+const LAMPS = [[40, 214], [330, 214], [598, 214], [930, 214], [394, 306], [566, 306], [250, 634], [512, 634], [736, 634], [940, 634]].map(([x, y]) => ({x, y}));
+const BENCHES = [{x: 430, y: 292}, {x: 530, y: 292}, {x: 410, y: 690}, {x: 610, y: 690}];
 const SPOTS = [{x: 150, y: 288}, {x: 274, y: 352}, {x: 60, y: 300}, {x: 430, y: 296, bench: true}, {x: 530, y: 296, bench: true},
                {x: 480, y: 404}, {x: 418, y: 372}, {x: 542, y: 372}, {x: 330, y: 250}, {x: 600, y: 252}, {x: 100, y: 252},
-               {x: 860, y: 252}, {x: 900, y: 392}, {x: 760, y: 252}];
+               {x: 860, y: 252}, {x: 900, y: 392}, {x: 760, y: 252}, {x: 410, y: 694, bench: true}, {x: 610, y: 694, bench: true},
+               {x: 300, y: 652}, {x: 690, y: 652}, {x: 560, y: 452}, {x: 660, y: 448}, {x: 180, y: 456}, {x: 900, y: 652}];
 
 function setMess(n) {   // called by the Sweep card; pieces only change when the number of open problems changes
   n = Math.min(8, Math.max(0, n | 0));
@@ -74,7 +85,9 @@ kit.register("world", cam);
 
 // ---------- the ground, drawn once ----------
 function blocked(x, y, m = 0) {
-  if (y > 212 - m && y < 268 + m) return true;
+  if (y > 212 - m && y < 268 + m || y > ROAD2_Y - 28 - m && y < ROAD2_Y + 28 + m) return true;
+  for (const b of [...Object.values(S), NOTICE]) if (x > b.x - 12 - m && x < b.x + b.w + 12 + m && y > b.y - 40 - m && y < b.y + b.h + 14 + m) return true;
+  if (LINKS.some(l => Math.abs(x - l) < 22 + m) && y > ROAD_Y && y < ROAD2_Y) return true;
   for (const b of Object.values(B)) if (x > b.x - 12 - m && x < b.x + b.w + 12 + m && y < b.y + b.h + 14 + m) return true;
   if (((x - POND.x) / (POND.rx + 14 + m)) ** 2 + ((y - POND.y) / (POND.ry + 14 + m)) ** 2 < 1) return true;
   if (Math.hypot(x - PLAZA.x, y - PLAZA.y) < PLAZA.r + 14 + m) return true;
@@ -84,7 +97,7 @@ function blocked(x, y, m = 0) {
 }
 const r = seeded(7);
 const FLOWERS = [];
-for (let tries = 0; FLOWERS.length < 22 && tries < 600; tries++) {
+for (let tries = 0; FLOWERS.length < 36 && tries < 900; tries++) {
   const x = 20 + r() * (W - 40), y = 20 + r() * (H - 30);
   if (!blocked(x, y, 4)) FLOWERS.push({x, y, n: 4 + Math.floor(r() * 5), c: ["#ff7eb6", "#ffd34d", "#ffffff", "#c084fc", "#7cc4ff"][Math.floor(r() * 5)], s: Math.floor(r() * 1e6)});
 }
@@ -104,7 +117,7 @@ function drawTerrain() {
     g.fillRect(tx, ty, 32, 32);
   }
   g.strokeStyle = "rgba(30,90,30,.35)"; g.lineWidth = 1.2;
-  for (let i = 0; i < 320; i++) {
+  for (let i = 0; i < 540; i++) {
     const x = rr() * W, y = rr() * H;
     g.beginPath(); g.moveTo(x - 2, y); g.lineTo(x, y - 4); g.lineTo(x + 2, y); g.stroke();
   }
@@ -116,9 +129,14 @@ function drawTerrain() {
   path(0, ROAD_Y - 16, W, 32);
   for (const b of Object.values(B)) path(b.door - 12, b.y + b.h - 2, 24, ROAD_Y - 16 - (b.y + b.h - 2));
   path(PLAZA.x - 12, ROAD_Y + 16, 24, 40);
+  path(0, ROAD2_Y - 16, W, 32);
+  for (const l of LINKS) path(l - 12, ROAD_Y + 16, 24, ROAD2_Y - ROAD_Y - 32);
+  for (const b of Object.values(S)) path(b.door - 12, b.y + b.h - 2, 24, ROAD2_Y - 16 - (b.y + b.h - 2));
+  path(NOTICE.front.x - 10, NOTICE.y + NOTICE.h + 20, 20, ROAD2_Y - 16 - (NOTICE.y + NOTICE.h + 20));
   for (const p of PLOTS) path(p.front.x - 10, ROAD_Y + 16, 20, p.y - ROAD_Y - 16);
   g.fillStyle = "rgba(120,90,50,.35)";
   for (let i = 0; i < 140; i++) { g.beginPath(); g.arc(rr() * W, ROAD_Y - 13 + rr() * 26, rr() * 1.4 + .4, 0, 7); g.fill(); }
+  for (let i = 0; i < 140; i++) { g.beginPath(); g.arc(rr() * W, ROAD2_Y - 13 + rr() * 26, rr() * 1.4 + .4, 0, 7); g.fill(); }
   // pond
   g.fillStyle = "#d9c58f"; g.beginPath(); g.ellipse(POND.x, POND.y, POND.rx + 7, POND.ry + 6, 0, 0, 7); g.fill();
   g.fillStyle = "#3d8fd1"; g.beginPath(); g.ellipse(POND.x, POND.y, POND.rx, POND.ry, 0, 0, 7); g.fill();
@@ -169,7 +187,7 @@ const butterflies = FLOWERS.slice(0, 6).map((f, i) => ({cx: f.x, cy: f.y - 10, p
 const fireflies = Array.from({length: 16}, (_, i) => ({x: rnd(0, W), y: rnd(270, H), vx: rnd(-8, 8), vy: rnd(-6, 6), ph: i}));
 for (let i = 0; i < 3; i++) clouds.push({x: rnd(0, W), y: rnd(40, H - 40), s: rnd(.8, 1.4)});
 let mode = "auto", prev = null, deliveriesOnTheWay = 0, mailboxBump = 0, towerGlow = 0, thinking = false;
-let shown = {pending: 0, approved: 0, asks: 0};
+let shown = {pending: 0, approved: 0, asks: 0, made: 0, net: 0, leads: 0, followups: 0, live: 0, proposed: 0, news: []};
 let nextBirds = performance.now() + rnd(4000, 12000);
 
 function addParticle(p) { if (!calm && particles.length < 500) particles.push({vx: 0, vy: 0, g: 0, life: 1, ...p, max: p.life ?? 1}); }
@@ -223,16 +241,18 @@ function makeAgent(info) {
   return a;
 }
 
-function route(a, to) {
+function route(a, to) {   // along the nearest street, over a link path if the trip crosses from Main Street to Market Street
   if (calm) { a.x = to.x; a.y = to.y; a.path = []; return; }
-  const p = [];
-  const onRoad = y => Math.abs(y - ROAD_Y) < 6;
-  if (Math.abs(a.x - to.x) < 4) p.push({x: to.x, y: to.y});
-  else {
-    if (!onRoad(a.y)) p.push({x: a.x, y: ROAD_Y + rnd(-5, 5)});
-    p.push({x: to.x, y: p.length ? p[0].y : a.y});
-    p.push({x: to.x, y: to.y});
+  const street = y => y > SOUTH ? ROAD2_Y : ROAD_Y, from = street(a.y), dest = street(to.y), p = [];
+  if (Math.abs(a.x - to.x) < 4 && from === dest) { a.path = [{x: to.x, y: to.y}]; return; }
+  let y = a.y;
+  if (Math.abs(a.y - from) >= 6) { y = from + rnd(-5, 5); p.push({x: a.x, y}); }
+  if (from !== dest) {
+    const cost = l => Math.abs(a.x - l) + Math.abs(l - to.x);
+    const link = LINKS.reduce((best, l) => cost(l) < cost(best) ? l : best);
+    p.push({x: link, y}); y = dest + rnd(-5, 5); p.push({x: link, y});
   }
+  p.push({x: to.x, y}, {x: to.x, y: to.y});
   a.path = p;
 }
 function hurry(a) {   // drop whatever idle thing they were doing so a real job starts right away
@@ -244,7 +264,10 @@ function hurry(a) {   // drop whatever idle thing they were doing so a real job 
 function say(a, text, secs = 4) { a.say = text; a.sayUntil = performance.now() + secs * 1000; }
 function feel(a, face, secs = 3) { a.face = face; a.faceUntil = performance.now() + secs * 1000; }
 function wake(a) { if (a.sleeping) { a.sleeping = false; a.x = a.home.front.x; a.y = a.home.front.y - 6; } }
-const workSpot = a => ({x: a.home.front.x + (a.key === "boss" ? -26 : 0), y: a.home.front.y});
+// Where each agent goes when they have a job. Anyone not listed works at their own cottage.
+const WORK = {boss: () => ({x: B.hq.front.x - 26, y: B.hq.front.y}), chad: () => B.studio.front, sweep: () => S.bank.front,
+              pitch: () => S.pitch.front, scout: () => S.scout.front};
+const workSpot = a => WORK[a.key]?.() || a.home.front;
 
 const CHATTER = ["Nice day for clips ☀️", "☕ coffee break", "Anything trending?", "🎵 la la la", "Stretching 🙆", "Vibes are good ✨", "Who moved my chair?"];
 const NIGHT_CHATTER = ["Night shift 🌙", "Still grinding 💪", "The stars are out ✨"];
@@ -529,6 +552,74 @@ function drawTower(t) {
     ctx.fillStyle = "rgba(42,26,8,.85)"; roundRect(ctx, cx - w / 2, base - 62, w, 14, 7); ctx.fill();
     ctx.fillStyle = "#ffd59a"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, cx, base - 55);
   }
+}
+
+// The south side: Bank (money), Pitch Office (leads), Campaign HQ (Scout's campaigns) and the notice board (latest news).
+function badge(x, y, n, t, color = "#ff4d6d") {
+  const k = 1 + Math.sin(t / 250) * .08;
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0, 0, 8, 0, 7); ctx.fill();
+  ctx.font = `900 10px ${FONT}`; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(n > 99 ? "99+" : n, 0, .5);
+  ctx.restore();
+}
+function plaque(text, x, y, bg = "rgba(42,26,8,.88)", fg = "#ffe9b0") {
+  ctx.font = `800 9px ${FONT}`;
+  const w = ctx.measureText(text).width + 12;
+  ctx.fillStyle = bg; roundRect(ctx, x - w / 2, y - 7, w, 14, 7); ctx.fill();
+  ctx.fillStyle = fg; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, x, y + .5);
+}
+function drawBank(t) {
+  const b = S.bank;
+  house(b, t);
+  ctx.fillStyle = "#e8dcc0"; for (const cx of [b.x + 52, b.x + b.w - 52]) ctx.fillRect(cx - 4, b.y + b.h * .52 + 22, 8, b.h * .48 - 22);   // columns
+  emoji("💰", b.x + 28, b.y + 20, 18, Math.sin(t / 900) * .1);
+  const coins = Math.min(9, Math.ceil(Math.log10(1 + shown.made) * 3));   // the stack grows with what you made this month
+  for (let i = 0; i < coins; i++) {
+    ctx.fillStyle = "#b8860b"; ctx.beginPath(); ctx.ellipse(b.x + b.w + 16, b.y + b.h - 3 - i * 4, 8, 3, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#ffd34d"; ctx.beginPath(); ctx.ellipse(b.x + b.w + 16, b.y + b.h - 4 - i * 4, 8, 3, 0, 0, 7); ctx.fill();
+  }
+  plaque(`${shown.net < 0 ? "−" : ""}$${Math.abs(shown.net).toFixed(2)} net this month`, b.door, b.y - 8, shown.net < 0 ? "rgba(90,20,20,.88)" : "rgba(10,60,30,.88)", shown.net < 0 ? "#fecaca" : "#bbf7d0");
+}
+function drawPitchOffice(t) {
+  const b = S.pitch;
+  house(b, t);
+  emoji("📮", b.x + b.w - 24, b.y + 16, 16);
+  if (shown.followups) badge(b.door + 24, b.y + b.h * .52 - 4, shown.followups, t);
+  if (shown.leads) plaque(`${shown.leads} lead${shown.leads === 1 ? "" : "s"}`, b.door, b.y - 8);
+}
+function drawCampaignHQ(t) {
+  const b = S.scout;
+  house(b, t);
+  emoji("🎯", b.x + 26, b.y + 18, 17);
+  for (let i = 0; i < Math.min(5, shown.live); i++) {   // a pennant for each campaign you joined
+    const px = b.x + b.w - 20 - i * 14, py = b.y - 4;
+    ctx.fillStyle = "#5a4636"; ctx.fillRect(px, py - 16, 2, 18);
+    ctx.fillStyle = ["#14a38b", "#ffb347", "#ff6fa8", "#7cc4ff", "#4ade80"][i];
+    ctx.beginPath(); ctx.moveTo(px + 2, py - 16); ctx.lineTo(px + 12 + Math.sin(t / 250 + i) * 1.5, py - 12); ctx.lineTo(px + 2, py - 8); ctx.fill();
+  }
+  if (shown.proposed) badge(b.door + 24, b.y + b.h * .52 - 4, shown.proposed, t, "#f59e0b");
+  plaque(shown.live ? `${shown.live} campaign${shown.live === 1 ? "" : "s"} live` : "No campaigns yet", b.door - 30, b.y - 10);
+}
+function drawNotice(t) {
+  const n = NOTICE, cx = n.x + n.w / 2;
+  ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(cx + 6, n.y + n.h + 28, n.w / 2, 6, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = "#6b4226"; ctx.fillRect(n.x + 20, n.y + n.h - 4, 7, 32); ctx.fillRect(n.x + n.w - 27, n.y + n.h - 4, 7, 32);
+  ctx.fillStyle = "#8a5a32"; roundRect(ctx, n.x - 4, n.y - 4, n.w + 8, n.h + 8, 6); ctx.fill();
+  ctx.fillStyle = "#f6ecd2"; roundRect(ctx, n.x, n.y + 16, n.w, n.h - 16, 3); ctx.fill();
+  ctx.fillStyle = "#5a361e"; ctx.fillRect(n.x + 14, n.y - 14, n.w - 28, 4);
+  ctx.font = `900 10px ${FONT}`; ctx.fillStyle = "#fff2d6"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("📜 TOWN NEWS", cx, n.y + 7);
+  ctx.textAlign = "left";
+  const news = shown.news.length ? shown.news : [{who: "", text: "Nothing new yet"}];
+  news.slice(0, 4).forEach((row, i) => {
+    const y = n.y + 28 + i * 19;
+    ctx.fillStyle = ["#fde68a", "#bfdbfe", "#fbcfe8", "#bbf7d0"][i]; ctx.fillRect(n.x + 6, y - 7, n.w - 12, 15);
+    ctx.fillStyle = "#e11d48"; ctx.beginPath(); ctx.arc(n.x + 11, y - 3, 1.8, 0, 7); ctx.fill();
+    ctx.font = `700 8px ${FONT}`; ctx.fillStyle = "#2a2233";
+    let line = (row.who ? row.who + ": " : "") + row.text;
+    if (ctx.measureText(line).width > n.w - 26) { while (line.length > 1 && ctx.measureText(line + "…").width > n.w - 26) line = line.slice(0, -1); line += "…"; }
+    ctx.fillText(line, n.x + 16, y + .5);
+  });
+  if (SKY.dk > .15) lights.push({x: cx, y: n.y + n.h / 2, r: 80, warm: .7});
 }
 
 function drawTree(tr, t) {
@@ -842,6 +933,8 @@ function draw(t) {
     ...LAMPS.map(o => ({y: o.y, d: () => drawLamp(o)})),
     ...BENCHES.map(o => ({y: o.y - 2, d: () => drawBench(o)})),
     ...PLOTS.map(o => ({y: o.y + 40, d: () => drawPlot(o)})),
+    {y: S.bank.y + S.bank.h, d: () => drawBank(t)}, {y: S.pitch.y + S.pitch.h, d: () => drawPitchOffice(t)},
+    {y: S.scout.y + S.scout.h, d: () => drawCampaignHQ(t)}, {y: NOTICE.y + NOTICE.h + 28, d: () => drawNotice(t)},
     ...LITTER.map(o => ({y: o.y, d: () => drawLitter(o)})),
     ...[...agents.values()].map(a => ({y: a.y, d: () => drawAgent(a, t)})),
   ].sort((p, q) => p.y - q.y);
@@ -916,6 +1009,8 @@ const toWorld = e => cam.toWorld(e.clientX, e.clientY);
 function hit(p) {
   for (const a of agents.values()) if (!a.sleeping && (a.key === "boss" ? Math.abs(p.x - a.x) < 22 && p.y > a.y - 86 && p.y < a.y + 4 : Math.hypot(p.x - a.x, p.y - (a.y - 14)) < 18)) return {agent: a};
   for (const [k, b] of Object.entries(B)) if (p.x > b.x - 8 && p.x < b.x + b.w + 8 && p.y > b.y - 10 && p.y < b.y + b.h + 4) return {building: k};
+  for (const [k, b] of Object.entries(S)) if (p.x > b.x - 8 && p.x < b.x + b.w + 8 && p.y > b.y - 24 && p.y < b.y + b.h + 4) return {building: k};
+  if (p.x > NOTICE.x - 6 && p.x < NOTICE.x + NOTICE.w + 6 && p.y > NOTICE.y - 16 && p.y < NOTICE.y + NOTICE.h + 30) return {building: "notice"};
   if (Math.hypot(p.x - MAILBOX.x, p.y - (MAILBOX.y - 18)) < 18) return {building: "post"};
   for (const pl of PLOTS) if (p.x > pl.x && p.x < pl.x + pl.w && p.y > pl.y && p.y < pl.y + pl.h) return {plot: pl};
   return null;
@@ -926,6 +1021,12 @@ const TIPS = {
   post: () => `Approvals: ${waiting()} waiting for your OK. Click to approve or reject right here.`,
   tower: () => `Broadcast Tower: approved clips get posted from here.${shown.approved ? ` ${shown.approved} queued.` : ""} Click for recent posts.`,
 };
+Object.assign(TIPS, {
+  bank: () => `Bank: ${shown.net < 0 ? "−" : ""}$${Math.abs(shown.net).toFixed(2)} net this month. Sweep counts every cent here. Click for money.`,
+  pitch: () => `Pitch Office: ${shown.leads} lead${shown.leads === 1 ? "" : "s"}${shown.followups ? `, ${shown.followups} due a follow-up` : ""}. Click for leads.`,
+  scout: () => `Campaign HQ: ${shown.live} live campaign${shown.live === 1 ? "" : "s"}${shown.proposed ? `, ${shown.proposed} for you to look at` : ""}. Click for campaigns.`,
+  notice: "Town News: the latest from your agents. Click for more.",
+});
 const waiting = () => shown.pending + shown.asks;
 const tip = document.getElementById("worldtip");
 canvas.addEventListener("mousemove", e => {
@@ -990,6 +1091,54 @@ function plotCard() {
     buttons: [{act: "plan", label: "💬 Plan a new agent with the Boss"}],
     acts: {plan: () => kit.bossCard("I want a new agent in HQ Town that ")}}));
 }
+function bankCard() {
+  kit.infoCard("bank", () => {
+    const m = (kit.state() || {}).money?.periods || {}, row = (label, p) => `<div><b class="${(p?.net || 0) < 0 ? "neg" : ""}">${kit.usd(p?.net)}</b><span>${label}: made ${kit.usd(p?.made)}, spent ${kit.usd(p?.spent)}</span></div>`;
+    const cost = (kit.state() || {}).spend;
+    return {color: "#2f855a", icon: "🏦", title: "Bank", sub: "Money in and out (the same numbers as the strip at the top)",
+      html: `<div class="grid">${row("Today", m.today)}${row("This month", m.month)}</div>
+        <p class="muted">Claude this month: <b>${kit.usd(m.month?.claude)}</b>${cost?.daily_budget_usd ? ` · daily budget ${kit.usd(cost.daily_budget_usd)}` : ""}${cost?.over_budget ? " · <b>budget reached</b>" : ""}</p>
+        <p class="muted">Sweep watches the costs and sends you one cost report a day.</p>`,
+      buttons: [{act: "income", label: "➕ Add income"}, {act: "expense", label: "➖ Add expense", kind: "ghost"}, {act: "sweep", label: "🧹 Sweep", kind: "ghost"}],
+      acts: {
+        income: () => { document.querySelector('#hq-money [data-panel="income"]')?.click(); window.scrollTo({top: 0, behavior: "smooth"}); },
+        expense: () => { document.querySelector('#hq-money [data-panel="expense"]')?.click(); window.scrollTo({top: 0, behavior: "smooth"}); },
+        sweep: () => kit.agentCard("Sweep", live),
+      }};
+  });
+}
+const LEAD_PILL = {pitched: "warn", replied: "on", client: "on", new: "", drafted: ""};
+function pitchCard() {
+  kit.infoCard("pitch", () => {
+    const leads = ((kit.state() || {}).leads || []).filter(l => !["dead", "dropped", "do_not_contact"].includes(l.status)).slice(0, 7);
+    return {color: "#7c5cd6", icon: "✉️", title: "Pitch Office", sub: "People who might pay you to clip for them",
+      html: leads.length ? `<ul class="feed">${leads.map(l => `<li><span class="pill ${LEAD_PILL[l.status] ?? ""}">${kit.esc(l.status)}</span>${kit.esc(l.name)}
+          <span>${kit.esc(l.platform || "")}</span></li>`).join("")}</ul>` : `<p class="muted">No leads yet. Ask the Boss to have Pitch find some.</p>`,
+      buttons: [{act: "pitch", label: "✉️ Pitch's card"}, {act: "open", label: "Open Pitch ↗", kind: "ghost"}],
+      acts: {pitch: () => kit.agentCard("Pitch", live), open: () => kit.goTab("pitch", "leadsection")}};
+  });
+}
+function campaignCard() {
+  kit.infoCard("scout", () => {
+    const camps = ((kit.state() || {}).campaigns || []).filter(x => x.status === "joined" || x.status === "proposed").slice(0, 7);
+    return {color: "#14a38b", icon: "🎯", title: "Campaign HQ", sub: "Paid clipping campaigns Scout found",
+      html: camps.length ? `<ul class="feed">${camps.map(x => `<li><span class="pill ${x.status === "joined" ? "on" : "warn"}">${x.status === "joined" ? "live" : "look"}</span>
+          ${kit.esc(x.name)} <span>${x.rate_per_1k ? kit.usd(x.rate_per_1k) + "/1k views" : ""}${x.totals?.earned_usd ? " · earned " + kit.usd(x.totals.earned_usd) : ""}</span></li>`).join("")}</ul>`
+        : `<p class="muted">No campaigns yet. Paste campaign links on the Campaigns tab and Scout rates them.</p>`,
+      buttons: [{act: "scout", label: "🔎 Scout's card"}, {act: "open", label: "Open Campaigns ↗", kind: "ghost"}],
+      acts: {scout: () => kit.agentCard("Scout", live), open: () => kit.goTab("campaigns", "campsection")}};
+  });
+}
+function noticeCard() {
+  kit.infoCard("notice", () => {
+    const rows = ((kit.state() || {}).activity || []).slice(0, 10);
+    return {color: "#8a5a32", icon: "📜", title: "Town News", sub: "Everything your agents did lately",
+      html: rows.length ? `<ul class="feed">${rows.map(r => `<li><span>${kit.esc(kit.when(r.created_at))}</span><b>${kit.esc(r.agent)}</b> ${kit.esc(r.message)}</li>`).join("")}</ul>`
+        : `<p class="muted">Nothing yet.</p>`,
+      buttons: [{act: "open", label: "Open Activity ↗", kind: "ghost"}],
+      acts: {open: () => kit.goTab("activity", "activity")}};
+  });
+}
 canvas.addEventListener("click", e => {
   if (cam.dragged) return;
   const h = hit(toWorld(e));
@@ -1004,6 +1153,10 @@ canvas.addEventListener("click", e => {
   else if (h.building === "tower") towerCard();
   else if (h.building === "studio") studioCard();
   else if (h.building === "hq") kit.bossCard();
+  else if (h.building === "bank") bankCard();
+  else if (h.building === "pitch") pitchCard();
+  else if (h.building === "scout") campaignCard();
+  else if (h.building === "notice") noticeCard();
   else if (h.plot?.agent) kit.agentCard(h.plot.agent, live);
   else if (h.plot) { floatText(h.plot.x + h.plot.w / 2, h.plot.y, "Room for one more 🌱", "#e8ffd8", 12); plotCard(); }
 });
@@ -1028,8 +1181,15 @@ window.HQWorld = {
     const c = s.counts || {};
     if (prev) react(c);
     chatter(s.activity || []);
+    const month = s.money?.periods?.month || {}, leads = s.leads || [], camps = s.campaigns || [], now = new Date().toISOString();
+    const business = new Set((s.agents || []).filter(a => (a.village || "business") === "business").map(a => a.name.toLowerCase()).concat("steven"));
     shown = {pending: c.pending_approval || 0, approved: c.approved || 0,
-             asks: (s.approvals || []).filter(a => (a.village || "business") === "business").length};
+             asks: (s.approvals || []).filter(a => (a.village || "business") === "business").length,
+             made: month.made || 0, net: month.net || 0,
+             leads: leads.filter(l => !["dead", "dropped", "do_not_contact"].includes(l.status)).length,
+             followups: leads.filter(l => l.status === "pitched" && l.followup_at && l.followup_at <= now).length,
+             live: camps.filter(x => x.status === "joined").length, proposed: camps.filter(x => x.status === "proposed").length,
+             news: (s.activity || []).filter(r => business.has(String(r.agent).toLowerCase())).slice(0, 4).map(r => ({who: r.agent, text: r.message}))};
     prev = {...c};
     chips(c);
     if (calm) draw(performance.now());

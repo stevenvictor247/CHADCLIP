@@ -9,7 +9,7 @@ const canvas = document.getElementById("fbcanvas");
 const kit = window.HQTown;
 if (!canvas || !kit) return;
 const ctx = canvas.getContext("2d");
-const W = 960, H = 416, ROAD_Y = 240;
+const W = 960, H = 720, ROAD_Y = 240, ROAD2_Y = 650, SOUTH = 430;   // the main road, Stadium Drive, and where one ends and the other begins
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const EMOJI = '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
 const FONT = '"Nunito",system-ui,sans-serif';
@@ -41,13 +41,25 @@ const COTTAGES = [["Clock", "⏰", 66], ["Ref", "🚩", 168], ["Tells", "📊", 
   .map(([agent, icon, x]) => ({agent, icon, x, y: 300, w: 86, h: 72}));
 for (const p of COTTAGES) p.front = {x: p.x + p.w / 2, y: p.y - 8};
 const CREEK = 34;   // the creek on the left edge: HQ Town is across the footbridge
+// South of the field, on Stadium Drive: where Clock, Scribe, Ref and Tells go to work, the home stands, and two lots for Wave 2.
+const S = {
+  clock:   {x: 54, y: 446, w: 84, h: 184, wall: "#f1ece4", roof: GREEN, door: 96, label: "Clock Tower", icon: "🕰️"},
+  library: {x: 150, y: 512, w: 104, h: 118, wall: "#f8efd8", roof: "#8a5a32", door: 202, label: "Library", icon: "📚"},
+  lab:     {x: 296, y: 506, w: 160, h: 124, wall: "#e6f0ec", roof: "#2f6d60", door: 376, label: "Tag Lab", icon: "🗂️"},
+  print:   {x: 486, y: 512, w: 160, h: 118, wall: "#fff6dc", roof: "#c99712", door: 566, label: "Outbox & Print", icon: "📤"},
+};
+for (const b of Object.values(S)) b.front = {x: b.door, y: b.y + b.h + 18};
+const LOTS = [{x: 704, y: 540, w: 112, h: 82}, {x: 836, y: 540, w: 112, h: 82}];   // Wave 2: Depth, Blitz, Itinerary, Recon
+const STANDS = {x: 300, y: 422, w: 344, h: 44};
+const LINKS = [270, 676];   // paths joining the main road and Stadium Drive
 const MAILBOX = {x: 488, y: 178};
-const TREES = [[296, 92], [300, 168], [500, 40], [784, 168], [948, 214], [262, 410], [676, 410], [60, 404], [512, 160]]
+const TREES = [[296, 92], [300, 168], [500, 40], [784, 168], [948, 214], [246, 412], [700, 412], [60, 404], [512, 160], [160, 470], [690, 470], [950, 470], [260, 710], [430, 712], [610, 708], [800, 712], [940, 706], [120, 712]]
   .map(([x, y], i) => ({x, y, i, kind: i % 3 === 1 ? "dark" : "green"}));
-const LAMPS = [[70, 214], [310, 214], [520, 214], [790, 214]].map(([x, y]) => ({x, y}));
+const LAMPS = [[70, 214], [310, 214], [520, 214], [790, 214], [150, 634], [470, 634], [690, 634], [940, 634]].map(([x, y]) => ({x, y}));
 const SPOTS = [{x: 360, y: 330, field: true}, {x: 470, y: 352, field: true}, {x: 584, y: 330, field: true}, {x: 410, y: 384, field: true},
                {x: 540, y: 386, field: true}, {x: 472, y: 276}, {x: 647, y: 196}, {x: 22, y: 244}, {x: 300, y: 250}, {x: 760, y: 252},
-               {x: 904, y: 370, tailgate: true}, {x: 946, y: 370, tailgate: true}, {x: 120, y: 254}];
+               {x: 904, y: 370, tailgate: true}, {x: 946, y: 370, tailgate: true}, {x: 120, y: 254},
+               {x: 340, y: 486, stands: true}, {x: 470, y: 488, stands: true}, {x: 600, y: 486, stands: true}, {x: 300, y: 664}, {x: 760, y: 660}, {x: 880, y: 664}];
 
 // ---------- canvas sizing ----------
 // The camera (town-kit.js) fits the village to its box and handles zooming and dragging, like in HQ Town.
@@ -59,7 +71,9 @@ kit.register("fbworld", cam);
 function creekEdge(y) { return CREEK + Math.sin(y / 38) * 6 + Math.sin(y / 13) * 2; }
 function blocked(x, y) {
   if (x < creekEdge(y) + 14) return true;
-  if (y > 210 && y < 270) return true;
+  if (y > 210 && y < 270 || y > ROAD2_Y - 30 && y < ROAD2_Y + 30) return true;
+  for (const b of [...Object.values(S), ...LOTS, STANDS]) if (x > b.x - 12 && x < b.x + b.w + 12 && y > b.y - 40 && y < b.y + b.h + 14) return true;
+  if (LINKS.some(l => Math.abs(x - l) < 22) && y > ROAD_Y && y < ROAD2_Y) return true;
   for (const b of [...Object.values(B), BOARD]) if (x > b.x - 12 && x < b.x + b.w + 12 && y < b.y + b.h + 30) return true;
   if (x > FIELD.x - 14 && x < FIELD.x + FIELD.w + 14 && y > FIELD.y - 20) return true;
   if (x > TENT.x - 10 && y > TENT.y - 14 && y < CORNHOLE.y + 10) return true;
@@ -69,7 +83,7 @@ function blocked(x, y) {
 }
 const r = seeded(11);
 const FLOWERS = [];
-for (let tries = 0; FLOWERS.length < 16 && tries < 600; tries++) {
+for (let tries = 0; FLOWERS.length < 26 && tries < 900; tries++) {
   const x = 40 + r() * (W - 60), y = 20 + r() * (H - 30);
   if (!blocked(x, y)) FLOWERS.push({x, y, n: 3 + Math.floor(r() * 4), c: ["#ffd34d", "#ffffff", "#7cc4ff", "#4ade80"][Math.floor(r() * 4)], s: Math.floor(r() * 1e6)});
 }
@@ -88,7 +102,7 @@ function drawTerrain() {
     g.fillRect(tx, ty, 32, 32);
   }
   g.strokeStyle = "rgba(30,90,30,.35)"; g.lineWidth = 1.2;
-  for (let i = 0; i < 260; i++) {
+  for (let i = 0; i < 450; i++) {
     const x = rr() * W, y = rr() * H;
     g.beginPath(); g.moveTo(x - 2, y); g.lineTo(x, y - 4); g.lineTo(x + 2, y); g.stroke();
   }
@@ -102,8 +116,13 @@ function drawTerrain() {
   path(BOARD.front.x - 10, BOARD.y + BOARD.h + 26, 20, ROAD_Y - 16 - (BOARD.y + BOARD.h + 26));
   path(FIELD.x + FIELD.w / 2 - 12, ROAD_Y + 16, 24, FIELD.y - ROAD_Y - 16);
   for (const p of COTTAGES) path(p.front.x - 10, ROAD_Y + 16, 20, p.y - ROAD_Y - 16);
+  path(CREEK + 8, ROAD2_Y - 16, W - CREEK - 8, 32);
+  for (const l of LINKS) path(l - 12, ROAD_Y + 16, 24, ROAD2_Y - ROAD_Y - 32);
+  for (const b of Object.values(S)) path(b.door - 12, b.y + b.h - 2, 24, ROAD2_Y - 16 - (b.y + b.h - 2));
+  for (const lot of LOTS) path(lot.x + lot.w / 2 - 10, lot.y + lot.h, 20, ROAD2_Y - 16 - lot.y - lot.h);
   g.fillStyle = "rgba(120,90,50,.35)";
   for (let i = 0; i < 120; i++) { g.beginPath(); g.arc(rr() * W, ROAD_Y - 13 + rr() * 26, rr() * 1.4 + .4, 0, 7); g.fill(); }
+  for (let i = 0; i < 110; i++) { g.beginPath(); g.arc(CREEK + 12 + rr() * (W - CREEK - 12), ROAD2_Y - 13 + rr() * 26, rr() * 1.4 + .4, 0, 7); g.fill(); }
   // the creek, with sandy banks
   const creek = (pad, color) => {
     g.fillStyle = color; g.beginPath(); g.moveTo(0, 0);
@@ -170,7 +189,7 @@ const particles = [], flyers = [], clouds = [], birds = [];
 for (let i = 0; i < 3; i++) clouds.push({x: rnd(0, W), y: rnd(40, H - 40), s: rnd(.8, 1.4)});
 const fireflies = Array.from({length: 12}, (_, i) => ({x: rnd(40, W), y: rnd(270, H), vx: rnd(-8, 8), vy: rnd(-6, 6), ph: i}));
 let prev = null, mailBump = 0, boardGlow = 0, deliveriesOnTheWay = 0, nextBirds = performance.now() + rnd(6000, 15000);
-let shown = {pending: 0, week: null, flagged: 0};
+let shown = {pending: 0, week: null, flagged: 0, notes: 0, sheets: 0, outbox: 0, toPrint: 0};
 
 function addParticle(p) { if (!calm && particles.length < 400) particles.push({vx: 0, vy: 0, g: 0, life: 1, ...p, max: p.life ?? 1}); }
 function burst(x, y, n, kind, colors, opts = {}) {
@@ -212,15 +231,18 @@ function makeAgent(info) {
   agents.set(key, a);
   return a;
 }
-function route(a, to) {
+function route(a, to) {   // along the nearest road, over a link path if the trip crosses between the main road and Stadium Drive
   if (calm) { a.x = to.x; a.y = to.y; a.path = []; return; }
-  const p = [], onRoad = y => Math.abs(y - ROAD_Y) < 6;
-  if (Math.abs(a.x - to.x) < 4) p.push({x: to.x, y: to.y});
-  else {
-    if (!onRoad(a.y)) p.push({x: a.x, y: ROAD_Y + rnd(-5, 5)});
-    p.push({x: to.x, y: p.length ? p[0].y : a.y});
-    p.push({x: to.x, y: to.y});
+  const road = y => y > SOUTH ? ROAD2_Y : ROAD_Y, from = road(a.y), dest = road(to.y), p = [];
+  if (Math.abs(a.x - to.x) < 4 && from === dest) { a.path = [{x: to.x, y: to.y}]; return; }
+  let y = a.y;
+  if (Math.abs(a.y - from) >= 6) { y = from + rnd(-5, 5); p.push({x: a.x, y}); }
+  if (from !== dest) {
+    const cost = l => Math.abs(a.x - l) + Math.abs(l - to.x);
+    const link = LINKS.reduce((best, l) => cost(l) < cost(best) ? l : best);
+    p.push({x: link, y}); y = dest + rnd(-5, 5); p.push({x: link, y});
   }
+  p.push({x: to.x, y}, {x: to.x, y: to.y});
   a.path = p;
 }
 function hurry(a) {
@@ -231,7 +253,9 @@ function hurry(a) {
 }
 function say(a, text, secs = 4) { a.say = text; a.sayUntil = performance.now() + secs * 1000; }
 function wake(a) { if (a.sleeping) { a.sleeping = false; a.x = a.home.front.x; a.y = a.home.front.y - 6; } }
-const workSpot = a => ({x: a.home.front.x + (a.key === "captain" ? -30 : 0), y: a.home.front.y});
+// Where each agent goes when they have a job: Captain to the Film Room, the others to their place on Stadium Drive.
+const WORK = {clock: () => S.clock.front, scribe: () => S.library.front, ref: () => S.lab.front, tells: () => ({x: S.lab.front.x + 34, y: S.lab.front.y})};
+const workSpot = a => WORK[a.key]?.() || {x: a.home.front.x + (a.key === "captain" ? -30 : 0), y: a.home.front.y};
 const onField = a => a.x > FIELD.x && a.x < FIELD.x + FIELD.w && a.y > FIELD.y && a.y < FIELD.y + FIELD.h;
 
 const CHATTER = ["Watching film 🎞️", "Run it back ⏪", "Go Warriors! 💚💛", "Hydrate 💧", "What's the down and distance?", "Stretching 🙆", "Next play ▶️",
@@ -596,6 +620,92 @@ function drawCottage(p) {
   ctx.font = `800 8px ${FONT}`; ctx.fillStyle = "#3a2a1c"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText(p.agent.toUpperCase(), p.x + p.w / 2, p.y + p.h - 3);
 }
+// Stadium Drive: the Clock Tower (real time, what's due), the Library (notebook), the Tag Lab (sheets), the Outbox & Print
+// shop, the home stands and two lots waiting for Wave 2.
+function plaque(text, x, y, bg = "rgba(12,84,73,.92)", fg = GOLD) {
+  ctx.font = `800 9px ${FONT}`;
+  const w = ctx.measureText(text).width + 12;
+  ctx.fillStyle = bg; roundRect(ctx, x - w / 2, y - 7, w, 14, 7); ctx.fill();
+  ctx.fillStyle = fg; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, x, y + .5);
+}
+function badge(x, y, n, t, color = "#ff4d6d") {
+  const k = 1 + Math.sin(t / 250) * .08;
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0, 0, 8, 0, 7); ctx.fill();
+  ctx.font = `900 10px ${FONT}`; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(n > 99 ? "99+" : n, 0, .5);
+  ctx.restore();
+}
+function drawClockTower(t) {
+  const b = S.clock, cx = b.x + b.w / 2, bottom = b.y + b.h;
+  ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(cx + 6, bottom + 2, b.w / 2 + 8, 7, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = BRICK; ctx.fillRect(b.x + 8, b.y + 40, b.w - 16, b.h - 40);
+  ctx.fillStyle = "rgba(0,0,0,.12)"; for (let y = b.y + 48; y < bottom; y += 8) ctx.fillRect(b.x + 8, y, b.w - 16, 1.5);
+  ctx.fillStyle = GREEN; ctx.beginPath(); ctx.moveTo(b.x + 2, b.y + 44); ctx.lineTo(cx, b.y); ctx.lineTo(b.x + b.w - 2, b.y + 44); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = GOLD; ctx.fillRect(cx - 1, b.y - 12, 2, 14); ctx.beginPath(); ctx.arc(cx, b.y - 13, 2.5, 0, 7); ctx.fill();
+  // the clock face shows the real time
+  const fy = b.y + 74, d = new Date(), hr = (d.getHours() % 12 + d.getMinutes() / 60) / 12 * Math.PI * 2, mn = d.getMinutes() / 60 * Math.PI * 2;
+  ctx.fillStyle = GOLD; ctx.beginPath(); ctx.arc(cx, fy, 22, 0, 7); ctx.fill();
+  ctx.fillStyle = "#fffbea"; ctx.beginPath(); ctx.arc(cx, fy, 18, 0, 7); ctx.fill();
+  ctx.fillStyle = "#1d1426"; for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; ctx.fillRect(cx + Math.sin(a) * 15 - .8, fy - Math.cos(a) * 15 - .8, 1.6, 1.6); }
+  ctx.strokeStyle = "#1d1426"; ctx.lineCap = "round";
+  ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(cx, fy); ctx.lineTo(cx + Math.sin(hr) * 9, fy - Math.cos(hr) * 9); ctx.stroke();
+  ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx, fy); ctx.lineTo(cx + Math.sin(mn) * 14, fy - Math.cos(mn) * 14); ctx.stroke();
+  if (SKY.dk > .15) lights.push({x: cx, y: fy, r: 50, warm: 1});
+  ctx.fillStyle = "#7a4a2a"; roundRect(ctx, b.door - 11, bottom - 30, 22, 30, 4); ctx.fill();
+  plaque(`${b.icon} ${b.label}`, cx, b.y + 112, "#1f2a24", "#fff2d6");
+  const w = shown.week;
+  if (w && !w.season_over && (w.due_today?.length || w.late?.length)) badge(b.x + b.w - 6, b.y + 52, (w.due_today?.length || 0) + (w.late?.length || 0), t, w.late?.length ? "#ef4444" : "#f59e0b");
+}
+function drawLibrary(t) {
+  const b = S.library;
+  house(b);
+  emoji("📚", b.x + b.w / 2, b.y + 18, 16);
+  plaque(`📓 ${shown.notes} note${shown.notes === 1 ? "" : "s"}`, b.door, b.y - 8);
+}
+function drawLab(t) {
+  const b = S.lab;
+  house(b);
+  emoji("🗂️", b.x + 26, b.y + 20, 16); emoji("🔬", b.x + b.w - 26, b.y + 20, 15, Math.sin(t / 700) * .1);
+  if (shown.flagged) badge(b.door + 26, b.y + b.h * .52 - 4, shown.flagged, t);
+  plaque(shown.sheets ? `${shown.sheets} sheet${shown.sheets === 1 ? "" : "s"} in`: "Drop sheets in the Inbox", b.door, b.y - 8);
+}
+function drawPrintShop(t) {
+  const b = S.print;
+  house(b);
+  emoji("🖨️", b.x + 26, b.y + 20, 16);
+  if (shown.toPrint) badge(b.x + b.w - 20, b.y + 14, shown.toPrint, t, "#3b82f6");
+  plaque(`📤 ${shown.outbox} in Outbox`, b.door, b.y - 8);
+}
+function drawStands(t) {
+  const st = STANDS, crowd = shown.week?.days_to_game === 0;   // the crowd shows up on game day
+  ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fillRect(st.x + 4, st.y + st.h, st.w, 5);
+  for (let r = 0; r < 4; r++) {
+    const y = st.y + r * 11;
+    ctx.fillStyle = r % 2 ? "#cfd6dd" : "#e2e8f0"; ctx.fillRect(st.x, y, st.w, 9);
+    ctx.fillStyle = "rgba(0,0,0,.15)"; ctx.fillRect(st.x, y + 7, st.w, 2);
+    for (let x = st.x + 6; x < st.x + st.w - 4; x += 9) {
+      ctx.fillStyle = (x / 9 + r) % 2 < 1 ? GREEN : GOLD; ctx.fillRect(x, y + 1, 6, 5);
+      if (crowd && (x * 7 + r * 13) % 5 < 3) {
+        const hop = Math.max(0, Math.sin(t / 160 + x * .3 + r)) * 2;
+        ctx.fillStyle = ["#e9b48a", "#c68863", "#8d5a3b", "#f1c9a5"][(x + r) % 4]; ctx.beginPath(); ctx.arc(x + 3, y - 1 - hop, 3, 0, 7); ctx.fill();
+      }
+    }
+  }
+  ctx.font = `900 8px ${FONT}`; ctx.fillStyle = GOLD; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(crowd ? "GAME DAY · GO WARRIORS!" : "HOME STANDS", st.x + st.w / 2, st.y + st.h + 10);
+}
+function drawLot(lot, i) {
+  ctx.strokeStyle = "#8a5a32"; ctx.lineWidth = 2; ctx.strokeRect(lot.x, lot.y, lot.w, lot.h);
+  ctx.fillStyle = "#a8794b"; ctx.fillRect(lot.x + 2, lot.y + 2, lot.w - 4, lot.h - 4);
+  ctx.strokeStyle = "rgba(70,40,20,.35)"; for (let y = lot.y + 10; y < lot.y + lot.h; y += 12) { ctx.beginPath(); ctx.moveTo(lot.x + 6, y); ctx.lineTo(lot.x + lot.w - 6, y); ctx.stroke(); }
+  ctx.fillStyle = "#6b4226"; ctx.fillRect(lot.x + lot.w / 2 - 1.5, lot.y + 18, 3, 24);
+  ctx.fillStyle = GREEN; roundRect(ctx, lot.x + lot.w / 2 - 38, lot.y + 6, 76, 22, 4); ctx.fill();
+  ctx.font = `900 8px ${FONT}`; ctx.fillStyle = GOLD; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("WAVE 2 COMING", lot.x + lot.w / 2, lot.y + 13);
+  ctx.font = `800 7px ${FONT}`; ctx.fillStyle = "#fff"; ctx.fillText(i ? "Itinerary · Recon" : "Depth · Blitz", lot.x + lot.w / 2, lot.y + 22);
+  emoji(i ? "🗺️" : "🧱", lot.x + lot.w / 2 + 30, lot.y + lot.h - 16, 14);
+}
+
 function drawTree(tr, t) {
   const sway = Math.sin(t / 1100 + tr.i) * 1.4;
   ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.beginPath(); ctx.ellipse(tr.x + 5, tr.y, 18, 6, 0, 0, 7); ctx.fill();
@@ -763,6 +873,10 @@ function draw(t) {
     ...TOWERS.map(o => ({y: o.y, d: () => drawTower(o)})),
     {y: FIELD.y + FIELD.h / 2, d: () => { drawGoalpost(FIELD.x + 2, t); drawGoalpost(FIELD.x + FIELD.w - 2, t); }},
     {y: TENT.y + TENT.h, d: () => drawTent(t)},
+    {y: STANDS.y + STANDS.h, d: () => drawStands(t)},
+    {y: S.clock.y + S.clock.h, d: () => drawClockTower(t)}, {y: S.library.y + S.library.h, d: () => drawLibrary(t)},
+    {y: S.lab.y + S.lab.h, d: () => drawLab(t)}, {y: S.print.y + S.print.h, d: () => drawPrintShop(t)},
+    ...LOTS.map((o, i) => ({y: o.y + o.h, d: () => drawLot(o, i)})),
     ...[...agents.values()].map(a => ({y: a.y, d: () => drawAgent(a, t)})),
   ].sort((p, q) => p.y - q.y);
   for (const th of things) th.d();
@@ -830,6 +944,9 @@ function hit(p) {
   if (p.x > BOARD.x - 4 && p.x < BOARD.x + BOARD.w + 4 && p.y > BOARD.y - 4 && p.y < BOARD.y + BOARD.h + 30) return {building: "board"};
   if (p.x > FIELD.x && p.x < FIELD.x + FIELD.w && p.y > FIELD.y && p.y < FIELD.y + FIELD.h) return {building: "field"};
   for (const c of COTTAGES) if (p.x > c.x && p.x < c.x + c.w && p.y > c.y && p.y < c.y + c.h) return {cottage: c};
+  for (const [k, b] of Object.entries(S)) if (p.x > b.x - 6 && p.x < b.x + b.w + 6 && p.y > b.y - 16 && p.y < b.y + b.h + 4) return {building: k};
+  if (LOTS.some(l => p.x > l.x && p.x < l.x + l.w && p.y > l.y && p.y < l.y + l.h)) return {building: "lots"};
+  if (p.x > STANDS.x && p.x < STANDS.x + STANDS.w && p.y > STANDS.y - 6 && p.y < STANDS.y + STANDS.h + 14) return {building: "stands"};
   if (p.x < CREEK + 22 && Math.abs(p.y - ROAD_Y) < 22) return {building: "bridge"};
   if (p.x > TENT.x - 4 && p.y > TENT.y - 4 && p.y < CORNHOLE.y + 6) return {building: "tent"};
   return null;
@@ -851,6 +968,14 @@ const TIPS = {
   field: "Tom Adams Field: drop tagging sheets in the football Inbox and Ref checks them. Click to see your sheets.",
   bridge: "The footbridge to HQ Town. Both villages share the Boss.",
 };
+Object.assign(TIPS, {
+  clock: () => { const w = shown.week; return w && !w.season_over ? `Clock Tower: ${w.due_today.length} due today, ${w.late.length} late. Click for the checklist.` : "Clock Tower"; },
+  library: () => `Library: Scribe keeps your Coaching Notebook here (${shown.notes} notes). Click to read the latest.`,
+  lab: () => `Tag Lab: Ref checks your tagged sheets and Tells counts tendencies. ${shown.sheets} sheet${shown.sheets === 1 ? "" : "s"} in. Click for details.`,
+  print: () => `Outbox & Print: ${shown.outbox} file${shown.outbox === 1 ? "" : "s"} in your Outbox${shown.toPrint ? `, ${shown.toPrint} waiting to print` : ""}. Click for files.`,
+  lots: "Two lots for Wave 2: Depth, Blitz, Itinerary and Recon. Click to plan them.",
+  stands: "The home stands. They fill up on game day.",
+});
 const tip = document.getElementById("fbtip");
 canvas.addEventListener("mousemove", e => {
   if (canvas.classList.contains("dragging")) { if (tip) tip.style.display = "none"; return; }
@@ -908,6 +1033,36 @@ function fieldCard() {
       acts: {ref: () => kit.agentCard("Ref", live), open: () => kit.goTab("football", "fbfiles")}};
   });
 }
+function libraryCard() {
+  kit.infoCard("library", () => {
+    const fb = (kit.state() || {}).football || {}, notes = (fb.notes || []).slice(0, 6);
+    return {color: "#8a5a32", icon: "📚", title: "Library", sub: `Your Coaching Notebook · ${fb.notes_total || 0} notes`,
+      html: notes.length ? `<ul class="feed">${notes.map(n => `<li><span class="pill">${kit.esc(n.tab)}</span>${kit.esc(String(n.text).slice(0, 160))}</li>`).join("")}</ul>`
+        : `<p class="muted">No notes yet. Start a message to the Boss with "NB:" and Scribe files it here.</p>`,
+      buttons: [{act: "nb", label: "📓 Add a note"}, {act: "open", label: "Open notebook ↗", kind: "ghost"}],
+      acts: {nb: () => kit.bossCard("NB: "), open: () => kit.goTab("football", "fbnotes")}};
+  });
+}
+function printCard() {
+  kit.infoCard("print", () => {
+    const fb = (kit.state() || {}).football || {}, out = (fb.outbox || []).slice(0, 6), pr = fb.print || {};
+    return {color: "#c99712", icon: "📤", title: "Outbox & Print", sub: pr.when ? `Clock prints the print folder ${kit.esc(pr.when)}` : "Finished reports",
+      html: (out.length ? `<h4>Outbox</h4><ul class="feed">${out.map(f => `<li><a href="/api/football/outbox/${encodeURIComponent(f.name)}" target="_blank" rel="noopener">${kit.esc(f.name)}</a></li>`).join("")}</ul>`
+          : `<p class="muted">Nothing in the Outbox yet. Approved reports land here.</p>`) +
+        (pr.files?.length ? `<h4>Waiting to print</h4><ul class="feed">${pr.files.map(f => `<li>${kit.esc(f.name)}${f.problem ? ` <span class="pill bad">${kit.esc(f.problem)}</span>` : ""}</li>`).join("")}</ul>` : "") +
+        (pr.paused ? `<p class="muted">Printing is paused.</p>` : ""),
+      buttons: [{act: "open", label: "Open Warrior Village ↗", kind: "ghost"}],
+      acts: {open: () => kit.goTab("football", "football")}};
+  });
+}
+function waveCard() {
+  kit.infoCard("wave2", () => ({color: "#0C5449", icon: "🏗️", title: "Wave 2 lots", sub: "Room for four more football agents",
+    html: `<ul class="feed"><li><b>Depth</b>: keeps the depth chart and who's banged up</li><li><b>Blitz</b>: blitz and pressure tendencies</li>
+      <li><b>Itinerary</b>: road-trip schedule and travel sheet</li><li><b>Recon</b>: opponent research before film</li></ul>
+      <p class="muted">These are the Wave 2 ideas from the Warrior Village plan. Tell the Boss which one you want first.</p>`,
+    buttons: [{act: "plan", label: "💬 Plan Wave 2 with the Boss"}],
+    acts: {plan: () => kit.bossCard("For Warrior Village Wave 2, I want to start with ")}}));
+}
 canvas.addEventListener("click", e => {
   if (cam.dragged) return;
   const h = hit(toWorld(e));
@@ -925,6 +1080,12 @@ canvas.addEventListener("click", e => {
   else if (h.building === "tent") floatText(TENT.x + TENT.w / 2, TENT.y - 6, "Go Warriors! 🌭", "#fde68a", 12);
   else if (h.building === "press") floatText(B.press.door, B.press.y - 6, "Go Warriors! 💚💛", "#fde68a", 12);
   else if (h.building === "bridge") { if (kit.mode() === "fb") kit.setMode("hq"); else floatText(CREEK + 30, ROAD_Y - 30, "HQ Town is across the bridge ⬅️", "#e8ffd8", 11); }
+  else if (h.building === "clock") boardCard();
+  else if (h.building === "library") libraryCard();
+  else if (h.building === "lab") fieldCard();
+  else if (h.building === "print") printCard();
+  else if (h.building === "lots") waveCard();
+  else if (h.building === "stands") floatText(STANDS.x + STANDS.w / 2, STANDS.y - 6, "Go Warriors! 💚💛", "#fde68a", 13);
   else if (h.cottage) kit.agentCard(h.cottage.agent, live);
 });
 
@@ -940,7 +1101,8 @@ window.FootballTown = {
     if (prev) react(state);
     chatter((s.activity || []).filter(r => agents.has(String(r.agent).toLowerCase())));
     const latest = fb.files.find(f => f.status === "checked");
-    shown = {pending: appr.length, week: fb.week, flagged: latest?.fix || 0};
+    shown = {pending: appr.length, week: fb.week, flagged: latest?.fix || 0, notes: fb.notes_total || 0, sheets: (fb.files || []).length,
+             outbox: (fb.outbox || []).length, toPrint: (fb.print?.files || []).length};
     prev = {approvals: appr.map(a => a.id), files: Object.fromEntries(fb.files.map(f => [f.id, f.status])), loaded: true,
             week: fb.week, notes: fb.notes_total, outbox: fb.outbox.length};
     hud();

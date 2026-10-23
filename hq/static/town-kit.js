@@ -75,7 +75,7 @@ const css = `
   #town-card .say { display:flex; gap:6px; } #town-card .say input { flex:1; min-width:0; }
   #town-card .grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:6px 0; }
   #town-card .grid div { background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:10px; padding:6px 9px; }
-  #town-card .grid b { display:block; font-size:18px; } #town-card .grid span { color:var(--muted); font-size:11px; }
+  #town-card .grid b { display:block; font-size:18px; } #town-card .grid b.neg { color:#fca5a5; } #town-card .grid span { color:var(--muted); font-size:11px; }
   #town-card .empty { text-align:center; padding:16px 8px; color:var(--muted); } #town-card .empty .big { font-size:30px; display:block; }
   @media (max-width:960px) { #towns { margin:8px 8px 0; } }
   @media (max-width:700px) {
@@ -123,8 +123,9 @@ function camera(canvas, W, H, opts = {}) {
     cam.dpr = dpr; cam.cssW = cw; cam.cssH = ch;
     canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
     const contain = Math.min(cw / W, ch / H), cover = Math.max(cw / W, ch / H);
-    // The whole village fits. In a tall, narrow box (a phone) that would leave it tiny, so it starts closer and you drag sideways.
-    cam.fit = cw / ch < 1.1 ? Math.min(cover, contain * 1.9) : contain;
+    // The whole village fits. In a box much narrower than the village (a phone) that would leave it small in a sea of
+    // trees, so it starts closer and you drag sideways to see the rest.
+    cam.fit = cw / ch < W / H / 1.3 ? Math.min(cover, contain * 1.6) : contain;
     update();
   };
   cam.canPan = () => cam.cssW / k() < W - 1 || cam.cssH / k() < H - 1;
