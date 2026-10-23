@@ -37,6 +37,11 @@ const css = `
   .world-hint { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); background:rgba(20,14,30,.82); color:#fff; padding:8px 14px;
     border-radius:999px; font-size:13px; font-weight:800; opacity:0; transition:opacity .3s; pointer-events:none; z-index:3; white-space:nowrap; }
   .world-hint.show { opacity:1; }
+  .world-follow { position:absolute; left:50%; top:44px; transform:translateX(-50%); z-index:3; cursor:pointer; }
+  #towns.paused::before { content:"⏸ HQ is paused. Agents are resting until you resume."; position:absolute; left:50%; top:46px; transform:translateX(-50%);
+    z-index:5; background:rgba(250,204,21,.95); color:#2a1a02; font-weight:900; font-size:13px; padding:6px 14px; border-radius:999px;
+    box-shadow:0 6px 18px rgba(0,0,0,.35); white-space:nowrap; pointer-events:none; }
+  #towns.paused .world canvas { filter:saturate(.45) brightness(.92); }
   .world-hud .stat-chip { cursor:pointer; } .world-hud .stat-chip.hot { border-color:#ff4d6d; background:rgba(120,20,50,.75); }
   .world-hud .stat-chip:empty { display:none; }
   body[data-tab="home"] > header .stats, body[data-tab="home"] > #hq-update.ok { display:none; }
@@ -114,12 +119,14 @@ function camera(canvas, W, H, opts = {}) {
     cam.version++;
     canvas.style.touchAction = cam.zoom > 1.01 ? "none" : "pan-y";   // zoomed in, a finger drags the village instead of the page
     canvas.classList.toggle("can-pan", cam.canPan());
+    if (!cam.follow) followChip(null);
     opts.onChange?.();
   }
   cam.resize = () => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const cw = canvas.clientWidth || W, ch = canvas.clientHeight || H;
     if (!cw || !ch) return;
+    // Sharp on high-DPI screens, but a huge village box (a 4K or Retina screen) is capped at about 3 million pixels so it stays smooth.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3e6 / (cw * ch)));
     cam.dpr = dpr; cam.cssW = cw; cam.cssH = ch;
     canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
     const contain = Math.min(cw / W, ch / H), cover = Math.max(cw / W, ch / H);
@@ -147,10 +154,20 @@ function camera(canvas, W, H, opts = {}) {
   };
   cam.panBy = (dx, dy) => { cam.cx -= dx / k(); cam.cy -= dy / k(); cam.follow = null; update(); };
   cam.reset = () => { cam.zoom = 1; cam.cx = W / 2; cam.cy = H / 2; cam.follow = null; update(); };
+  // Keep the camera on someone (an agent's "Follow" button). A chip on the village says who, and stops it.
+  function followChip(name) {
+    const box = canvas.closest(".world");
+    let el = box?.querySelector(".world-follow");
+    if (!name) { el?.remove(); return; }
+    if (!box) return;
+    if (!el) { el = document.createElement("button"); el.className = "chip world-follow"; box.appendChild(el); el.onclick = e => { e.stopPropagation(); cam.reset(); }; }
+    el.textContent = `📍 Following ${name} · ✕`;
+  }
+  cam.startFollow = (target, name) => { cam.follow = target; followChip(name); };
   cam.lookAt = (x, y, zoom) => { if (zoom) cam.zoom = clamp(zoom, 1, MAX); cam.cx = x; cam.cy = y; update(); };
   cam.tick = dt => {   // glide after whoever you're following
     const t = cam.follow?.();
-    if (cam.follow && !t) cam.follow = null;
+    if (cam.follow && !t) { cam.follow = null; followChip(null); }
     if (!t) return;
     const e = Math.min(1, dt * 3);
     cam.cx = lerp(cam.cx, t.x, e); cam.cy = lerp(cam.cy, t.y - 20, e);
@@ -349,7 +366,7 @@ const when = iso => {
   return mins < 1 ? "just now" : mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`;
 };
 const usd = n => "$" + (+n || 0).toFixed(2);
-const PANELS = {chad: ["clips", "library"], scout: ["campaigns", "campsection"], pitch: ["pitch", "leadsection"], sweep: ["sweep", "sweep"],
+const PANELS = {chad: ["clips", "library"], scout: ["campaigns", "campsection"], tally: ["campaigns", "campsection"], pitch: ["pitch", "leadsection"], sweep: ["sweep", "sweep"],
                 boss: ["boss", "chatlog"], captain: ["football", "football"], clock: ["football", "fbweek"], ref: ["football", "fbfiles"],
                 tells: ["football", "fbfiles"], scribe: ["football", "fbnotes"]};
 
@@ -548,7 +565,11 @@ function register(id, cam) {
 
 window.HQTown = {
   camera, outskirts, night, seeded, register, hint, cams,
-  setState(s) { state = s; renderCard(); },
+  setState(s) {
+    state = s;
+    if (stage) stage.classList.toggle("paused", !!s.paused);
+    renderCard();
+  },
   ...hq,
   agentCard, bossCard, approvalsCard, infoCard, closeCard, renderCard, at,
   cardOpen: key => card?.key === key,

@@ -1003,7 +1003,7 @@ function live(name, act) {
   if (a && act === "follow") {
     wake(a);
     cam.lookAt(a.x, a.y - 20, Math.max(cam.zoom, 2.2));
-    cam.follow = () => agents.get(a.key) === a ? a : null;
+    cam.startFollow(() => agents.get(a.key) === a ? a : null, a.name);
   }
   return a;
 }
