@@ -1,6 +1,6 @@
 """YouTube Shorts upload via the YouTube Data API v3.
 
-First time per account run:  python -m hq connect-youtube <account name>
+Connect each account once from the Settings page (Connect YouTube), or run: python -m hq connect-youtube <account name>
 That opens a Google sign-in and saves a token file, so later uploads run unattended.
 """
 
@@ -22,7 +22,7 @@ def _credentials(account: dict, interactive: bool = False):
         creds.refresh(Request())
     elif not creds or not creds.valid:
         if not interactive:
-            raise RuntimeError(f"YouTube account {account['name']} isn't connected. Run: python -m hq connect-youtube {account['name']}")
+            raise RuntimeError(f"YouTube account {account['name']} isn't connected. Use Connect YouTube on the Settings page.")
         flow = InstalledAppFlow.from_client_secrets_file(str(ROOT / account["client_secrets_file"]), SCOPES)
         creds = flow.run_local_server(port=0)
     token_file.parent.mkdir(parents=True, exist_ok=True)

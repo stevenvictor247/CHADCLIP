@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, ledger, money, settings, setup_check, tiktok_auth, update
+from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
 from . import sweep_api
 from .config import CLIPS_DIR, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
@@ -405,6 +405,46 @@ def tiktok_disconnect(request: Request):
     tiktok_auth.disconnect()
     db.log("Steven", "Disconnected TikTok")
     return tiktok_auth.status()
+
+
+class YouTubeIn(BaseModel):
+    account: str
+    text: str = ""
+
+
+@app.get("/api/youtube")
+def youtube_status(request: Request):
+    _from_hq_page(request)
+    return youtube_auth.status()
+
+
+@app.post("/api/youtube/client")
+def youtube_client(body: YouTubeIn, request: Request):
+    _from_hq_page(request)
+    try:
+        return {"message": youtube_auth.save_client(body.account, body.text), "accounts": youtube_auth.status()}
+    except youtube_auth.YouTubeError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/youtube/sign-in")
+def youtube_sign_in(body: YouTubeIn, request: Request):
+    _from_hq_page(request)
+    try:
+        return {"message": youtube_auth.start_sign_in(body.account), "accounts": youtube_auth.status()}
+    except youtube_auth.YouTubeError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/youtube/disconnect")
+def youtube_disconnect(body: YouTubeIn, request: Request):
+    _from_hq_page(request)
+    try:
+        youtube_auth.disconnect(body.account)
+    except youtube_auth.YouTubeError as e:
+        raise HTTPException(400, str(e))
+    db.log("Steven", f"Disconnected YouTube account {body.account}")
+    return {"accounts": youtube_auth.status()}
 
 
 @app.get("/api/setup")

@@ -25,7 +25,7 @@
   .help { grid-column:2; color:var(--muted); font-size:13px; }
   @media (max-width:640px) { .help { grid-column:1; } }
   .row { display:flex; gap:8px; align-items:center; }
-  input, select { width:100%; background:#120f0d; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:9px 11px; font:inherit; }
+  input, select, textarea { width:100%; background:#120f0d; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:9px 11px; font:inherit; }
   input:focus, select:focus { outline:none; border-color:var(--accent); }
   input.changed, select.changed { border-color:var(--accent); }
   .tag { font-size:12px; white-space:nowrap; padding:3px 8px; border-radius:999px; background:rgba(74,222,128,.15); color:var(--good); }
@@ -128,10 +128,60 @@ function wireTikTok() {
   if ($("tt-off")) $("tt-off").onclick = async () => { await tiktokCall("/api/tiktok/disconnect", {}); load(); };
 }
 
+function youtubeSection(list) {
+  if (!list || !list.length) return "";
+  const steps = `<details class="help" style="margin:8px 0"><summary>How to get the Google client file (one time, about 10 minutes)</summary>
+    <ol style="margin:6px 0 0 18px;padding:0">
+      <li>Go to <a href="https://console.cloud.google.com/" target="_blank">console.cloud.google.com</a> and make a project (any name).</li>
+      <li>APIs &amp; Services → Library → turn on <b>YouTube Data API v3</b>.</li>
+      <li>APIs &amp; Services → OAuth consent screen → External. Fill in the app name and your email. Then press <b>Publish app</b>,
+          otherwise Google signs HQ out every 7 days. Google will warn that the app isn't verified; that's fine for your own channel.</li>
+      <li>Credentials → Create credentials → OAuth client ID → <b>Desktop app</b> → Create → <b>Download JSON</b>.</li>
+      <li>Open that file, copy everything in it, and paste it below.</li>
+    </ol></details>`;
+  return `<section id="youtube"><h2>Connect YouTube</h2>
+    <p class="help" style="margin:0 0 6px">Do this on the PC that runs HQ: Google's sign-in opens in this computer's browser.</p>${steps}` +
+    list.map(a => {
+      const n = esc(a.name);
+      const state = a.connected ? `<span class="tag">Connected</span>` : a.signing_in ? `<span class="tag no">Waiting for you to finish Google's sign-in…</span>`
+                                : `<span class="tag no">Not connected</span>`;
+      return `<div class="field" id="yt-${n}"><label>${n}</label><div>
+          <div class="row">${state}${a.connected ? `<button class="link" type="button" data-yt-off="${n}">Disconnect</button>` : ""}</div>
+          <div class="row" style="margin-top:8px;align-items:stretch"><textarea id="yt-client-${n}" rows="3" style="flex:1" placeholder="${a.has_client ? "Google client file saved. Paste a new one here to replace it." : "Step 1: paste everything in the Google client file (.json) here"}"></textarea>
+            <button class="plain" type="button" data-yt-client="${n}">Save file</button></div>
+          <div class="row" style="margin-top:8px"><button class="plain" type="button" data-yt-sign="${n}" ${a.has_client ? "" : "disabled"}>Step 2: Sign in with Google</button></div>
+          <div class="result" id="yt-msg-${n}">${a.error ? "⚠️ " + esc(a.error) : ""}</div></div></div>`;
+    }).join("") + `</section>`;
+}
+function wireYouTube() {
+  const msg = (n, t) => { const m = $("yt-msg-" + n); if (m) m.textContent = t; };
+  let poll = null;
+  const watch = () => { clearInterval(poll); poll = setInterval(async () => {
+    try {
+      const list = await tiktokCall("/api/youtube");
+      if (!list.some(a => a.signing_in)) { clearInterval(poll); load(); }
+    } catch (e) { clearInterval(poll); }
+  }, 3000); };
+  document.querySelectorAll("[data-yt-client]").forEach(b => b.onclick = async () => {
+    const n = b.dataset.ytClient;
+    try { const r = await tiktokCall("/api/youtube/client", {account: n, text: $("yt-client-" + n).value}); msg(n, "✅ " + r.message); setTimeout(load, 800); }
+    catch (e) { msg(n, "⚠️ " + e.message); }
+  });
+  document.querySelectorAll("[data-yt-sign]").forEach(b => b.onclick = async () => {
+    const n = b.dataset.ytSign;
+    try { const r = await tiktokCall("/api/youtube/sign-in", {account: n}); msg(n, r.message); b.disabled = true; watch(); }
+    catch (e) { msg(n, "⚠️ " + e.message); }
+  });
+  document.querySelectorAll("[data-yt-off]").forEach(b => b.onclick = async () => {
+    await tiktokCall("/api/youtube/disconnect", {account: b.dataset.ytOff}); load();
+  });
+}
+
 function render(d) {
   lastTests = d.tests || {};
   let html = d.sections.map(s => `<section><h2>${esc(s.title)}</h2>${s.fields.map(field).join("")}</section>`).join("");
   if (d.tiktok) html += tiktokSection(d.tiktok);
+  html += youtubeSection(d.youtube);
   if (d.accounts.length) {
     html += `<section id="accounts"><h2>Posting accounts</h2><p class="help" style="margin:0 0 6px">Turn an account on once its keys are saved above. Chad only posts to accounts that are on.</p>` +
       d.accounts.map(a => `<label class="switch"><input type="checkbox" data-account="${esc(a.name)}" ${a.enabled ? "checked" : ""}>
@@ -150,6 +200,7 @@ function render(d) {
   }
   $("sections").innerHTML = html;
   wireTikTok();
+  wireYouTube();
   document.querySelectorAll("[data-pitch]").forEach(el => el.addEventListener("input", () => {
     if (el.value !== (el.dataset.orig ?? "")) { pitchChanges[el.dataset.pitch] = el.value; el.classList.add("changed"); }
     else { delete pitchChanges[el.dataset.pitch]; el.classList.remove("changed"); }
