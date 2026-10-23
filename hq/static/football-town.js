@@ -6,7 +6,8 @@
 (() => {
 "use strict";
 const canvas = document.getElementById("fbcanvas");
-if (!canvas) return;
+const kit = window.HQTown;
+if (!canvas || !kit) return;
 const ctx = canvas.getContext("2d");
 const W = 960, H = 416, ROAD_Y = 240;
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -49,19 +50,11 @@ const SPOTS = [{x: 360, y: 330, field: true}, {x: 470, y: 352, field: true}, {x:
                {x: 904, y: 370, tailgate: true}, {x: 946, y: 370, tailgate: true}, {x: 120, y: 254}];
 
 // ---------- canvas sizing ----------
-let scale = 1, terrain = null;
-const dark = document.createElement("canvas");
-dark.width = W / 2; dark.height = H / 2;
-const dctx = dark.getContext("2d");
-function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const cssW = canvas.clientWidth || W;
-  canvas.width = Math.round(cssW * dpr);
-  canvas.height = Math.round(cssW * H / W * dpr);
-  scale = canvas.width / W;
-  terrain = drawTerrain();
-  if (calm) draw(performance.now());
-}
+// The camera (town-kit.js) fits the village to its box and handles zooming and dragging, like in HQ Town.
+const terrain = document.createElement("canvas"), dark = document.createElement("canvas");
+let terrainAt = -1;
+const cam = kit.camera(canvas, W, H, {onChange: () => { if (calm) draw(performance.now()); }});
+kit.register("fbworld", cam);
 
 function creekEdge(y) { return CREEK + Math.sin(y / 38) * 6 + Math.sin(y / 13) * 2; }
 function blocked(x, y) {
@@ -82,10 +75,12 @@ for (let tries = 0; FLOWERS.length < 16 && tries < 600; tries++) {
 }
 
 function drawTerrain() {
-  const c = document.createElement("canvas");
-  c.width = canvas.width; c.height = canvas.height;
+  const c = terrain;
+  if (c.width !== canvas.width || c.height !== canvas.height) { c.width = canvas.width; c.height = canvas.height; }
   const g = c.getContext("2d");
-  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height);
+  g.setTransform(cam.s, 0, 0, cam.s, cam.ox, cam.oy);
+  kit.outskirts(g, cam.view(), W, H, {grass: "#5cb054", seed: 24});
   const rr = seeded(24);
   g.fillStyle = "#62b85a"; g.fillRect(0, 0, W, H);
   for (let ty = 0; ty < H; ty += 32) for (let tx = 0; tx < W; tx += 32) {
@@ -166,7 +161,7 @@ function drawTerrain() {
       g.fillStyle = "#ffcf3f"; g.beginPath(); g.arc(x, y, 1, 0, 7); g.fill();
     }
   }
-  return c;
+  terrainAt = cam.version;
 }
 
 // ---------- village state ----------
@@ -719,19 +714,7 @@ function drawParticles() {
   }
 }
 function drawLightsAndDark(t) {
-  if (SKY.tint > 0) { ctx.fillStyle = `rgba(${SKY.tc},${SKY.tint})`; ctx.fillRect(0, 0, W, H); }
-  if (SKY.dk <= 0) return;
-  dctx.globalCompositeOperation = "source-over";
-  dctx.clearRect(0, 0, dark.width, dark.height);
-  dctx.fillStyle = `rgba(8,12,46,${SKY.dk})`; dctx.fillRect(0, 0, dark.width, dark.height);
-  dctx.globalCompositeOperation = "destination-out";
-  for (const l of lights) {
-    const x = l.x / 2, y = l.y / 2, rad = l.r / 2 * (1 + Math.sin(t / 700 + l.x) * .03);
-    const g = dctx.createRadialGradient(x, y, 0, x, y, rad);
-    g.addColorStop(0, "rgba(0,0,0,.95)"); g.addColorStop(1, "rgba(0,0,0,0)");
-    dctx.fillStyle = g; dctx.beginPath(); dctx.arc(x, y, rad, 0, 7); dctx.fill();
-  }
-  ctx.drawImage(dark, 0, 0, W, H);
+  if (!kit.night(ctx, cam, dark, SKY, lights, t)) return;
   ctx.globalCompositeOperation = "lighter";
   for (const l of lights) {
     const g = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * .6);
@@ -762,12 +745,13 @@ function drawSkyLife(t) {
 }
 
 function draw(t) {
-  if (!terrain) return;
+  if (!canvas.width) return;
+  if (terrainAt !== cam.version) drawTerrain();
   SKY = sky();
   lights = [];
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(terrain, 0, 0);
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  cam.apply(ctx);
   drawWater(t);
   const pending = Math.max(0, shown.pending - deliveriesOnTheWay);
   drawBuildings(t, pending);
@@ -800,6 +784,7 @@ function draw(t) {
 // ---------- simulation ----------
 function tick(dt, now) {
   for (const a of agents.values()) { think(a, now); step(a, dt, now); }
+  cam.tick(dt);
   mailBump = Math.max(0, mailBump - dt * 2);
   boardGlow = Math.max(0, boardGlow - dt * .7);
   for (const c of clouds) { c.x += 9 * dt; if (c.x > W + 160) { c.x = -160; c.y = rnd(40, H - 40); } }
@@ -837,10 +822,7 @@ function hud() {
   el.textContent = w.season_over ? "🏁 Season over" : w.days_to_game === 0 ? `🏟️ Game day vs ${w.game.opponent}`
     : `🏈 ${w.game.opponent} in ${w.days_to_game} day${w.days_to_game === 1 ? "" : "s"}`;
 }
-function toWorld(e) {
-  const rc = canvas.getBoundingClientRect();
-  return {x: (e.clientX - rc.left) / rc.width * W, y: (e.clientY - rc.top) / rc.height * H};
-}
+const toWorld = e => cam.toWorld(e.clientX, e.clientY);
 function hit(p) {
   for (const a of agents.values()) if (!a.sleeping && Math.hypot(p.x - a.x, p.y - (a.y - 14)) < 18) return {agent: a};
   for (const [k, b] of Object.entries(B)) if (p.x > b.x - 8 && p.x < b.x + b.w + 8 && p.y > b.y - 10 && p.y < b.y + b.h + 4) return {building: k};
@@ -862,51 +844,88 @@ function boardTip() {
 }
 const TIPS = {
   film: "Film Room: Captain runs Warrior Village from here. Click to talk to the Boss, who hands football work to Captain.",
-  mail: () => `Coaches' Mailroom: ${shown.pending} football item${shown.pending === 1 ? "" : "s"} waiting for your OK. Click to review.`,
+  mail: () => `Coaches' Mailroom: ${shown.pending} football item${shown.pending === 1 ? "" : "s"} waiting for your OK. Click to approve or reject right here.`,
   press: "Press Box: where you chart on game day.",
   tent: "Warrior Village tailgate: where the agents take a cornhole break.",
   board: boardTip,
   field: "Tom Adams Field: drop tagging sheets in the football Inbox and Ref checks them. Click to see your sheets.",
   bridge: "The footbridge to HQ Town. Both villages share the Boss.",
 };
-const COTTAGE_GO = {Clock: "fbweek", Ref: "fbfiles", Tells: "fbfiles", Scribe: "fbnotes"};
 const tip = document.getElementById("fbtip");
 canvas.addEventListener("mousemove", e => {
+  if (canvas.classList.contains("dragging")) { if (tip) tip.style.display = "none"; return; }
   const h = hit(toWorld(e));
-  canvas.style.cursor = h ? "pointer" : "default";
+  canvas.style.cursor = h ? "pointer" : "";
   if (!tip) return;
   let text = "";
   if (h?.agent) text = `${h.agent.name}: ${h.agent.busy ? "working on " + h.agent.busy : h.agent.role || ""}`;
   else if (h?.building) { const v = TIPS[h.building]; text = typeof v === "function" ? v() : v; }
-  else if (h?.cottage) text = `${h.cottage.agent}'s cottage. ${agents.get(h.cottage.agent.toLowerCase())?.role || ""}`;
+  else if (h?.cottage) text = `${h.cottage.agent}'s cottage. Click for ${h.cottage.agent}'s card.`;
   tip.textContent = text;
   tip.style.display = text ? "block" : "none";
   if (text) {
     const rc = canvas.getBoundingClientRect();
     tip.style.left = clamp(e.clientX - rc.left + 14, 4, rc.width - 230) + "px";
-    tip.style.top = (e.clientY - rc.top + 14) + "px";
+    tip.style.top = clamp(e.clientY - rc.top + 14, 4, rc.height - 60) + "px";
   }
 });
 canvas.addEventListener("mouseleave", () => { if (tip) tip.style.display = "none"; });
+
+// Clicks open a card on the stage, like in HQ Town: agents, the Mailroom (approve right there), the scoreboard's
+// checklist and the sheets on the field.
+function live(name, act) {
+  const a = agents.get(String(name).toLowerCase());
+  if (a && act === "follow") {
+    wake(a);
+    cam.lookAt(a.x, a.y - 20, Math.max(cam.zoom, 2.2));
+    cam.follow = () => agents.get(a.key) === a ? a : null;
+  }
+  return a;
+}
+const STATE_PILL = {done: "on", late: "bad", due: "warn"};
+function boardCard() {
+  kit.infoCard("board", () => {
+    const w = (kit.state() || {}).football?.week;
+    if (!w) return null;
+    if (w.season_over) return {color: "#0C5449", icon: "🏁", title: "Season over", html: `<p>Great work this year 🏈</p>`, buttons: []};
+    const g = w.game, list = w.checklist || [];
+    return {color: "#0C5449", icon: "🏈", title: `${g.opponent}, ${g.day} ${g.date.slice(5).replace("-", "/")}`,
+      sub: `${w.days_to_game === 0 ? "Game day" : `${w.days_to_game} day${w.days_to_game === 1 ? "" : "s"} to go`}${g.confirmed ? "" : " · date not confirmed"}`,
+      html: `<h4>This week's checklist</h4><ul class="feed">${list.map(x => `<li><span class="pill ${STATE_PILL[x.state] || ""}">${kit.esc(x.state)}</span>
+        ${kit.esc(x.item)} <span>${kit.esc(x.due_day || "")}</span></li>`).join("")}</ul>`,
+      buttons: [{act: "clock", label: "⏰ Clock's card"}, {act: "open", label: "Open the checklist ↗", kind: "ghost"}],
+      acts: {clock: () => kit.agentCard("Clock", live), open: () => kit.goTab("football", "fbweek")}};
+  });
+}
+function fieldCard() {
+  kit.infoCard("field", () => {
+    const fb = (kit.state() || {}).football || {}, files = (fb.files || []).slice(0, 6);
+    return {color: "#3f9a4a", icon: "🏟️", title: "Tom Adams Field", sub: "Your tagged sheets",
+      html: files.length ? `<ul class="feed">${files.map(f => `<li><span class="pill ${f.status === "checked" ? (f.fix ? "bad" : "on") : ""}">${f.status === "checked" ? (f.fix ? `${f.fix} to fix` : "clean") : kit.esc(f.status)}</span>
+          ${kit.esc(f.name)}</li>`).join("")}</ul>`
+        : `<p class="muted">No sheets yet. Drop a Hudl export or practice sheet in the football Inbox and Ref checks the tags.</p>`,
+      buttons: [{act: "ref", label: "🚩 Ref's card"}, {act: "open", label: "Open sheets ↗", kind: "ghost"}],
+      acts: {ref: () => kit.agentCard("Ref", live), open: () => kit.goTab("football", "fbfiles")}};
+  });
+}
 canvas.addEventListener("click", e => {
+  if (cam.dragged) return;
   const h = hit(toWorld(e));
-  if (!h) return;
-  const goTo = id => document.getElementById(id)?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"});
+  kit.at(e);
+  if (!h) { kit.closeCard(); return; }
   if (h.agent) {
     const a = h.agent;
     a.jumpT = .5;
-    say(a, a.busy ? `Working on: ${a.busy}` : `Hi! I'm ${a.name} 👋`, 3.5);
     burst(a.x, a.y - 30, 6, "emoji", ["💚", "💛"], {min: 10, max: 40, g: -10});
-  } else if (h.building === "mail") {
-    if (!window.hqShowApprovals?.("football")) floatText(MAILBOX.x, MAILBOX.y - 40, "Nothing waiting for you ✅", "#e8ffd8", 11);
-  }
-  else if (h.building === "board") goTo("fbweek");
-  else if (h.building === "field") goTo("fbfiles");
-  else if (h.building === "film") { goTo("chatlog"); setTimeout(() => document.getElementById("chatinput")?.focus({preventScroll: true}), 400); }
+    kit.agentCard(a.name, live);
+  } else if (h.building === "mail") kit.approvalsCard("football");
+  else if (h.building === "board") boardCard();
+  else if (h.building === "field") fieldCard();
+  else if (h.building === "film") kit.agentCard("Captain", live);
   else if (h.building === "tent") floatText(TENT.x + TENT.w / 2, TENT.y - 6, "Go Warriors! 🌭", "#fde68a", 12);
   else if (h.building === "press") floatText(B.press.door, B.press.y - 6, "Go Warriors! 💚💛", "#fde68a", 12);
-  else if (h.building === "bridge") document.getElementById("world")?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "nearest"});
-  else if (h.cottage) goTo(COTTAGE_GO[h.cottage.agent] || "football");
+  else if (h.building === "bridge") { if (kit.mode() === "fb") kit.setMode("hq"); else floatText(CREEK + 30, ROAD_Y - 30, "HQ Town is across the bridge ⬅️", "#e8ffd8", 11); }
+  else if (h.cottage) kit.agentCard(h.cottage.agent, live);
 });
 
 // ---------- public API ----------
@@ -929,9 +948,9 @@ window.FootballTown = {
   },
 };
 
-new ResizeObserver(resize).observe(canvas);
+new ResizeObserver(() => cam.resize()).observe(canvas);
 new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(canvas);
-resize();
+cam.resize();
 if (calm) setInterval(() => { tick(1, performance.now()); draw(performance.now()); }, 2000);
 else requestAnimationFrame(frame);
 })();

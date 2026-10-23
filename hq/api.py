@@ -135,6 +135,11 @@ def money_bar():
     return FileResponse(STATIC / "money-bar.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/town-kit.js")
+def town_kit():
+    return FileResponse(STATIC / "town-kit.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/world.js")
 def world():
     return FileResponse(STATIC / "world.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})

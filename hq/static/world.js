@@ -3,7 +3,8 @@
 (() => {
 "use strict";
 const canvas = document.getElementById("worldcanvas");
-if (!canvas) return;
+const kit = window.HQTown;
+if (!canvas || !kit) return;
 const ctx = canvas.getContext("2d");
 const W = 960, H = 416, ROAD_Y = 240;
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -64,19 +65,12 @@ function drawLitter(l) {
 }
 
 // ---------- canvas sizing ----------
-let scale = 1, terrain = null;
-const dark = document.createElement("canvas");
-dark.width = W / 2; dark.height = H / 2;
-const dctx = dark.getContext("2d");
-function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const cssW = canvas.clientWidth || W;
-  canvas.width = Math.round(cssW * dpr);
-  canvas.height = Math.round(cssW * H / W * dpr);
-  scale = canvas.width / W;
-  terrain = drawTerrain();
-  if (calm) draw(performance.now());
-}
+// The camera (town-kit.js) fits the town to its box and handles zooming and dragging. The ground is drawn into
+// `terrain` once per camera move, then copied each frame.
+const terrain = document.createElement("canvas"), dark = document.createElement("canvas");
+let terrainAt = -1;
+const cam = kit.camera(canvas, W, H, {onChange: () => { if (calm) draw(performance.now()); }});
+kit.register("world", cam);
 
 // ---------- the ground, drawn once ----------
 function blocked(x, y, m = 0) {
@@ -96,10 +90,12 @@ for (let tries = 0; FLOWERS.length < 22 && tries < 600; tries++) {
 }
 
 function drawTerrain() {
-  const c = document.createElement("canvas");
-  c.width = canvas.width; c.height = canvas.height;
+  const c = terrain;
+  if (c.width !== canvas.width || c.height !== canvas.height) { c.width = canvas.width; c.height = canvas.height; }
   const g = c.getContext("2d");
-  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height);
+  g.setTransform(cam.s, 0, 0, cam.s, cam.ox, cam.oy);
+  kit.outskirts(g, cam.view(), W, H, {grass: "#64b556", seed: 42});
   const rr = seeded(42);
   // grass, with a soft checker of tiles and tufts
   g.fillStyle = "#6cbf5c"; g.fillRect(0, 0, W, H);
@@ -162,7 +158,7 @@ function drawTerrain() {
       g.fillStyle = "#ffcf3f"; g.beginPath(); g.arc(x, y, 1, 0, 7); g.fill();
     }
   }
-  return c;
+  terrainAt = cam.version;
 }
 
 // ---------- world state ----------
@@ -173,7 +169,7 @@ const butterflies = FLOWERS.slice(0, 6).map((f, i) => ({cx: f.x, cy: f.y - 10, p
 const fireflies = Array.from({length: 16}, (_, i) => ({x: rnd(0, W), y: rnd(270, H), vx: rnd(-8, 8), vy: rnd(-6, 6), ph: i}));
 for (let i = 0; i < 3; i++) clouds.push({x: rnd(0, W), y: rnd(40, H - 40), s: rnd(.8, 1.4)});
 let mode = "auto", prev = null, deliveriesOnTheWay = 0, mailboxBump = 0, towerGlow = 0, thinking = false;
-let shown = {pending: 0, approved: 0};
+let shown = {pending: 0, approved: 0, asks: 0};
 let nextBirds = performance.now() + rnd(4000, 12000);
 
 function addParticle(p) { if (!calm && particles.length < 500) particles.push({vx: 0, vy: 0, g: 0, life: 1, ...p, max: p.life ?? 1}); }
@@ -793,19 +789,7 @@ function drawParticles() {
 }
 
 function drawLightsAndDark(t) {
-  if (SKY.tint > 0) { ctx.fillStyle = `rgba(${SKY.tc},${SKY.tint})`; ctx.fillRect(0, 0, W, H); }
-  if (SKY.dk <= 0) return;
-  dctx.globalCompositeOperation = "source-over";
-  dctx.clearRect(0, 0, dark.width, dark.height);
-  dctx.fillStyle = `rgba(8,12,46,${SKY.dk})`; dctx.fillRect(0, 0, dark.width, dark.height);
-  dctx.globalCompositeOperation = "destination-out";
-  for (const l of lights) {
-    const x = l.x / 2, y = l.y / 2, r = l.r / 2 * (1 + Math.sin(t / 700 + l.x) * .03);
-    const g = dctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, "rgba(0,0,0,.95)"); g.addColorStop(1, "rgba(0,0,0,0)");
-    dctx.fillStyle = g; dctx.beginPath(); dctx.arc(x, y, r, 0, 7); dctx.fill();
-  }
-  ctx.drawImage(dark, 0, 0, W, H);
+  if (!kit.night(ctx, cam, dark, SKY, lights, t)) return;
   ctx.globalCompositeOperation = "lighter";
   for (const l of lights) {
     const g = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * .6);
@@ -843,12 +827,13 @@ function drawSkyLife(t) {
 }
 
 function draw(t) {
-  if (!terrain) return;
+  if (!canvas.width) return;
+  if (terrainAt !== cam.version) drawTerrain();
   SKY = sky();
   lights = [];
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(terrain, 0, 0);
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  cam.apply(ctx);
   drawWater(t);
   const pending = Math.max(0, shown.pending - deliveriesOnTheWay);
   drawBuildings(t, pending);
@@ -878,6 +863,7 @@ function draw(t) {
 let fountainAcc = 0, smokeAcc = 0;
 function tick(dt, now) {
   for (const a of agents.values()) { think(a, now); step(a, dt, now); }
+  cam.tick(dt);
   mailboxBump = Math.max(0, mailboxBump - dt * 2);
   towerGlow = Math.max(0, towerGlow - dt * .7);
   for (const d of ducks) d.a += d.sp * dt;
@@ -926,10 +912,7 @@ function hud() {
 const modeBtn = document.getElementById("worldmode");
 if (modeBtn) modeBtn.onclick = () => { mode = {auto: "day", day: "night", night: "auto"}[mode]; hud(); if (calm) draw(performance.now()); };
 
-function toWorld(e) {
-  const r = canvas.getBoundingClientRect();
-  return {x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H};
-}
+const toWorld = e => cam.toWorld(e.clientX, e.clientY);
 function hit(p) {
   for (const a of agents.values()) if (!a.sleeping && (a.key === "boss" ? Math.abs(p.x - a.x) < 22 && p.y > a.y - 86 && p.y < a.y + 4 : Math.hypot(p.x - a.x, p.y - (a.y - 14)) < 18)) return {agent: a};
   for (const [k, b] of Object.entries(B)) if (p.x > b.x - 8 && p.x < b.x + b.w + 8 && p.y > b.y - 10 && p.y < b.y + b.h + 4) return {building: k};
@@ -938,57 +921,117 @@ function hit(p) {
   return null;
 }
 const TIPS = {
-  studio: "Clip Studio: where Chad cuts clips. Click to see your clips.",
+  studio: "Clip Studio: where Chad cuts clips. Click for today's clip numbers.",
   hq: "Boss HQ: click to talk to the Boss.",
-  post: () => `Approvals: ${shown.pending} clip${shown.pending === 1 ? "" : "s"} waiting for you. Click to review.`,
-  tower: () => `Broadcast Tower: approved clips get posted from here.${shown.approved ? ` ${shown.approved} queued.` : ""} Click to see posted clips.`,
+  post: () => `Approvals: ${waiting()} waiting for your OK. Click to approve or reject right here.`,
+  tower: () => `Broadcast Tower: approved clips get posted from here.${shown.approved ? ` ${shown.approved} queued.` : ""} Click for recent posts.`,
 };
+const waiting = () => shown.pending + shown.asks;
 const tip = document.getElementById("worldtip");
 canvas.addEventListener("mousemove", e => {
+  if (canvas.classList.contains("dragging")) { if (tip) tip.style.display = "none"; return; }
   const p = toWorld(e), h = hit(p);
-  canvas.style.cursor = h ? "pointer" : "default";
+  canvas.style.cursor = h ? "pointer" : "";
   if (!tip) return;
   let text = "";
   if (h?.agent) {
     const a = h.agent;
     text = `${a.name}: ${a.busy ? "working on " + a.busy : a.role || ""}`;
   } else if (h?.building) { const v = TIPS[h.building]; text = typeof v === "function" ? v() : v; }
-  else if (h?.plot) text = h.plot.agent ? (h.plot.agent === "Sweep" ? "Sweep's shed: the janitor lives here. Click for today's cost report." : `${h.plot.agent}'s cottage`) : "An empty plot for your next agent.";
+  else if (h?.plot) text = h.plot.agent ? (h.plot.agent === "Sweep" ? "Sweep's shed: the janitor lives here. Click for Sweep's card." : `${h.plot.agent}'s cottage. Click for ${h.plot.agent}'s card.`) : "An empty plot for your next agent. Click to plan one with the Boss.";
   tip.textContent = text;
   tip.style.display = text ? "block" : "none";
   if (text) {
     const r = canvas.getBoundingClientRect();
     tip.style.left = clamp(e.clientX - r.left + 14, 4, r.width - 230) + "px";
-    tip.style.top = (e.clientY - r.top + 14) + "px";
+    tip.style.top = clamp(e.clientY - r.top + 14, 4, r.height - 60) + "px";
   }
 });
 canvas.addEventListener("mouseleave", () => { if (tip) tip.style.display = "none"; });
+
+// Clicking opens a card on the stage: an agent's status and recent work, Approvals with Approve and Reject buttons,
+// a chat with the Boss, or a short summary of a building. "Follow" on an agent's card keeps the camera on them.
+function live(name, act) {
+  const a = agents.get(String(name).toLowerCase());
+  if (a && act === "follow") {
+    wake(a);
+    cam.lookAt(a.x, a.y - 20, Math.max(cam.zoom, 2.2));
+    cam.follow = () => agents.get(a.key) === a ? a : null;
+  }
+  return a;
+}
+function studioCard() {
+  kit.infoCard("studio", () => {
+    const st = kit.state() || {}, c = st.counts || {}, chad = (st.agents || []).find(a => a.name === "Chad");
+    return {color: "#e0457b", icon: "🎬", title: "Clip Studio", sub: chad?.doing ? `Chad is working: ${kit.esc(chad.doing)}` : "Chad is free right now",
+      html: `<div class="grid"><div><b>${c.pending_approval || 0}</b><span>waiting for you</span></div><div><b>${c.approved || 0}</b><span>approved, queued</span></div>
+        <div><b>${c.posted || 0}</b><span>posted</span></div><div><b>${c.failed || 0}</b><span>failed</span></div></div>
+        <p class="muted">Chad finds the best moments in the creators you picked, cuts vertical clips with captions and brings them to Approvals.</p>`,
+      buttons: [{act: "chad", label: "✂️ Chad's card"}, {act: "open", label: "Open Clips ↗", kind: "ghost"}],
+      acts: {chad: () => kit.agentCard("Chad", live), open: () => kit.goTab("clips", "library")}};
+  });
+}
+function towerCard() {
+  kit.infoCard("tower", () => {
+    const st = kit.state() || {}, c = st.counts || {}, posts = (st.posts || []).slice(0, 5);
+    const icon = p => p.status === "posted" ? "✅" : p.status === "failed" ? "💥" : "⏭️";
+    return {color: "#64748b", icon: "📡", title: "Broadcast Tower", sub: "Approved clips get posted from here",
+      html: `<div class="grid"><div><b>${c.approved || 0}</b><span>queued to post</span></div><div><b>${c.posted || 0}</b><span>posted</span></div></div>
+        <h4>Latest posts</h4>${posts.length ? `<ul class="feed">${posts.map(p => `<li><span>${kit.esc(kit.when(p.created_at))}</span>${icon(p)} Clip #${p.clip_id} on ${kit.esc(p.platform)}
+          ${p.url ? `<a href="${kit.esc(p.url)}" target="_blank" rel="noopener">view</a>` : ""}${p.status === "failed" && p.error ? `<br><small class="muted">${kit.esc(String(p.error).slice(0, 140))}</small>` : ""}</li>`).join("")}</ul>`
+          : `<p class="muted">Nothing posted yet. Posting starts once a TikTok, YouTube or Instagram account is connected in Settings.</p>`}`,
+      buttons: [{act: "open", label: "Open Clips ↗", kind: "ghost"}],
+      acts: {open: () => kit.goTab("clips", "library")}};
+  });
+}
+function plotCard() {
+  kit.infoCard("plot", () => ({color: "#a8794b", icon: "🌱", title: "Empty plot", sub: "Room for your next agent",
+    html: `<p>Every agent gets a cottage here. Tell the Boss what job you want done and it can plan the agent with you: what it does, what it may do on its own, and what it brings to Approvals first.</p>`,
+    buttons: [{act: "plan", label: "💬 Plan a new agent with the Boss"}],
+    acts: {plan: () => kit.bossCard("I want a new agent in HQ Town that ")}}));
+}
 canvas.addEventListener("click", e => {
+  if (cam.dragged) return;
   const h = hit(toWorld(e));
-  if (!h) return;
-  const goTo = id => (window.hqTabs?.showFor(id), (document.getElementById(id)?.closest("section") || document.getElementById(id))?.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"}));
+  kit.at(e);
+  if (!h) { kit.closeCard(); return; }
   if (h.agent) {
     const a = h.agent;
     a.jumpT = .5;
-    say(a, a.busy ? `Working on: ${a.busy}` : (a.key === "boss" ? "Need something? Click HQ or the Boss tab to chat 👑" : `Hi! I'm ${a.name} 👋`), 3.5);
     burst(a.x, a.y - 30, 6, "emoji", ["💖"], {min: 10, max: 40, g: -10});
-    if (a.key === "sweep") goTo("sweep");
-  } else if (h.building === "post") goTo("pending");
-  else if (h.building === "tower" || h.building === "studio") goTo("library");
-  else if (h.building === "hq") { goTo("chatlog"); setTimeout(() => document.getElementById("chatinput")?.focus({preventScroll: true}), 400); }
-  else if (h.plot?.agent === "Sweep") goTo("sweep");
-  else if (h.plot && !h.plot.agent) floatText(h.plot.x + h.plot.w / 2, h.plot.y, "Coming soon 🌱", "#e8ffd8", 12);
+    if (a.key === "boss") kit.bossCard(); else kit.agentCard(a.name, live);
+  } else if (h.building === "post") kit.approvalsCard("business");
+  else if (h.building === "tower") towerCard();
+  else if (h.building === "studio") studioCard();
+  else if (h.building === "hq") kit.bossCard();
+  else if (h.plot?.agent) kit.agentCard(h.plot.agent, live);
+  else if (h.plot) { floatText(h.plot.x + h.plot.w / 2, h.plot.y, "Room for one more 🌱", "#e8ffd8", 12); plotCard(); }
 });
+// The chips at the top: what's waiting for you, and how the clips are doing.
+const chipWaiting = document.getElementById("worldwaiting"), chipPosted = document.getElementById("worldposted");
+if (chipWaiting) chipWaiting.onclick = e => { kit.at(e); kit.approvalsCard("business"); };
+if (chipPosted) chipPosted.onclick = e => { kit.at(e); towerCard(); };
+function chips(c) {
+  if (chipWaiting) {
+    const n = waiting();
+    chipWaiting.textContent = n ? `⏳ ${n} waiting for you` : "✅ Nothing waiting";
+    chipWaiting.classList.toggle("hot", n > 0);
+  }
+  if (chipPosted) chipPosted.textContent = [`🚀 ${c.posted || 0} posted`, c.approved ? `👍 ${c.approved} queued` : "", c.failed ? `💥 ${c.failed} failed` : ""].filter(Boolean).join(" · ");
+}
 
 // ---------- public API ----------
 window.HQWorld = {
   update(s) {
+    kit.setState(s);
     syncAgents((s.agents || []).filter(a => (a.village || "business") === "business"));   // Warrior Village draws the football agents
     const c = s.counts || {};
     if (prev) react(c);
     chatter(s.activity || []);
-    shown = {pending: c.pending_approval || 0, approved: c.approved || 0};
+    shown = {pending: c.pending_approval || 0, approved: c.approved || 0,
+             asks: (s.approvals || []).filter(a => (a.village || "business") === "business").length};
     prev = {...c};
+    chips(c);
     if (calm) draw(performance.now());
   },
   setMess,
@@ -1002,9 +1045,9 @@ window.HQWorld = {
   },
 };
 
-new ResizeObserver(resize).observe(canvas);
+new ResizeObserver(() => cam.resize()).observe(canvas);
 new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(canvas);
-resize();
+cam.resize();
 hud(); setInterval(hud, 15000);
 if (calm) setInterval(() => { tick(1, performance.now()); draw(performance.now()); }, 2000);
 else requestAnimationFrame(frame);
