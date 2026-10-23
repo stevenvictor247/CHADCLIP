@@ -8,7 +8,8 @@ from pathlib import Path
 
 from ....config import ROOT
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+# upload: post Shorts. readonly: read your own videos' view counts (Tally). Asked together so you sign in once.
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
 
 
 def _credentials(account: dict, interactive: bool = False):
