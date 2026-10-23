@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -23,6 +24,35 @@ SESSION_COOKIE = "hq_session"
 def _session_token() -> str:
     """The cookie value a logged-in browser holds. Changing HQ_PASSWORD logs everyone out."""
     return hmac.new(PASSWORD.encode(), b"agent-hq-session", hashlib.sha256).hexdigest()
+
+
+# Without a password HQ only listens on this computer, so only these names may reach it. This stops a website
+# from pointing its own domain at 127.0.0.1 ("DNS rebinding") to read HQ or press its buttons.
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"} | {
+    h.strip().lower() for h in os.getenv("HQ_ALLOWED_HOSTS", "").split(",") if h.strip()}
+CHANGES = ("POST", "PUT", "PATCH", "DELETE")
+
+
+def _host(request: Request) -> str:
+    host = request.headers.get("host", "").lower()
+    if host.startswith("["):  # [::1]:8000
+        return host[1:].split("]")[0]
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+
+
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    """Two locks against other websites open in the same browser:
+    - without HQ_PASSWORD, only requests addressed to this computer by name are answered;
+    - anything that changes something (approve, post, send, save) must come from HQ's own pages, which add an X-HQ
+      header that other websites can't send. Without this a web page could quietly press Approve on a pitch email."""
+    if not PASSWORD and _host(request) not in LOCAL_HOSTS:
+        return JSONResponse({"detail": "HQ only answers this computer. Set HQ_PASSWORD to open it from others."},
+                            status_code=403)
+    if (request.method in CHANGES and request.url.path.startswith("/api/")
+            and request.headers.get("x-hq") != "1"):
+        return JSONResponse({"detail": "Use the HQ dashboard for this"}, status_code=403)
+    return await call_next(request)
 
 
 @app.middleware("http")
