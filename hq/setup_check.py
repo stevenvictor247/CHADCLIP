@@ -134,6 +134,13 @@ def items() -> list[dict]:
                      f"Last backup {last:%d %b %H:%M}." if last else "HQ makes one each day while it's running.",
                      "" if fresh else "Leave HQ running; the first backup happens on its own", required=False))
 
+    copy_dir = os.getenv("HQ_BACKUP_COPY_DIR", "").strip()
+    out.append(_item("backup_copy", "Backups in a second place", "done" if copy_dir else "todo",
+                     f"A copy goes to {copy_dir} each day (without your keys)." if copy_dir else
+                     "Backups only live on this PC, so a dead drive loses HQ and its backups together.",
+                     "" if copy_dir else "Set HQ_BACKUP_COPY_DIR to a Google Drive folder in Settings",
+                     "/settings#k-HQ_BACKUP_COPY_DIR", required=False))
+
     git = update.is_git_copy()
     out.append(_item("updates", "Automatic updates", "done" if git else "problem",
                      "HQ updates itself from GitHub." if git else "This copy came from a ZIP, so it can't update itself.",
