@@ -140,28 +140,22 @@ function youtubeSection(list) {
       <li>Open that file, copy everything in it, and paste it below.</li>
     </ol></details>`;
   return `<section id="youtube"><h2>Connect YouTube</h2>
-    <p class="help" style="margin:0 0 6px">Do this on the PC that runs HQ: Google's sign-in opens in this computer's browser.</p>${steps}` +
+    <p class="help" style="margin:0 0 6px">Works from any computer. You approve in Google, then paste back the address you land on.</p>${steps}` +
     list.map(a => {
       const n = esc(a.name);
-      const state = a.connected ? `<span class="tag">Connected</span>` : a.signing_in ? `<span class="tag no">Waiting for you to finish Google's sign-in…</span>`
+      const state = a.connected ? `<span class="tag">Connected</span>` : a.waiting ? `<span class="tag no">Waiting for the address you land on after Google…</span>`
                                 : `<span class="tag no">Not connected</span>`;
       return `<div class="field" id="yt-${n}"><label>${n}</label><div>
           <div class="row">${state}${a.connected ? `<button class="link" type="button" data-yt-off="${n}">Disconnect</button>` : ""}</div>
           <div class="row" style="margin-top:8px;align-items:stretch"><textarea id="yt-client-${n}" rows="3" style="flex:1" placeholder="${a.has_client ? "Google client file saved. Paste a new one here to replace it." : "Step 1: paste everything in the Google client file (.json) here"}"></textarea>
             <button class="plain" type="button" data-yt-client="${n}">Save file</button></div>
-          <div class="row" style="margin-top:8px"><button class="plain" type="button" data-yt-sign="${n}" ${a.has_client ? "" : "disabled"}>Step 2: Sign in with Google</button></div>
-          <div class="result" id="yt-msg-${n}">${a.error ? "⚠️ " + esc(a.error) : ""}</div></div></div>`;
+          <div class="row" style="margin-top:8px"><button class="plain" type="button" data-yt-sign="${n}" ${a.has_client ? "" : "disabled"}>Step 2: Open Google sign-in</button></div>
+          <div class="row" style="margin-top:8px"><input id="yt-answer-${n}" placeholder="Step 3: paste the address from the page Google sends you to (it won't load; that's fine)"><button class="plain" type="button" data-yt-connect="${n}">Connect</button></div>
+          <div class="result" id="yt-msg-${n}"></div></div></div>`;
     }).join("") + `</section>`;
 }
 function wireYouTube() {
   const msg = (n, t) => { const m = $("yt-msg-" + n); if (m) m.textContent = t; };
-  let poll = null;
-  const watch = () => { clearInterval(poll); poll = setInterval(async () => {
-    try {
-      const list = await tiktokCall("/api/youtube");
-      if (!list.some(a => a.signing_in)) { clearInterval(poll); load(); }
-    } catch (e) { clearInterval(poll); }
-  }, 3000); };
   document.querySelectorAll("[data-yt-client]").forEach(b => b.onclick = async () => {
     const n = b.dataset.ytClient;
     try { const r = await tiktokCall("/api/youtube/client", {account: n, text: $("yt-client-" + n).value}); msg(n, "✅ " + r.message); setTimeout(load, 800); }
@@ -169,7 +163,13 @@ function wireYouTube() {
   });
   document.querySelectorAll("[data-yt-sign]").forEach(b => b.onclick = async () => {
     const n = b.dataset.ytSign;
-    try { const r = await tiktokCall("/api/youtube/sign-in", {account: n}); msg(n, r.message); b.disabled = true; watch(); }
+    try { window.open((await tiktokCall("/api/youtube/sign-in", {account: n})).url, "_blank");
+          msg(n, "Approve it in the new tab. At the end the page won't load; copy the address from the address bar and paste it below."); }
+    catch (e) { msg(n, "⚠️ " + e.message); }
+  });
+  document.querySelectorAll("[data-yt-connect]").forEach(b => b.onclick = async () => {
+    const n = b.dataset.ytConnect;
+    try { const r = await tiktokCall("/api/youtube/connect", {account: n, text: $("yt-answer-" + n).value}); msg(n, "✅ " + r.message); setTimeout(load, 800); }
     catch (e) { msg(n, "⚠️ " + e.message); }
   });
   document.querySelectorAll("[data-yt-off]").forEach(b => b.onclick = async () => {
