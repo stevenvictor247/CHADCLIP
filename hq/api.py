@@ -453,6 +453,10 @@ class TextIn(BaseModel):
     text: str
 
 
+class PauseIn(BaseModel):
+    paused: bool
+
+
 def _football_file(file_id: int) -> str:
     rows = db.rows("SELECT name FROM football_files WHERE id = ?", file_id)
     if not rows:
@@ -498,6 +502,19 @@ def football_checklist(body: FootballItemIn, request: Request):
         return {"message": season.mark(body.item, body.done, body.opponent)}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@app.post("/api/football/print/now")
+def football_print_now(request: Request):
+    _from_hq_page(request)
+    return {"task_id": db.create_task("Clock", "Print now", {"print": True}, created_by="Steven")}
+
+
+@app.post("/api/football/print/pause")
+def football_print_pause(body: PauseIn, request: Request):
+    _from_hq_page(request)
+    from .football import printing
+    return {"message": printing.set_paused(body.paused), "print": printing.state()}
 
 
 @app.post("/api/football/note")
