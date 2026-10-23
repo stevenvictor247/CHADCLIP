@@ -92,6 +92,11 @@
         <div id="fbfilelist"></div>
       </section>
       <section id="fboutbox"><h2>Outbox</h2><div id="fboutlist"></div></section>
+      <section id="fbprint"><h2>🖨️ Thursday print <span class="count" id="fbprintcount" style="display:none"></span></h2>
+        <div id="fbprintbody"></div>
+        <div class="row"><button id="fbprintnow">Print now</button><button class="ghost" id="fbprintpause">Pause</button></div>
+        <div class="msg" id="fbprintmsg"></div>
+      </section>
       <section id="fbrules"><h2>Rulebook and folders</h2><div id="fbrulebody"></div>
         <div class="row"><button class="ghost" id="fbrulesedit">View or edit the rulebook</button></div>
         <div id="fbruleedit"></div>
@@ -246,6 +251,39 @@
         <div>📤 Outbox: <span class="path">${esc(fb.outbox_path)}</span></div>
         <div class="muted" style="margin-top:4px">To share these with your Mac, set HQ_FOOTBALL_DIR in <a href="/settings">⚙️ Settings</a> to a Google Drive folder, like G:\\My Drive\\HQ Football.</div></div>`;
   }
+  // ---- the Thursday print ----
+  function drawPrint(fb) {
+    const p = fb.print;
+    if (!p || !changed("print", p)) return;
+    const ready = p.files.filter(f => !f.problem).length;
+    $("fbprintcount").style.display = p.files.length ? "" : "none";
+    $("fbprintcount").textContent = p.files.length;
+    $("fbprintpause").textContent = p.paused ? "Resume" : "Pause";
+    const next = new Date(p.next);
+    const nextText = next.toLocaleString([], {weekday: "long", hour: "numeric", minute: "2-digit"});
+    $("fbprintbody").innerHTML = `
+      <div class="fbline" style="display:block">
+        <div>${p.paused ? "⏸ Paused. Nothing prints on its own until you press Resume." : `⏰ Prints ${esc(p.when)}. Next: <b>${esc(nextText)}</b>`}</div>
+        <div>📁 Folder: <span class="path">${esc(p.folder)}</span> ${p.folder_found ? "" : "(not found)"}</div>
+        <div>🖨️ Printer: ${esc(p.printer)}</div></div>
+      ${p.files.length ? p.files.map(f => `<div class="fbline">${f.problem ? "⚠" : "📄"} ${esc(f.name)}${f.problem ? ` <span class="muted">${esc(f.problem)}</span>` : ""}</div>`).join("") :
+        `<div class="muted">Nothing waiting. Put PDF, Word or Excel files in the folder and Clock prints them at the next print time, then moves them to a Printed folder.</div>`}
+      ${ready && !p.paused ? `<div class="muted">${ready} ready to print.</div>` : ""}
+      ${p.log.length ? `<div class="muted" style="margin-top:8px">Recent: ${p.log.slice(0, 4).map(l => esc(l.at.replace("T", " ") + " " + l.text)).join("<br>")}</div>` : ""}`;
+  }
+  $("fbprintnow").onclick = async () => {
+    $("fbprintnow").disabled = true;
+    const r = await post("/api/football/print/now");
+    $("fbprintmsg").textContent = r.ok ? "Clock is printing. You'll get a text when it's done." : r.message;
+    $("fbprintnow").disabled = false;
+    if (r.ok) refresh();
+  };
+  $("fbprintpause").onclick = async () => {
+    const r = await post("/api/football/print/pause", {paused: !(data && data.print && data.print.paused)});
+    $("fbprintmsg").textContent = r.message || "";
+    shown.print = null;
+    refresh();
+  };
   $("fbrulesedit").onclick = async () => {
     const box = $("fbruleedit");
     if (box.innerHTML) { box.innerHTML = ""; return; }
@@ -271,6 +309,7 @@
       drawOutbox(fb.outbox);
       drawNotes(fb);
       drawRules(fb);
+      drawPrint(fb);
     },
   };
 })();

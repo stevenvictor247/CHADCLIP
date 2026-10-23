@@ -80,7 +80,15 @@ FOOTBALL_OUTBOX = FOOTBALL_DIR / "Outbox"
 # Hour (local time) Clock sends the day's football reminders to your phone.
 FOOTBALL_REMINDER_HOUR = int(os.getenv("HQ_FOOTBALL_REMINDER_HOUR", "8") or 8)
 
-for d in (FOOTBALL_DATA, FOOTBALL_INBOX, FOOTBALL_OUTBOX):
+# Thursday print: what's in this folder gets printed once a week, then moves to its Printed subfolder. Blank = a
+# "Print Thursday" folder in the football Outbox. Point it at a Google Drive folder (synced to this PC) to drop files in from anywhere.
+FOOTBALL_PRINT_DIR = Path(os.getenv("HQ_PRINT_DIR", "").strip() or FOOTBALL_DIR / "Print Thursday")
+# Printer name exactly as Windows lists it. Blank = the Windows default printer.
+FOOTBALL_PRINTER = os.getenv("HQ_PRINTER", "").strip()
+FOOTBALL_PRINT_WEEKDAY = int(os.getenv("HQ_PRINT_WEEKDAY", "").strip() or "3") % 7   # 0 = Monday ... 3 = Thursday
+FOOTBALL_PRINT_HOUR = int(os.getenv("HQ_PRINT_HOUR", "").strip() or "20") % 24       # local time, 24-hour clock
+
+for d in (FOOTBALL_DATA, FOOTBALL_INBOX, FOOTBALL_OUTBOX, FOOTBALL_PRINT_DIR):
     try:
         d.mkdir(parents=True, exist_ok=True)
     except OSError:  # a Drive folder that isn't there yet shouldn't stop HQ starting

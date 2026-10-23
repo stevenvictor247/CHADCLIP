@@ -152,8 +152,8 @@ def test_rejecting_a_cheaper_model_changes_nothing(monkeypatch, tmp_path):
 
 
 def test_daily_report_sent_once_and_listed(monkeypatch, tmp_path):
-    monkeypatch.setenv("HQ_SWEEP_REPORT_HOUR", "0")
     hq = _fresh(monkeypatch, tmp_path)
+    monkeypatch.setenv("HQ_SWEEP_REPORT_HOUR", "0")   # after _fresh, which clears it: otherwise this only passes after 8 AM
     sent = []
     import hq.relay
     monkeypatch.setattr(hq.relay, "notify", lambda text: sent.append(text))
