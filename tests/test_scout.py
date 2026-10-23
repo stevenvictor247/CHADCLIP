@@ -84,7 +84,7 @@ def test_dashboard_api_shows_and_decides_campaigns():
 
     from hq.api import app
     cid = campaigns.propose(dict(DATA), None, [])
-    client = TestClient(app)
+    client = TestClient(app, headers={"X-HQ": "1"})
     assert any(c["id"] == cid for c in client.get("/api/state").json()["campaigns"])
     assert client.post(f"/api/campaigns/{cid}/join").json()["message"].startswith("Campaign")
     assert client.post("/api/campaigns/999999/join").status_code == 404
@@ -186,7 +186,7 @@ def test_inbox_api_and_settings_field():
 
     from hq import settings
     from hq.api import app
-    client = TestClient(app)
+    client = TestClient(app, headers={"X-HQ": "1"})
     assert client.post("/api/scout/inbox", json={"text": "  "}).status_code == 400
     assert client.post("/api/scout/inbox", json={"text": "https://a.com/x"}).status_code == 200
     assert any(i["url"] == "https://a.com/x" for i in client.get("/api/state").json()["scout_inbox"])
@@ -251,7 +251,7 @@ def test_creator_api(twitch_stub):
 
     from hq.api import app
     scout_pkg.Scout().run({"params": '{"creators": 5}'})
-    client = TestClient(app)
+    client = TestClient(app, headers={"X-HQ": "1"})
     picks = client.get("/api/state").json()["creator_picks"]
     assert client.post(f"/api/creators/{picks[0]['id']}/skip").status_code == 200
     assert client.post(f"/api/creators/{picks[1]['id']}/permit", json={"how": "x"}).status_code == 400

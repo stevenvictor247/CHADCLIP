@@ -122,7 +122,7 @@ def test_dashboard_api_for_approvals_and_leads():
 
     from hq.api import app
     run({"lead": {"name": "Sam", "platform": "youtube", "handle": "sam2"}})
-    c = TestClient(app)
+    c = TestClient(app, headers={"X-HQ": "1"})
     s = c.get("/api/state").json()
     assert s["approvals"] and any(l["handle"] == "sam2" for l in s["leads"])
     aid = s["approvals"][0]["id"]

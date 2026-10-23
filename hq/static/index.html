@@ -571,7 +571,7 @@ window.hqShowApprovals = village => {
   return true;
 };
 async function decideApproval(id, decision) {
-  const r = await (await fetch(`/api/approvals/${id}/${decision}`, {method: "POST"})).json();
+  const r = await (await fetch(`/api/approvals/${id}/${decision}`, {method: "POST", headers: {"X-HQ": "1"}})).json();
   toast(esc((r.message || "Done").split("\n")[0]));
   shownApprovals = null; refresh();
 }
@@ -592,13 +592,13 @@ function renderLeads(list) {
 async function leadYes(id) {
   const how = prompt("How did they say yes? (for example: replied to my email, OK to clip) Leave blank to use today's date.", "");
   if (how === null) return;
-  const r = await fetch(`/api/leads/${id}/yes`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({how})});
+  const r = await fetch(`/api/leads/${id}/yes`, {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"}, body: JSON.stringify({how})});
   const d = await r.json().catch(() => ({}));
   alert(r.ok ? d.message : (d.detail || "Couldn't save that"));
   shownLeads = null; refresh();
 }
 async function setLead(id, status) {
-  await fetch(`/api/leads/${id}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({status})});
+  await fetch(`/api/leads/${id}`, {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"}, body: JSON.stringify({status})});
   shownLeads = null; refresh();
 }
 
@@ -618,13 +618,13 @@ function renderCreators(list) {
 async function permitCreator(id) {
   const how = prompt("How are you allowed to clip them? For example: clipping program, joined today");
   if (!how) return;
-  const res = await fetch(`/api/creators/${id}/permit`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({how})});
+  const res = await fetch(`/api/creators/${id}/permit`, {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"}, body: JSON.stringify({how})});
   const r = await res.json();
   toast(esc(r.message || r.detail || "Done"));
   shownCreators = null; refresh();
 }
 async function skipCreator(id) {
-  await fetch(`/api/creators/${id}/skip`, {method: "POST"});
+  await fetch(`/api/creators/${id}/skip`, {method: "POST", headers: {"X-HQ": "1"}});
   shownCreators = null; refresh();
 }
 function renderInbox(items) {
@@ -633,14 +633,14 @@ function renderInbox(items) {
 }
 async function addInbox() {
   const text = $("inboxtext").value;
-  const res = await fetch("/api/scout/inbox", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})});
+  const res = await fetch("/api/scout/inbox", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"}, body: JSON.stringify({text})});
   const r = await res.json();
   toast(esc(r.message || r.detail || "Done"));
   if (res.ok) $("inboxtext").value = "";
   refresh();
 }
 async function decideCampaign(id, decision) {
-  const r = await (await fetch(`/api/campaigns/${id}/${decision}`, {method: "POST"})).json();
+  const r = await (await fetch(`/api/campaigns/${id}/${decision}`, {method: "POST", headers: {"X-HQ": "1"}})).json();
   toast(r.message || "Done");
   shownCampaigns = null; refresh();
 }
@@ -649,10 +649,10 @@ async function decide(id, decision) {
   const card = document.querySelector(`.clip[data-id="${id}"]`);
   card.querySelectorAll("button").forEach(b => b.disabled = true);
   if (decision === "approve") {
-    await fetch(`/api/clips/${id}`, {method: "PATCH", headers: {"Content-Type": "application/json"},
+    await fetch(`/api/clips/${id}`, {method: "PATCH", headers: {"Content-Type": "application/json", "X-HQ": "1"},
       body: JSON.stringify({title: card.querySelector(".title").value, caption: card.querySelector(".caption").value})});
   }
-  await fetch(`/api/clips/${id}/${decision}`, {method: "POST"});
+  await fetch(`/api/clips/${id}/${decision}`, {method: "POST", headers: {"X-HQ": "1"}});
   if (decision === "approve") { confetti(card); toast(`👍 Clip #${id} approved. Chad will post it.`); }
   card.classList.add("leaving-" + decision);
   setTimeout(() => { shownPending = null; refresh(); }, calm ? 0 : 500);
@@ -669,7 +669,7 @@ $("chatform").onsubmit = async e => {
   $("chatlog").scrollTop = $("chatlog").scrollHeight;
   window.HQWorld?.bossThinking(true);
   let reply;
-  try { reply = (await (await fetch("/api/chat", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})})).json()).reply; }
+  try { reply = (await (await fetch("/api/chat", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"}, body: JSON.stringify({text})})).json()).reply; }
   catch (err) { reply = "Couldn't reach the app. Is it still running? (" + err + ")"; }
   $("thinking")?.remove();
   window.HQWorld?.bossThinking(false);
@@ -680,7 +680,7 @@ $("chatform").onsubmit = async e => {
   refresh();
 };
 window.hqRefresh = refresh;
-$("newconv").onclick = async () => { await fetch("/api/conversation/new", {method: "POST"}); shownChat = null; refresh(); };
+$("newconv").onclick = async () => { await fetch("/api/conversation/new", {method: "POST", headers: {"X-HQ": "1"}}); shownChat = null; refresh(); };
 
 refresh();
 setInterval(refresh, 5000);
