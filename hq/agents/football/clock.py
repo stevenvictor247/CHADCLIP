@@ -3,7 +3,7 @@ when something is due or late. Plain rules, no AI, so it costs nothing."""
 
 import json
 
-from ...football import season
+from ...football import printing, season
 from ..base import Agent
 
 
@@ -30,7 +30,8 @@ class Clock(Agent):
                         '(add "opponent" for another week); {"game": {"opponent": "Davenport", "date": "2026-10-24", '
                         '"kickoff": "1:00 PM", "site": "home"}}; {"due": {"item": "Teamworks itinerary", "weekday": '
                         '"Thursday"}} or {"due": {"item": "...", "days_before": 3, "add": true}} or {"due": {"item": "...", '
-                        '"remove": true}}',
+                        '"remove": true}}; {"print": true} prints '
+                        'the Thursday print folder now; {"pause": true} or {"resume": true} for the Thursday print',
             village="football",
             notify_when_done=True,
         )
@@ -49,4 +50,8 @@ class Clock(Agent):
             d = p["due"]
             done.append(season.set_due(d["item"], d.get("days_before"), d.get("weekday"), bool(d.get("add")),
                                        bool(d.get("remove"))))
+        if p.get("print"):
+            return printing.print_now("Print now")
+        if p.get("pause") or p.get("resume"):
+            return printing.set_paused(bool(p.get("pause")))
         return "\n".join(done + [summary()])
