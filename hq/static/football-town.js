@@ -892,7 +892,21 @@ function draw(t) {
     ctx.strokeStyle = "#b8860b"; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.font = `900 14px ${FONT}`; ctx.fillStyle = "#4a2a00"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("!", B.mail.door, y + 1);
   }
+  kit.glow(ctx, hoverShape(), t);
   for (const a of agents.values()) drawBubble(a, t);
+}
+let hover = null;
+function hoverShape() {   // the outline drawn around what the mouse is over
+  const h = hover;
+  if (!h) return null;
+  const box = b => ({x: b.x - 8, y: b.y - 12, w: b.w + 16, h: b.h + 18});
+  if (h.agent) return h.agent.sleeping ? null : {x: h.agent.x, y: h.agent.y, r: 18};
+  if (h.cottage) return box(h.cottage);
+  const named = {board: BOARD, field: FIELD, stands: STANDS, tent: {x: TENT.x, y: TENT.y, w: TENT.w, h: CORNHOLE.y - TENT.y + 6},
+                 bridge: {x: 0, y: ROAD_Y - 24, w: CREEK + 24, h: 48}, mail: {x: MAILBOX.x - 16, y: MAILBOX.y - 40, w: 32, h: 44}};
+  if (h.building === "lots") return {x: LOTS[0].x - 6, y: LOTS[0].y - 6, w: LOTS[1].x + LOTS[1].w - LOTS[0].x + 12, h: LOTS[0].h + 12};
+  const b = named[h.building] || B[h.building] || S[h.building];
+  return b ? box(b) : null;
 }
 
 // ---------- simulation ----------
@@ -980,6 +994,7 @@ const tip = document.getElementById("fbtip");
 canvas.addEventListener("mousemove", e => {
   if (canvas.classList.contains("dragging")) { if (tip) tip.style.display = "none"; return; }
   const h = hit(toWorld(e));
+  hover = h;
   canvas.style.cursor = h ? "pointer" : "";
   if (!tip) return;
   let text = "";
@@ -994,7 +1009,7 @@ canvas.addEventListener("mousemove", e => {
     tip.style.top = clamp(e.clientY - rc.top + 14, 4, rc.height - 60) + "px";
   }
 });
-canvas.addEventListener("mouseleave", () => { if (tip) tip.style.display = "none"; });
+canvas.addEventListener("mouseleave", () => { hover = null; if (tip) tip.style.display = "none"; });
 
 // Clicks open a card on the stage, like in HQ Town: agents, the Mailroom (approve right there), the scoreboard's
 // checklist and the sheets on the field.
@@ -1003,7 +1018,7 @@ function live(name, act) {
   if (a && act === "follow") {
     wake(a);
     cam.lookAt(a.x, a.y - 20, Math.max(cam.zoom, 2.2));
-    cam.follow = () => agents.get(a.key) === a ? a : null;
+    cam.startFollow(() => agents.get(a.key) === a ? a : null, a.name);
   }
   return a;
 }

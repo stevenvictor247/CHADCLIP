@@ -266,7 +266,7 @@ function feel(a, face, secs = 3) { a.face = face; a.faceUntil = performance.now(
 function wake(a) { if (a.sleeping) { a.sleeping = false; a.x = a.home.front.x; a.y = a.home.front.y - 6; } }
 // Where each agent goes when they have a job. Anyone not listed works at their own cottage.
 const WORK = {boss: () => ({x: B.hq.front.x - 26, y: B.hq.front.y}), chad: () => B.studio.front, sweep: () => S.bank.front,
-              pitch: () => S.pitch.front, scout: () => S.scout.front};
+              pitch: () => S.pitch.front, scout: () => S.scout.front, tally: () => ({x: S.scout.front.x - 36, y: S.scout.front.y})};
 const workSpot = a => WORK[a.key]?.() || a.home.front;
 
 const CHATTER = ["Nice day for clips ☀️", "☕ coffee break", "Anything trending?", "🎵 la la la", "Stretching 🙆", "Vibes are good ✨", "Who moved my chair?"];
@@ -546,6 +546,7 @@ function drawTower(t) {
   // control shed
   const shed = {x: b.x + 4, y: base - 44, w: b.w - 8, h: 44, wall: "#e2e8f0", roof: "#64748b", door: b.door, label: "Live", icon: "📡", small: true};
   house(shed, t);
+  if (shown.failed > 0) badge(cx + 26, base - 40, shown.failed, t);   // failed posts stay flagged on the tower until fixed
   if (shown.approved > 0) {
     ctx.font = `800 10px ${FONT}`;
     const txt = `⏳ ${shown.approved} queued`, w = ctx.measureText(txt).width + 10;
@@ -578,6 +579,7 @@ function drawBank(t) {
     ctx.fillStyle = "#b8860b"; ctx.beginPath(); ctx.ellipse(b.x + b.w + 16, b.y + b.h - 3 - i * 4, 8, 3, 0, 0, 7); ctx.fill();
     ctx.fillStyle = "#ffd34d"; ctx.beginPath(); ctx.ellipse(b.x + b.w + 16, b.y + b.h - 4 - i * 4, 8, 3, 0, 0, 7); ctx.fill();
   }
+  if (shown.overBudget) plaque("⚠️ Claude budget reached", b.door, b.y - 26, "rgba(120,20,20,.92)", "#fecaca");
   plaque(`${shown.net < 0 ? "−" : ""}$${Math.abs(shown.net).toFixed(2)} net this month`, b.door, b.y - 8, shown.net < 0 ? "rgba(90,20,20,.88)" : "rgba(10,60,30,.88)", shown.net < 0 ? "#fecaca" : "#bbf7d0");
 }
 function drawPitchOffice(t) {
@@ -599,6 +601,7 @@ function drawCampaignHQ(t) {
   }
   if (shown.proposed) badge(b.door + 24, b.y + b.h * .52 - 4, shown.proposed, t, "#f59e0b");
   plaque(shown.live ? `${shown.live} campaign${shown.live === 1 ? "" : "s"} live` : "No campaigns yet", b.door - 30, b.y - 10);
+  if (shown.views7d) plaque(`👀 ${shown.views7d.toLocaleString()} views this week`, b.door - 30, b.y - 28, "rgba(10,60,55,.88)", "#ccfbf1");
 }
 function drawNotice(t) {
   const n = NOTICE, cx = n.x + n.w / 2;
@@ -949,7 +952,19 @@ function draw(t) {
     ctx.strokeStyle = "#b8860b"; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.font = `900 14px ${FONT}`; ctx.fillStyle = "#4a2a00"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("!", B.post.door, y + 1);
   }
+  kit.glow(ctx, hoverShape(), t);
   for (const a of agents.values()) drawBubble(a, t);
+}
+let hover = null;
+function hoverShape() {   // the outline drawn around what the mouse is over
+  const h = hover;
+  if (!h) return null;
+  const box = b => ({x: b.x - 8, y: b.y - 12, w: b.w + 16, h: b.h + 18});
+  if (h.agent) return h.agent.sleeping ? null : {x: h.agent.x, y: h.agent.y, r: h.agent.key === "boss" ? 24 : 18};
+  if (h.plot) return box(h.plot);
+  if (h.building === "notice") return {x: NOTICE.x - 8, y: NOTICE.y - 18, w: NOTICE.w + 16, h: NOTICE.h + 52};
+  const b = B[h.building] || S[h.building];
+  return b ? box(b) : null;
 }
 
 // ---------- simulation ----------
@@ -1019,7 +1034,7 @@ const TIPS = {
   studio: "Clip Studio: where Chad cuts clips. Click for today's clip numbers.",
   hq: "Boss HQ: click to talk to the Boss.",
   post: () => `Approvals: ${waiting()} waiting for your OK. Click to approve or reject right here.`,
-  tower: () => `Broadcast Tower: approved clips get posted from here.${shown.approved ? ` ${shown.approved} queued.` : ""} Click for recent posts.`,
+  tower: () => `Broadcast Tower: approved clips get posted from here.${shown.approved ? ` ${shown.approved} queued.` : ""}${shown.failed ? ` ${shown.failed} failed.` : ""} Click for recent posts.`,
 };
 Object.assign(TIPS, {
   bank: () => `Bank: ${shown.net < 0 ? "−" : ""}$${Math.abs(shown.net).toFixed(2)} net this month. Sweep counts every cent here. Click for money.`,
@@ -1032,6 +1047,7 @@ const tip = document.getElementById("worldtip");
 canvas.addEventListener("mousemove", e => {
   if (canvas.classList.contains("dragging")) { if (tip) tip.style.display = "none"; return; }
   const p = toWorld(e), h = hit(p);
+  hover = h;
   canvas.style.cursor = h ? "pointer" : "";
   if (!tip) return;
   let text = "";
@@ -1048,7 +1064,7 @@ canvas.addEventListener("mousemove", e => {
     tip.style.top = clamp(e.clientY - r.top + 14, 4, r.height - 60) + "px";
   }
 });
-canvas.addEventListener("mouseleave", () => { if (tip) tip.style.display = "none"; });
+canvas.addEventListener("mouseleave", () => { hover = null; if (tip) tip.style.display = "none"; });
 
 // Clicking opens a card on the stage: an agent's status and recent work, Approvals with Approve and Reject buttons,
 // a chat with the Boss, or a short summary of a building. "Follow" on an agent's card keeps the camera on them.
@@ -1057,7 +1073,7 @@ function live(name, act) {
   if (a && act === "follow") {
     wake(a);
     cam.lookAt(a.x, a.y - 20, Math.max(cam.zoom, 2.2));
-    cam.follow = () => agents.get(a.key) === a ? a : null;
+    cam.startFollow(() => agents.get(a.key) === a ? a : null, a.name);
   }
   return a;
 }
@@ -1183,11 +1199,12 @@ window.HQWorld = {
     chatter(s.activity || []);
     const month = s.money?.periods?.month || {}, leads = s.leads || [], camps = s.campaigns || [], now = new Date().toISOString();
     const business = new Set((s.agents || []).filter(a => (a.village || "business") === "business").map(a => a.name.toLowerCase()).concat("steven"));
-    shown = {pending: c.pending_approval || 0, approved: c.approved || 0,
+    shown = {pending: c.pending_approval || 0, approved: c.approved || 0, failed: c.failed || 0, overBudget: !!s.spend?.over_budget,
              asks: (s.approvals || []).filter(a => (a.village || "business") === "business").length,
              made: month.made || 0, net: month.net || 0,
              leads: leads.filter(l => !["dead", "dropped", "do_not_contact"].includes(l.status)).length,
              followups: leads.filter(l => l.status === "pitched" && l.followup_at && l.followup_at <= now).length,
+             views7d: s.tally?.views_7d || 0,
              live: camps.filter(x => x.status === "joined").length, proposed: camps.filter(x => x.status === "proposed").length,
              news: (s.activity || []).filter(r => business.has(String(r.agent).toLowerCase())).slice(0, 4).map(r => ({who: r.agent, text: r.message}))};
     prev = {...c};
