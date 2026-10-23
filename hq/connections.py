@@ -187,8 +187,9 @@ def youtube(account: dict, values=None) -> dict:
         from .agents.chad.publish import youtube as yt
         yt._credentials(account)  # refreshes the sign-in if needed; never opens a browser here
     except Exception as e:
-        return _bad(f"The YouTube sign-in no longer works ({str(e)[:120]}). "
-                    "Press Sign in with Google again under Connect YouTube on the Settings page.")
+        return _bad(f"YouTube needs signing in again ({str(e)[:120]}). Google ends sign-ins after 7 days while the app "
+                    "is in Testing. Press Open Google sign-in under Connect YouTube on the Settings page, "
+                    "approve, and paste the address back (about 2 minutes).")
     return _ok("YouTube sign-in works.")
 
 
