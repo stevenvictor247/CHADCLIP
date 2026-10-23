@@ -100,6 +100,14 @@ def handle_message(m: dict) -> None:
     text = (m.get("text") or "").strip()
     if not text:
         return
+    if text.lower().strip("!. /") in ("pause", "pause all", "stop", "resume", "unpause"):
+        from . import settings
+        stop = text.lower().strip("!. /") in ("pause", "pause all", "stop")
+        settings.save({"HQ_PAUSED": "true" if stop else "false"})
+        db.log("Steven", "Paused HQ (from Relay)" if stop else "Resumed HQ (from Relay)")
+        api("sendMessage", chat_id=m["chat"]["id"], text="⏸ HQ paused. No agent works and nothing posts. "
+            "Send \"resume\" to start again." if stop else "▶️ HQ resumed.")
+        return
     from . import boss  # imported here because the Boss imports the agents, and agents import Relay
     api("sendChatAction", chat_id=m["chat"]["id"], action="typing")
     try:

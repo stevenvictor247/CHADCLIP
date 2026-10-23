@@ -94,7 +94,12 @@ def daily_backup(state: dict):
 
 
 def tick():
+    from .agents.chad.publish import paused
     state = _state()
+    if paused():  # Pause All: nothing starts and nothing posts; the Boss still chats and the backup still runs
+        daily_backup(state)
+        _save_state(state)
+        return
     queue_scheduled(state)
     football_tick()
     if not REQUIRE_APPROVAL:

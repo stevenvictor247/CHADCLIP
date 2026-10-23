@@ -14,13 +14,17 @@
     #hq-update .what { color:var(--muted); font-size:13px; flex:1; min-width:200px; }
     #hq-update button { background:linear-gradient(135deg, var(--good), var(--sky)); color:#0d1a12; border:0; border-radius:10px;
                         padding:8px 14px; font:inherit; font-weight:800; cursor:pointer; }
-    #hq-update button:disabled { opacity:.6; cursor:wait; }`;
+    #hq-update button:disabled { opacity:.6; cursor:wait; }
+    #hq-paused { display:none; position:relative; z-index:2; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 22px;
+                 background:rgba(251,191,36,.18); border-bottom:1px solid var(--line); }
+    #hq-paused .what { color:var(--muted); font-size:13px; flex:1; min-width:200px; }`;
   document.head.insertAdjacentHTML("beforeend", `<style>${css}</style>`);
 
   const header = document.querySelector("header");
   if (!header) return;
+  header.insertAdjacentHTML("beforeend", `<button class="hqbar-btn" id="hq-pause" title="Stop every agent and all posting until you press Resume">⏸ Pause all</button>`);
   header.insertAdjacentHTML("beforeend", `<a class="hqbar-btn" href="/settings" title="API keys, accounts and options">⚙️ Settings</a>`);
-  header.insertAdjacentHTML("afterend", `<div id="hq-update"></div>`);
+  header.insertAdjacentHTML("afterend", `<div id="hq-update"></div><div id="hq-paused"><b>⏸ HQ is paused.</b><span class="what">No agent works and nothing posts until you press Resume. The Boss still chats.</span></div>`);
   const bar = document.getElementById("hq-update");
   const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 
@@ -73,4 +77,29 @@
   }
   check();
   setInterval(check, 10 * 60 * 1000);
+
+  // Pause All: one button that stops every agent and all posting (texting "pause" to the Relay bot does the same)
+  const pauseBtn = document.getElementById("hq-pause");
+  const pausedBar = document.getElementById("hq-paused");
+  function showPaused(p) {
+    pauseBtn.dataset.paused = p ? "1" : "";
+    pauseBtn.textContent = p ? "▶️ Resume" : "⏸ Pause all";
+    pausedBar.style.display = p ? "flex" : "none";
+  }
+  pauseBtn.onclick = async () => {
+    const want = !pauseBtn.dataset.paused;
+    if (want && !confirm("Pause HQ? Every agent stops and nothing posts until you press Resume.")) return;
+    pauseBtn.disabled = true;
+    try {
+      const r = await (await fetch("/api/pause", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"},
+                                                  body: JSON.stringify({paused: want})})).json();
+      showPaused(r.paused);
+    } catch (e) {}
+    pauseBtn.disabled = false;
+  };
+  async function checkPause() {
+    try { showPaused((await (await fetch("/api/pause")).json()).paused); } catch (e) {}
+  }
+  checkPause();
+  setInterval(checkPause, 30 * 1000);
 })();

@@ -150,11 +150,32 @@ def football_panel():
     return FileResponse(STATIC / "football-panel.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
+class PauseIn(BaseModel):
+    paused: bool
+
+
+@app.get("/api/pause")
+def pause_status():
+    from .agents.chad.publish import paused
+    return {"paused": paused()}
+
+
+@app.post("/api/pause")
+def pause(body: PauseIn):
+    """Pause All: stops every agent and all posting until Resume. The Boss still chats."""
+    from .agents.chad.publish import paused
+    settings.save({"HQ_PAUSED": "true" if body.paused else "false"})
+    db.log("Steven", "Paused HQ: no agent works and nothing posts" if body.paused else "Resumed HQ")
+    return {"paused": paused()}
+
+
 @app.get("/api/state")
 def state():
+    from .agents.chad.publish import paused
     running = {r["agent"]: r["instructions"] for r in db.rows("SELECT agent, instructions FROM tasks WHERE status = 'running'")}
     return {
         "has_llm": HAS_LLM,
+        "paused": paused(),
         "spend": ledger.summary(),
         "money": money.summary(),
         "campaigns": campaigns.summary(),
