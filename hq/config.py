@@ -65,7 +65,7 @@ PRICES = {
 UNKNOWN_PRICE = (5.00, 25.00)  # for a model not listed above, assume a pricey one so the meter never under-reports
 
 # Stop scheduled work for the rest of the day once Claude spending reaches this many US dollars. 0 means no limit.
-DAILY_BUDGET = float(os.getenv("HQ_DAILY_BUDGET", "0") or 0)
+DAILY_BUDGET = float(os.getenv("HQ_DAILY_BUDGET", "5") or 0)
 
 # The football village (Warrior Village). Its agents, its own daily Claude budget, and where its files live.
 # Its spending never counts against HQ_DAILY_BUDGET, and the business side's never counts against this one.

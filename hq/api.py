@@ -185,11 +185,35 @@ def football_panel():
     return FileResponse(STATIC / "football-panel.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
+class PauseIn(BaseModel):
+    paused: bool
+
+
+@app.get("/api/pause")
+def pause_status():
+    """Paused or not, and how long since the agents' background loop last went round (None = not started yet)."""
+    from .agents.chad.publish import paused
+    from .worker import seconds_since_last_round
+    ago = seconds_since_last_round()
+    return {"paused": paused(), "worker_seconds_ago": None if ago is None else round(ago)}
+
+
+@app.post("/api/pause")
+def pause(body: PauseIn):
+    """Pause All: stops every agent and all posting until Resume. The Boss still chats."""
+    from .agents.chad.publish import paused
+    settings.save({"HQ_PAUSED": "true" if body.paused else "false"})
+    db.log("Steven", "Paused HQ: no agent works and nothing posts" if body.paused else "Resumed HQ")
+    return {"paused": paused()}
+
+
 @app.get("/api/state")
 def state():
+    from .agents.chad.publish import paused
     running = {r["agent"]: r["instructions"] for r in db.rows("SELECT agent, instructions FROM tasks WHERE status = 'running'")}
     return {
         "has_llm": HAS_LLM,
+        "paused": paused(),
         "spend": ledger.summary(),
         "money": money.summary(),
         "campaigns": campaigns.summary(),
@@ -361,6 +385,15 @@ def lead_said_yes(lead_id: int, body: YesIn):
         return {"ok": True, "message": they_said_yes(lead_id, body.how)}
     except KeyError:
         raise HTTPException(404, f"No lead #{lead_id}")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/clips/{clip_id}/retry")
+def retry_clip(clip_id: int):
+    from .agents.chad.publish import retry
+    try:
+        return {"message": retry(clip_id)}
     except ValueError as e:
         raise HTTPException(400, str(e))
 

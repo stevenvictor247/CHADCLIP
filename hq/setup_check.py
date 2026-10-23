@@ -104,7 +104,7 @@ def items() -> list[dict]:
         else:
             out.append(_item("posting", "A posting account switched on", "done", f"On and working: {names}."))
 
-    budget = float(os.getenv("HQ_DAILY_BUDGET", "0") or 0)
+    budget = float(os.getenv("HQ_DAILY_BUDGET", "5") or 0)
     out.append(_item("budget", "Daily spending limit", "done" if budget > 0 else "todo",
                      f"Agents stop for the day after ${budget:g} of Claude use." if budget > 0 else
                      "No limit yet, so a runaway agent could run up a bill. $2 a day is plenty to start.",
