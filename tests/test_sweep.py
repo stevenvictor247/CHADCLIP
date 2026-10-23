@@ -178,7 +178,7 @@ def test_sweep_is_an_agent_that_still_runs_when_the_budget_is_spent(monkeypatch,
     assert hq.ledger.over_budget()
     hq.worker.queue_scheduled({})
     queued = {t["agent"] for t in hq.db.rows("SELECT agent FROM tasks")}
-    assert queued == {"Sweep"}                                                     # Claude agents wait, Sweep doesn't
+    assert queued == {"Sweep", "Tally"}                         # Claude agents wait; Sweep and Tally cost nothing, so they don't
 
 
 def test_dashboard_routes(monkeypatch, tmp_path):

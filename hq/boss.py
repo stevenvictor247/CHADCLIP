@@ -4,7 +4,7 @@ import hashlib
 import json
 import threading
 
-from . import agents, db, football, ledger, llm, review
+from . import agents, db, football, ledger, llm, review, tally
 from .config import BOSS_MODEL, VISION_PATH
 
 SYSTEM = """You are the Boss, the head of an AI agent team that runs parts of Steven's online business.
@@ -94,6 +94,7 @@ def get_status() -> dict:
         "recent_posts": db.rows("SELECT clip_id, platform, account, status, url, error, created_at FROM posts ORDER BY id DESC LIMIT 10"),
         "activity": db.rows("SELECT agent, message, created_at FROM activity ORDER BY id DESC LIMIT 15"),
         "claude_spend": ledger.summary(),
+        "views": tally.summary(),
         "football": football.status(),
     }
 
