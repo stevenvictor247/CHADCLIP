@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 def _fresh(monkeypatch, tmp_path):
     monkeypatch.setenv("HQ_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("HQ_PASSWORD", "")
-    for k in ("HQ_SWEEP_REPORT_HOUR", "HQ_MODEL_TELLS"):
+    for k in ("HQ_MODEL_TELLS",):
         monkeypatch.delenv(k, raising=False)
     import hq.config, hq.db, hq.ledger, hq.sweep, hq.api
     for m in (hq.config, hq.db, hq.ledger, hq.sweep, hq.api):
@@ -158,7 +158,6 @@ def test_daily_report_sent_once_and_listed(monkeypatch, tmp_path):
     import hq.relay
     monkeypatch.setattr(hq.relay, "notify", lambda text: sent.append(text))
     _usage(hq.db, "Chad", "claude-sonnet-5-5", 0.4, ago={"hours": 30})
-    hq.sweep.fix_stuck_tasks  # imported
     _task(hq.db, "Chad", "running", {"hours": 4})
     assert "Sent the daily report" in hq.sweep.run()
     assert len(sent) == 1 and "Sweep's daily report" in sent[0] and "Put task" in sent[0]
