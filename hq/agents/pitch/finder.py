@@ -161,7 +161,11 @@ def _youtube(url: str) -> tuple[str, str] | None:
     return (found[0], url) if found else None
 
 
+LAST_CHECKED: list[str] = []  # what the latest lookup looked at, so a "found nothing" can say where it looked
+
+
 def _search(bio: str, extra_urls: list[str]) -> dict | None:
+    LAST_CHECKED.clear()
     hit = next(iter(emails_in(bio)), None)
     if hit:
         return {"email": hit, "source": "their Twitch bio", "url": ""}
@@ -181,6 +185,7 @@ def _search(bio: str, extra_urls: list[str]) -> dict | None:
         html = _get(url)
         if not html:
             continue
+        LAST_CHECKED.append(url)
         if found := emails_in(html):
             kind = "their link-in-bio page" if _in(host, AGGREGATORS) else "their website"
             return {"email": found[0], "source": kind, "url": url}
