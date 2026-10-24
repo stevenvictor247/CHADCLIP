@@ -112,3 +112,23 @@ def test_manual_lead_with_a_link_gets_an_email_looked_up(monkeypatch):
     Pitch().run({"params": json.dumps({"lead": {"name": "Sam", "platform": "youtube", "handle": "sam",
                                                 "contact": "https://sam.gg"}})})
     assert db.rows("SELECT contact FROM leads")[0]["contact"] == "hi@sam.gg"
+
+
+def test_recheck_switches_waiting_cards_to_send_email(monkeypatch):
+    monkeypatch.setattr(pitch_mod.mailer, "configured", lambda: True)
+    monkeypatch.setattr(pitch_mod.mailer, "credentials", lambda: ("steven@gmail.com", "x"))
+    pages(monkeypatch, {})
+    for h in ("linked", "bare"):
+        Pitch().run({"params": json.dumps({"lead": {"name": h.title(), "platform": "twitch", "handle": h,
+                                                    "contact": "https://twitch.tv/" + h + " (no email in bio)",
+                                                    "notes": "Their bio: site https://" + h + ".gg" if h == "linked" else "just vibes"}})})
+    assert [a["yes_label"] for a in approvals.pending()] == ["I'll send it"] * 2
+    monkeypatch.setattr(pitch_mod.twitch, "profile_by_login", lambda login: {"bio": "", "type": ""})
+    pages(monkeypatch, {"https://linked.gg": "biz@linked.gg"})
+    out = Pitch().run({"params": json.dumps({"recheck": True})})
+    assert "biz@linked.gg" in out and "Bare" in out
+    linked, bare = approvals.pending()
+    assert linked["yes_label"] == "Send email" and linked["payload"]["email"] is True
+    assert "Email found via their website" in linked["preview"] and "Contact: biz@linked.gg" in linked["preview"]
+    assert bare["yes_label"] == "I'll send it"
+    assert db.rows("SELECT contact FROM leads WHERE handle = 'linked'")[0]["contact"] == "biz@linked.gg"

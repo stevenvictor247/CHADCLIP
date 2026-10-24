@@ -196,13 +196,14 @@ def _search(bio: str, extra_urls: list[str]) -> dict | None:
     return None
 
 
-def find_email(platform: str, handle: str, bio: str = "", extra_urls: list[str] | None = None) -> dict | None:
+def find_email(platform: str, handle: str, bio: str = "", extra_urls: list[str] | None = None,
+               retry_misses: bool = False) -> dict | None:
     """{'email', 'source', 'url'} for a public email the creator posted, or None. Cached, misses too."""
     handle = handle.lower()
     cached = db.rows("SELECT * FROM email_finds WHERE platform = ? AND handle = ?", platform, handle)
     if cached:
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(cached[0]["found_at"])).days
-        if age < (CACHE_DAYS if cached[0]["email"] else MISS_DAYS):
+        if age < (CACHE_DAYS if cached[0]["email"] else 0 if retry_misses else MISS_DAYS):
             c = cached[0]
             return {"email": c["email"], "source": c["source"], "url": c["url"]} if c["email"] else None
     try:
