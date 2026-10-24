@@ -38,7 +38,7 @@ def _task(db, agent, status, ago=None, result=None, created_by="boss", instructi
 
 def _clip(db, status="pending_approval", path="", ago=None, creator="Jynxzi", **kw):
     cols = {"creator": creator, "source_url": kw.get("source_url", "https://youtu.be/x"), "start_s": 0, "end_s": 30,
-            "path": path, "title": "A clip", "caption": "So funny. Credit: @jynxzi", "hashtags": "[]", "score": 8,
+            "path": path, "title": "A clip", "caption": kw.get("caption", "So funny. Credit: @jynxzi"), "hashtags": "[]", "score": 8,
             "reason": "big laugh", "captioned": 1, "status": status, "created_at": _ago(**(ago or {"hours": 1}))}
     return db.execute(f"INSERT INTO clips ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})", *cols.values())
 
@@ -96,8 +96,37 @@ def test_broken_and_flagged_clips(monkeypatch, tmp_path):
     _clip(hq.db, path=str(tmp_path / "gone2.mp4"), caption="")
     tip = _tip(hq, "broken_clips")
     assert tip["fix"]["id"] == "set_aside_broken" and "2 waiting clips" in tip["title"]
-    assert "video file is missing from disk (2)" in _tip(hq, "flagged_clips")["why"]
+    assert "flagged_clips" not in _ids(hq)              # the missing files have their own tip, not counted twice
     assert gone in hq.quality._broken_clip_ids()
+    assert "Set aside 2 clips" in hq.quality.apply_fix("set_aside_broken")
+    # set aside as failed, not rejected: Chad learns your taste from rejections, and a lost file says nothing about taste
+    statuses = [r["status"] for r in hq.db.rows("SELECT status FROM clips ORDER BY id")]
+    assert statuses == ["pending_approval", "failed", "failed"]
+    assert "broken_clips" not in _ids(hq)
+    import hq.tally
+    assert "rejected" not in hq.tally.your_taste()
+
+
+def test_flagged_clips_tip(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    for i in range(3):
+        f = tmp_path / f"{i}.mp4"
+        f.write_bytes(b"x")
+        _clip(hq.db, path=str(f), caption="" if i < 2 else "Fine one. Credit: @j")
+    tip = _tip(hq, "flagged_clips")
+    assert tip["title"] == "2 of the 3 waiting clips have a problem" and "caption has no credit" in tip["why"]
+
+
+def test_waiting_clips_wording(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    f = tmp_path / "c.mp4"
+    f.write_bytes(b"x")
+    for _ in range(15):
+        _clip(hq.db, path=str(f), ago={"hours": 2})
+    tip = _tip(hq, "clips_waiting")
+    assert tip["severity"] == "high" and "over a day" not in tip["why"]       # many, but none old yet
+    hq.db.execute("UPDATE clips SET created_at = ?", _ago(hours=30))
+    assert _tip(hq, "clips_waiting")["why"].startswith("All of them for over a day.")
 
 
 def test_rejection_rate_and_the_streamer_behind_it(monkeypatch, tmp_path):
@@ -330,11 +359,17 @@ def test_coach_note_once_a_day_and_never_over_budget(monkeypatch, tmp_path):
     assert rep["improve"]["coach"].startswith("Approve") and "Coach's note: Approve" in rep["text"]
     hq.sweep.run()                                     # a normal round: no new call, the day's note stays on the tab
     assert len(calls) == 1 and hq.sweep.latest()["report"]["improve"]["coach"].startswith("Approve")
-    # switched off, or the budget is spent: no call, the report still goes out
-    monkeypatch.setenv("HQ_SWEEP_COACH", "false")
-    hq.sweep.run(force_report=True)
-    monkeypatch.setenv("HQ_SWEEP_COACH", "true")
+    hq.sweep.run(force_report=True)                    # pressing "send the report" again the same day: no second call
+    assert len(calls) == 1 and hq.sweep.latest()["report"]["improve"]["coach"].startswith("Approve")
+    # a new day with the budget spent, or the note switched off: no call, and the report still goes out
+    state = json.loads(hq.sweep.STATE_PATH.read_text())
+    state["coach_day"] = "2000-01-01"
+    hq.sweep.STATE_PATH.write_text(json.dumps(state))
     monkeypatch.setattr(hq.ledger, "over_budget", lambda village="business": True)
+    assert "Sent the daily report" in hq.sweep.run(force_report=True)
+    assert len(calls) == 1 and hq.sweep.latest()["report"]["improve"]["coach"] is None
+    monkeypatch.setattr(hq.ledger, "over_budget", lambda village="business": False)
+    monkeypatch.setenv("HQ_SWEEP_COACH", "false")
     hq.sweep.run(force_report=True)
     assert len(calls) == 1 and hq.sweep.latest()["report"]["improve"]["coach"] is None
 
@@ -407,3 +442,97 @@ def test_dashboard_routes_for_fixes_and_hiding(monkeypatch, tmp_path):
     assert c.post("/api/sweep/unhide/scout_waiting", headers={"X-HQ": "1"}).status_code == 200
     assert c.get("/api/sweep").json()["snoozed"] == {}
     assert hq.db.rows("SELECT 1 FROM activity WHERE message LIKE 'One-tap fix (Steven)%'")
+
+
+# ---- second-pass checks ----------------------------------------------------------------------------------
+
+def test_chad_jobs_behind_a_long_clipping_job_are_normal(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    import hq.worker
+    monkeypatch.setattr(hq.worker, "seconds_since_last_round", lambda: 30)
+    _task(hq.db, "Chad", "running", {"minutes": 1})
+    _task(hq.db, "Chad", "queued", {"hours": 3})
+    assert "queue_late" not in _ids(hq)                          # the video lane is busy: waiting is expected
+    _task(hq.db, "Pitch", "queued", {"hours": 3})
+    tip = _tip(hq, "queue_late")
+    assert tip["title"].startswith("1 job has") and "probably stuck" in tip["why"]
+    monkeypatch.setattr(hq.worker, "seconds_since_last_round", lambda: 3600)
+    tip = _tip(hq, "queue_late")
+    assert "60 minutes" in tip["why"] and tip["do"].startswith("Close HQ and open it again")
+
+
+def test_pitch_with_an_address_and_gmail_set_up_is_not_flagged(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    monkeypatch.setenv("PITCH_EMAIL_ADDRESS", "me@gmail.com")
+    monkeypatch.setenv("PITCH_EMAIL_APP_PASSWORD", "abcd efgh")
+    ts = _ago(hours=2)
+    lid = hq.db.execute("INSERT INTO leads (name, platform, handle, contact, status, created_at, updated_at) "
+                        "VALUES ('Bo', 'twitch', 'bo', 'bo@example.com', 'drafted', ?, ?)", ts, ts)
+    hq.db.execute("INSERT INTO approvals (agent, kind, title, preview, payload, created_at) VALUES "
+                  "('Pitch', 'pitch', 'Pitch', 'p', ?, ?)", json.dumps({"lead_id": lid, "email": False}), ts)
+    assert not {"pitch_no_email", "pitch_no_mailer"} & _ids(hq)
+
+
+def test_cancelled_copies_dont_count_as_failures(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    for _ in range(5):
+        _task(hq.db, "Chad", "queued", {"minutes": 3}, instructions="Clip Jynxzi")
+    hq.quality.apply_fix("cancel_duplicates")
+    _task(hq.db, "Chad", "done", {"minutes": 1}, "Made 2 clips.")
+    assert "fail_rate_chad" not in _ids(hq)
+
+
+def test_boss_cost_per_message_counts_only_typed_messages(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    text = json.dumps([{"type": "text", "text": "hi"}])
+    tool = json.dumps([{"type": "tool_result", "tool_use_id": "x", "content": "{}"}])
+    for content in (text, tool, tool):
+        hq.db.execute("INSERT INTO boss_messages (conversation, role, content, created_at) VALUES (1, 'user', ?, ?)", content, _ago(hours=1))
+    hq.db.execute("INSERT INTO llm_usage (agent, model, cost_usd, created_at) VALUES ('Boss', 'claude-opus-5-5', 0.3, ?)", _ago(hours=1))
+    boss = next(u for u in hq.quality.unit_costs() if u["agent"] == "Boss")
+    assert boss["count"] == 1 and boss["each"] == 0.3
+
+
+def test_worker_queues_the_daily_report_on_time_once(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    assert hq.sweep.queue_report_if_due() is True
+    assert hq.sweep.queue_report_if_due() is False               # never twice, even if that round fails
+    assert [t["agent"] for t in hq.db.rows("SELECT agent FROM tasks")] == ["Sweep"]
+    hq.sweep.run()
+    assert hq.sweep.report_due() is False
+
+
+def test_tapping_one_telegram_fix_keeps_the_other_buttons(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    import hq.relay
+    calls = []
+    monkeypatch.setattr(hq.relay, "owner_id", lambda: 7)
+    monkeypatch.setattr(hq.relay, "api", lambda method, files=None, **p: calls.append((method, p)) or {})
+    keyboard = {"inline_keyboard": [[{"text": "a", "callback_data": "sweepfix:approve:2"}],
+                                    [{"text": "b", "callback_data": "sweepfix:approve:4"}]]}
+    hq.relay.handle_callback({"id": "y", "from": {"id": 7}, "data": "sweepfix:approve:2",
+                              "message": {"message_id": 5, "chat": {"id": 7}, "reply_markup": keyboard}})
+    edit = next(p for m, p in calls if m == "editMessageReplyMarkup")
+    assert json.loads(edit["reply_markup"])["inline_keyboard"] == [keyboard["inline_keyboard"][1]]
+    # an approve/reject pair still loses both buttons once answered
+    calls.clear()
+    pair = json.loads(hq.relay._buttons("clip", 1))
+    _clip(hq.db)
+    hq.relay.handle_callback({"id": "z", "from": {"id": 7}, "data": "clip:approve:1",
+                              "message": {"message_id": 6, "chat": {"id": 7}, "reply_markup": pair}})
+    edit = next(p for m, p in calls if m == "editMessageReplyMarkup")
+    assert json.loads(edit["reply_markup"])["inline_keyboard"] == []
+
+
+def test_score_change_between_reports_compares_with_the_last_daily_report(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    _task(hq.db, "Pitch", "queued", {"hours": 3})
+    hq.sweep.run(force_report=True)                              # today's report: 88
+    state = json.loads(hq.sweep.STATE_PATH.read_text())
+    state["last_report_day"] = state["last_report"] = "2000-01-01"   # pretend that was yesterday
+    hq.sweep.STATE_PATH.write_text(json.dumps(state))
+    hq.db.execute("UPDATE tasks SET status = 'done'")
+    monkeypatch.setenv("HQ_SWEEP_REPORT_HOUR", "24")             # a round before today's report is due
+    assert "Sent the daily report" not in hq.sweep.run()
+    imp = hq.sweep.latest()["report"]["improve"]
+    assert imp["change"] == 12 and imp["fixed"]

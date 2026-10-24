@@ -104,7 +104,7 @@
           ${tips.length ? `${tips.length} idea${tips.length === 1 ? "" : "s"} to make HQ run better${highs ? `, <b>${highs} important</b>` : ""}.`
             : "Every agent's work looks clean today. ✨"}
           ${hist.length > 1 ? `<div class="swhist">Last ${hist.length} daily reports: ${hist.join(" → ")}</div>` : ""}
-          ${imp.hidden ? `<div class="swhist">${imp.hidden} hidden for now.</div>` : ""}
+          ${imp.hidden ? `<div class="swhist">${imp.hidden} hidden for now. <button class="ghost" id="swunhide" style="font-size:12px;padding:2px 10px">Show them again</button></div>` : ""}
         </div>
       </div>
       ${imp.coach ? `<div class="swcoach"><b>Coach's note:</b> ${esc(imp.coach)}</div>` : ""}
@@ -171,6 +171,11 @@
       catch (e) { err = e.message; }
       busy = ""; load();
     }));
+    root.querySelector("#swunhide")?.addEventListener("click", async () => {
+      try { for (const id of Object.keys(d.snoozed || {})) await call("/api/sweep/unhide/" + encodeURIComponent(id), "POST"); err = ""; }
+      catch (e) { err = e.message; }
+      load();
+    });
     act("[data-fix]", "fix", "/api/sweep/fix/", true);
     act("[data-hide]", "hide", "/api/sweep/hide/", false);
     act("[data-restore]", "restore", "/api/sweep/restore/", false);

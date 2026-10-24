@@ -483,7 +483,8 @@ def improvement(state: dict, daily: bool = False) -> dict:
         state["last_report_day"] = today
         state["last_daily_tips"] = {t["id"]: t["title"] for t in tips}
         state["last_daily_score"] = value
-    prev = state.get("yesterday_score")
+    # compare with the last daily report before today's (before today's report goes out, that's the newest one)
+    prev = state.get("yesterday_score") if state.get("last_report_day") == today else state.get("last_daily_score")
     return {"score": value, "change": None if prev is None else value - prev, "tips": shown, "top": [t["id"] for t in shown[:3]],
             "fixed": fixed, "hidden": len(tips) - len(shown), "broken_checks": broken, "units": quality.unit_costs(),
             "coach": None}
@@ -492,7 +493,7 @@ def improvement(state: dict, daily: bool = False) -> dict:
 def _coach_facts(spend: dict, problems: list[dict], improve: dict) -> dict:
     return {"claude_cost": {k: round(v or 0, 3) for k, v in spend.items() if isinstance(v, (int, float))},
             "health_score": improve["score"], "change_since_yesterday": improve["change"],
-            "fixed_since_yesterday": improve["fixed"],
+            "fixed_since_last_report": improve["fixed"],
             "findings": [{k: t[k] for k in ("severity", "area", "title", "why", "do", "open_days")} for t in improve["tips"]],
             "cost_findings": [{"title": p["title"], "detail": p["detail"]} for p in problems],
             "cost_per_result_this_week": improve["units"],
@@ -520,7 +521,7 @@ def build_report(spend: dict, problems: list[dict], actions: list[str], improve:
     else:
         lines += ["", "Nothing to improve today: every agent's work looks clean. ✨"]
     if improve["fixed"]:
-        lines.append("Fixed since yesterday: " + "; ".join(improve["fixed"][:5]) + ".")
+        lines.append("Fixed since the last report: " + "; ".join(improve["fixed"][:5]) + ".")
     lines.append("")
     cap = f" of {_usd(spend['budget'])} budget" if spend["budget"] else ""
     lines.append(f"Claude cost: {_usd(spend['yesterday'])} yesterday, {_usd(spend['today'])} so far today{cap}. "
@@ -596,10 +597,13 @@ def run(force_report: bool = False) -> str:
         state["last_report"] = today
         _write_json(STATE_PATH, state)
     improve = improvement(state, daily=due)
-    if due:
+    todays_note = (_read_json(REPORTS_DIR / "latest.json", {}).get("improve") or {}).get("coach")
+    if due and state.get("coach_day") != today:   # at most one Claude call a day, even if you press the button again
         improve["coach"] = quality.coach_note(_coach_facts(spend, problems, improve))
-    else:   # between daily reports the dashboard keeps the day's coach's note
-        improve["coach"] = (_read_json(REPORTS_DIR / "latest.json", {}).get("improve") or {}).get("coach")
+        if improve["coach"]:
+            state["coach_day"] = today
+    else:   # later rounds (and extra reports the same day) keep the day's note
+        improve["coach"] = todays_note if state.get("coach_day") == today else None
     # the report and the dashboard list what Sweep did in the last 24 hours
     cutoff = _ago(hours=24)
     state["recent"] = [r for r in state.get("recent", []) if r["at"] >= cutoff] + [{"at": db.now(), "what": a} for a in actions]
@@ -620,6 +624,28 @@ def run(force_report: bool = False) -> str:
 
 def _plural_s(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def report_due() -> bool:
+    state = _state()
+    return datetime.now().hour >= report_hour() and state.get("last_report") != datetime.now().strftime("%Y-%m-%d")
+
+
+def queue_report_if_due() -> bool:
+    """Called by the worker every round, so the daily report goes out at its hour rather than at Sweep's next 6-hourly
+    round. Queues one ordinary Sweep round (it sends the report itself), never two."""
+    if not report_due():
+        return False
+    state = _state()
+    today = datetime.now().strftime("%Y-%m-%d")
+    if state.get("report_queued") == today:   # once a day: a round that fails must not be queued again every tick
+        return False
+    state["report_queued"] = today
+    _write_json(STATE_PATH, state)
+    if db.rows("SELECT 1 FROM tasks WHERE agent = 'Sweep' AND status IN ('queued', 'running') LIMIT 1"):
+        return False   # a round is about to run anyway, and it sends the report
+    db.create_task("Sweep", "Send the daily report.", {}, created_by="Schedule")
+    return True
 
 
 def score_history(days: int = 14) -> list[dict]:

@@ -34,6 +34,7 @@ REPEAT_MESSAGES = 3                # the same Boss prompt this many times in a d
 REPEAT_TASKS = 4                   # the same job asked for this many times in a day (not by the schedule)
 EMPTY_RUNS = 3                     # this many empty rounds in a row from one scheduled job
 REJECT_RATE = 0.4                  # share of Chad's decided clips that were rejected
+SET_ASIDE_NOTE = "Sweep: video file missing, set aside."
 
 
 # ---- small helpers ---------------------------------------------------------------------------------------
@@ -123,8 +124,9 @@ def _pitch_cards_without_email() -> tuple[list[dict], list[dict]]:
         if payload.get("email"):
             continue
         lead = db.rows("SELECT name, contact FROM leads WHERE id = ?", payload.get("lead_id"))
-        if lead and mailer.address_in(lead[0]["contact"]) and not mailer.configured():
-            no_mailer.append({**a, "name": lead[0]["name"]})
+        if lead and mailer.address_in(lead[0]["contact"]):
+            if not mailer.configured():
+                no_mailer.append({**a, "name": lead[0]["name"]})
         else:
             no_address.append({**a, "name": lead[0]["name"] if lead else a["title"]})
     return no_address, no_mailer
@@ -163,8 +165,8 @@ def check_approvals() -> list[dict]:
     what = ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in kinds.most_common(4))
     return [_tip("stale_approvals", "organization", "high" if len(rows) >= 10 else "medium",
                  f"{_plural(len(rows), 'card has', 'cards have')} waited in Approvals over {STALE_APPROVAL_HOURS // 24} days",
-                 f"{what}. The oldest is {oldest / 24:.0f} days old. Old cards bury the new ones, and pitches and "
-                 "campaigns go stale while they wait.",
+                 f"{what}. The oldest is {oldest / 24:.0f} days old. Old cards bury the new ones, and a pitch "
+                 "goes stale while it waits.",
                  "Go through them in one sitting: approve what you still want and press Drop or Reject on the rest.",
                  ("Open Approvals", "/#approvals"))]
 
@@ -175,33 +177,39 @@ def check_waiting_clips() -> list[dict]:
     if not pending:
         return []
     tips = []
-    old = [c for c in pending if _hours_since(c["created_at"]) > STALE_CLIP_HOURS]
-    if old or len(pending) >= 15:
-        tips.append(_tip("clips_waiting", "organization", "high" if len(pending) >= 15 else "medium",
-                         f"{_plural(len(pending), 'clip is', 'clips are')} waiting for your yes or no",
-                         f"{len(old)} of them for over a day. Clips lose their moment fast: a funny stream moment "
-                         "is worth most in its first day or two.",
+    broken = _broken_clip_ids()
+    old = [c for c in pending if _hours_since(c["created_at"]) > STALE_CLIP_HOURS and c["id"] not in broken]
+    if old or len(pending) - len(broken) >= 15:
+        n = len(pending) - len(broken)
+        waited = (f"{'All' if len(old) == n else len(old)} of them for over a day. " if old else "")
+        tips.append(_tip("clips_waiting", "organization", "high" if n >= 15 else "medium",
+                         f"{_plural(n, 'clip is', 'clips are')} waiting for your yes or no",
+                         f"{waited}Clips lose their moment fast: a funny stream moment is worth most in its first "
+                         "day or two.",
                          "Approve or reject them in one go. Rejecting teaches Chad your taste, so don't skip the no's.",
                          ("Open Approvals", "/#approvals")))
     cfg = review._chad_settings()
     issues = Counter()
     flagged = 0
     for c in pending:
+        if c["id"] in broken:
+            continue   # they get their own tip below
         found = review.clip_issues(c, cfg)
         flagged += bool(found)
         issues.update(i.split(":")[0].split(" (")[0] for i in found)
-    broken = _broken_clip_ids()
+    checked = len(pending) - len(broken)
     if broken:
         tips.append(_tip("broken_clips", "quality", "medium",
                          f"{_plural(len(broken), 'waiting clip has', 'waiting clips have')} no video file any more",
                          "Their files were moved or deleted, so they can never be posted, but they still sit in your "
-                         "approval list.", "Set them aside (they're marked rejected; nothing is deleted).",
+                         "approval list.", "Set them aside. They leave your approval list without counting as "
+                         "rejections, so Chad's sense of your taste isn't thrown off.",
                          ("Open Approvals", "/#approvals"), ("set_aside_broken", f"Set aside {_plural(len(broken), 'clip')}")))
     if flagged >= 2:
         top = "; ".join(f"{k} ({n})" for k, n in issues.most_common(3))
         tips.append(_tip("flagged_clips", "quality", "low",
-                         (f"All {flagged} waiting clips have a problem" if flagged == len(pending)
-                          else f"{flagged} of the {len(pending)} waiting clips have a problem"),
+                         (f"All {flagged} waiting clips have a problem" if flagged == checked
+                          else f"{flagged} of the {checked} waiting clips have a problem"),
                          f"Most common: {top}. The problem is written on each clip's card.",
                          "Reject the flagged ones first; the rest are quicker to judge after that.",
                          ("Open Approvals", "/#approvals")))
@@ -210,8 +218,8 @@ def check_waiting_clips() -> list[dict]:
 
 def check_clip_quality() -> list[dict]:
     """How many of Chad's clips Steven turns down, and whether one streamer is the cause."""
-    rows = db.rows("SELECT creator, status FROM clips WHERE created_at >= ? AND status != 'pending_approval'",
-                   _ago(days=7))
+    rows = db.rows("SELECT creator, status FROM clips WHERE created_at >= ? AND status != 'pending_approval' "
+                   "AND COALESCE(boss_note, '') NOT LIKE ?", _ago(days=7), f"%{SET_ASIDE_NOTE}%")
     if len(rows) < 5:
         return []
     rejected = [r for r in rows if r["status"] == "rejected"]
@@ -222,11 +230,11 @@ def check_clip_quality() -> list[dict]:
                    for c, n in by_creator.items()]
     bad_creator = [(c, k, n) for c, k, n in bad_creator if k >= 3 and k / n >= 0.6]
     if rate >= REJECT_RATE:
-        wasted = _spend(_ago(days=7), "Chad") * rate
+        wasted = _spend(_ago(days=7), "Chad") * rate   # rough: Chad's week of Claude, in proportion
         tips.append(_tip("reject_rate", "quality", "medium",
                          f"You rejected {rate:.0%} of Chad's clips this week",
-                         f"{len(rejected)} of {len(rows)} decided clips. That's about {_usd(wasted)} of Chad's Claude "
-                         "time on clips nobody will see.",
+                         f"{len(rejected)} of {len(rows)} decided clips. That's roughly {_usd(wasted)} of Chad's "
+                         "Claude spend on clips nobody will see.",
                          "Tell the Boss in one sentence what you keep rejecting (too long, no punchline, wrong streamer). "
                          "Chad reads your approvals and rejections each time he picks moments.",
                          ("Talk to the Boss", "/#boss")))
@@ -234,8 +242,9 @@ def check_clip_quality() -> list[dict]:
         tips.append(_tip(f"reject_creator_{re.sub(r'[^a-z0-9]+', '_', creator.lower())}", "quality", "low",
                          f"Most clips of {creator} get rejected",
                          f"You turned down {k} of {n} this week.",
-                         f"Take {creator} off the list of streamers Chad clips, or tell the Boss what would make their "
-                         "clips worth keeping.", ("Open Clips", "/#clips")))
+                         f"Tell the Boss what's wrong with {creator}'s clips so Chad picks better ones. If they're "
+                         f"never worth it, stop clipping {creator}: ask Claude in the project to take them off Chad's "
+                         "list (the Clips tab can add streamers but not remove them yet).", ("Talk to the Boss", "/#boss")))
     return tips
 
 
@@ -300,8 +309,8 @@ def check_pitch() -> list[dict]:
         tips.append(_tip("pitch_stuck_sending", "quality", "high",
                          f"{_plural(len(stuck), 'pitch is', 'pitches are')} stuck half-sent",
                          ", ".join(s["name"] for s in stuck[:4]) + ". HQ was probably closed while it was emailing.",
-                         "Check your Gmail Sent folder: if it went, tell the Boss to mark the lead pitched; if not, "
-                         "tell the Boss to put it back as a draft.", ("Open Pitch", "/#pitch")))
+                         "Look in your Gmail Sent folder. If it went, tell the Boss \"mark that lead pitched\"; if it "
+                         "didn't, tell the Boss \"mark that lead drafted\" so you can send it again.", ("Talk to the Boss", "/#boss")))
     return tips
 
 
@@ -309,7 +318,7 @@ def check_tasks() -> list[dict]:
     tips = []
     # agents that fail a lot this week
     rows = db.rows("SELECT agent, status, result FROM tasks WHERE updated_at >= ? AND status IN ('done', 'failed') "
-                   "AND created_by != 'Sweep'", _ago(days=7))
+                   "AND created_by != 'Sweep' AND COALESCE(result, '') NOT LIKE 'Sweep: cancelled%'", _ago(days=7))
     by_agent: dict[str, list[dict]] = {}
     for r in rows:
         by_agent.setdefault(r["agent"], []).append(r)
@@ -338,12 +347,11 @@ def check_tasks() -> list[dict]:
     for (agent, instructions), n in streaks.items():
         if n >= EMPTY_RUNS:
             last = next(t["result"] for t in done if t["agent"] == agent and t["instructions"] == instructions)
+            do, link = EMPTY_ADVICE.get(agent.lower(), (f"Ask the Boss why {agent} keeps finding nothing.",
+                                                         ("Talk to the Boss", "/#boss")))
             tips.append(_tip(f"empty_{agent.lower()}", "efficiency", "low",
                              f"{agent}'s last {n} scheduled rounds found nothing",
-                             f"\"{instructions}\" keeps ending with: \"{last[:140]}\"",
-                             "Give it more to work with (more streamers on the Clips tab, a wider viewer range for "
-                             "Pitch in Settings), or ask the Boss to run it less often.",
-                             ("Open Settings", "/settings")))
+                             f"\"{instructions}\" keeps ending with: \"{last[:140]}\"", do, link))
     # duplicate jobs sitting in the queue
     dupes = _queue_duplicates()
     if dupes:
@@ -364,22 +372,50 @@ def check_tasks() -> list[dict]:
                          "looping: start a fresh Boss chat and tell it to check before asking again.",
                          ("Open Activity", "/#activity")))
     # jobs waiting much longer than they should
-    late = db.rows("SELECT COUNT(*) n, MIN(created_at) oldest FROM tasks WHERE status = 'queued'")[0]
-    if late["n"] and late["oldest"] and _hours_since(late["oldest"]) > QUEUE_LATE_HOURS:
-        from .agents.chad.publish import paused
-        if paused():
-            tips.append(_tip("paused", "organization", "medium", "HQ is paused",
-                             f"{_plural(late['n'], 'job is', 'jobs are')} waiting and nothing posts until you resume.",
-                             "Press Resume at the top of HQ (or send \"resume\" in Telegram) when you're ready.",
-                             ("Open Home", "/#home")))
-        else:
-            tips.append(_tip("queue_late", "efficiency", "high",
-                             f"{_plural(late['n'], 'job has', 'jobs have')} been waiting over {QUEUE_LATE_HOURS} hours",
-                             f"The oldest was queued {_hours_since(late['oldest']):.0f} hours ago. Agents may have "
-                             "stopped, or one long job is holding the line.",
-                             "Check for the red \"agents stopped\" bar at the top of HQ. If you see it, close HQ and "
-                             "open it again.", ("Open Activity", "/#activity")))
+    tips += _late_queue()
     return tips
+
+
+EMPTY_ADVICE = {  # agent -> (what to do, where) when its scheduled rounds keep finding nothing
+    "chad": ("Add more streamers in the \"Streamers Chad can clip\" box on the Clips tab, or press \"Clip the top "
+             "streamers now\" there.", ("Open Clips", "/#clips")),
+    "pitch": ("Widen the viewer range (Smallest and Biggest streamer) in Settings, Pitch section.", ("Open Settings", "/settings")),
+    "scout": ("Paste campaign links into the Boss chat so Scout has something to rate.", ("Talk to the Boss", "/#boss")),
+}
+
+
+def _late_queue() -> list[dict]:
+    """Jobs waiting much longer than they should. Chad's video lane runs one long job at a time, so Chad jobs queued
+    behind a running clipping job are normal; anything else waiting hours means the agents stopped or are stuck."""
+    from . import worker
+    from .agents.chad.publish import paused
+    queued = db.rows("SELECT agent, created_at FROM tasks WHERE status = 'queued'")
+    late = [q for q in queued if _hours_since(q["created_at"]) > QUEUE_LATE_HOURS]
+    if not late:
+        return []
+    if paused():
+        return [_tip("paused", "organization", "medium", "HQ is paused",
+                     f"{_plural(len(queued), 'job is', 'jobs are')} waiting and nothing posts until you resume.",
+                     "Press Resume at the top of HQ (or send \"resume\" in Telegram) when you're ready.",
+                     ("Open Home", "/#home"))]
+    quiet = worker.seconds_since_last_round()
+    video_busy = db.rows("SELECT 1 FROM tasks WHERE status = 'running' AND LOWER(agent) IN ({}) LIMIT 1".format(
+        ", ".join("?" for _ in worker.SLOW_AGENTS)), *worker.SLOW_AGENTS)
+    if video_busy and (quiet is None or quiet < 20 * 60):
+        late = [q for q in late if q["agent"].lower() not in worker.SLOW_AGENTS]
+        if not late:
+            return []
+    oldest = max(_hours_since(q["created_at"]) for q in late)
+    stopped = quiet is not None and quiet > 20 * 60
+    return [_tip("queue_late", "efficiency", "high",
+                 f"{_plural(len(late), 'job has', 'jobs have')} been waiting over {QUEUE_LATE_HOURS} hours",
+                 f"The oldest was queued {oldest:.0f} hours ago. " +
+                 (f"The agents haven't done a round for {quiet / 60:.0f} minutes, so they've stopped." if stopped else
+                  "The agents are running, so one job is probably stuck and holding up the rest."),
+                 ("Close HQ and open it again. The waiting jobs start on their own." if stopped else
+                  "Check the Activity tab for a job that started but never finished. Sweep puts a stuck job back "
+                  "in the queue after an hour; if it keeps happening, close HQ and open it again."),
+                 ("Open Activity", "/#activity"))]
 
 
 def check_boss() -> list[dict]:
@@ -398,7 +434,8 @@ def check_boss() -> list[dict]:
                          ("fresh_boss_chat", "Start a fresh Boss chat")))
     tokens = _boss_chat_tokens()
     if tokens >= BOSS_CHAT_LONG_TOKENS and not tips:
-        per = tokens * 4 / 1e6 * 0.1   # cached read price of the Boss's default model, per message
+        from .config import PRICES, UNKNOWN_PRICE, model_for
+        per = tokens * PRICES.get(model_for("boss"), UNKNOWN_PRICE)[0] / 1e6 * 0.1   # cached reads cost a tenth
         tips.append(_tip("boss_chat_long", "efficiency", "low",
                          f"The Boss chat is long (about {tokens // 1000}k tokens)",
                          f"All of it is sent again with every message. Even cached that's about {_usd(per)} a message, "
@@ -433,7 +470,7 @@ def check_money() -> list[dict]:
         tips.append(_tip("budget_hits", "money", "medium",
                          f"The daily budget ran out on {hit} of the last 7 days",
                          f"After {_usd(DAILY_BUDGET)} scheduled work stops for the day, so agents keep finishing late.",
-                         "Accept cheaper models for small agents when Sweep asks in Approvals, or raise "
+                         "Say yes when Sweep offers a cheaper model for a small agent in Approvals, or raise "
                          "HQ_DAILY_BUDGET a little in Settings.", ("Open Settings", "/settings#k-HQ_DAILY_BUDGET")))
     if football_hit >= 2:
         tips.append(_tip("football_budget_hits", "money", "low",
@@ -515,8 +552,8 @@ def unit_costs() -> list[dict]:
     made = {
         "Chad": (db.rows("SELECT COUNT(*) n FROM clips WHERE created_at >= ?", since)[0]["n"], "clip"),
         "Pitch": (db.rows("SELECT COUNT(*) n FROM leads WHERE created_at >= ?", since)[0]["n"], "draft"),
-        "Boss": (db.rows("SELECT COUNT(*) n FROM boss_messages WHERE role = 'user' AND created_at >= ?", since)[0]["n"],
-                 "message"),
+        "Boss": (sum(1 for m in db.rows("SELECT content FROM boss_messages WHERE role = 'user' AND created_at >= ?", since)
+                     if _text_of(m["content"])), "message"),
         "Scout": (db.rows("SELECT COUNT(*) n FROM campaigns WHERE created_at >= ?", since)[0]["n"], "campaign"),
     }
     out = []
@@ -552,10 +589,12 @@ def _fix_cancel_duplicates() -> str:
 
 
 def _fix_set_aside_broken() -> str:
+    """Marked failed, not rejected: Chad learns Steven's taste from his rejections, and a lost file says nothing
+    about taste. Failed clips never post and drop out of the approval list."""
     ids = _broken_clip_ids()
     for cid in ids:
-        db.execute("UPDATE clips SET status = 'rejected', boss_note = COALESCE(boss_note || ' ', '') || ? "
-                   "WHERE id = ? AND status = 'pending_approval'", "Sweep: video file missing, set aside.", cid)
+        db.execute("UPDATE clips SET status = 'failed', boss_note = COALESCE(boss_note || ' ', '') || ? "
+                   "WHERE id = ? AND status = 'pending_approval'", SET_ASIDE_NOTE, cid)
     return (f"Set aside {_plural(len(ids), 'clip')} with no video file: " + ", ".join(f"#{i}" for i in ids) + "."
             if ids else "Every waiting clip still has its video.")
 
