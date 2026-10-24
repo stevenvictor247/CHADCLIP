@@ -145,3 +145,14 @@ def test_recheck_button_endpoint_queues_a_pitch_task():
     assert r.status_code == 200
     t = db.rows("SELECT agent, params FROM tasks")[-1]
     assert t["agent"] == "Pitch" and json.loads(t["params"]) == {"recheck": True}
+
+
+def test_find_only_drafts_for_creators_with_an_email_whatever_the_settings(monkeypatch):
+    monkeypatch.setattr(pitch_mod, "settings", lambda: {**CFG, "require_email": False})
+    monkeypatch.setattr(pitch_mod.twitch, "small_streamers", lambda *a, **k: [
+        {"login": "nomail", "name": "NoMail", "id": "1", "viewers": 300, "game": "X"}])
+    monkeypatch.setattr(pitch_mod.twitch, "profile", lambda uid: {"bio": "vibes", "type": ""})
+    monkeypatch.setattr(pitch_mod.twitch, "top_clips", lambda *a, **k: [])
+    pages(monkeypatch, {})
+    assert "public email" in Pitch().run({"params": json.dumps({"find": 5})})
+    assert db.rows("SELECT * FROM leads") == []
