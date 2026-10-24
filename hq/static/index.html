@@ -260,7 +260,7 @@
       <div class="meta" style="margin-bottom:6px">Add a streamer and how you're allowed to clip them (their public clipping policy, a clipping program, or their OK). Chad skips anyone who isn't listed.</div>
       <div class="row"><input id="allowedlogin" value="jynxzi" placeholder="Twitch name, like jynxzi" style="flex:1"><input id="allowedhow" value="Steven: public open-clipping policy, Oct 23" placeholder="How you're allowed to clip them" style="flex:2"><button onclick="addAllowed()">Add</button></div>
       <div id="allowed"></div>
-      <div class="row"><button class="ghost" onclick="clipNow()">Clip the top streamers now</button></div>
+      <div class="row"><button class="ghost" onclick="clipNow()">Clip the top streamers now</button> <button class="ghost" onclick="clipPast()">Clip past streams of everyone allowed</button></div>
     </section>
     <section id="creatorsection" style="display:none">
       <h2>Creators to clip <span class="count" id="creatorcount"></span></h2>
@@ -626,7 +626,9 @@ async function setLead(id, status) {
   shownLeads = null; refresh();
 }
 
+let allowedLogins = [];
 function renderAllowed(list) {
+  allowedLogins = list.map(a => a.login);
   $("allowedcount").textContent = list.length || "";
   $("allowed").innerHTML = list.length ? list.map(a => `<div class="meta"><a href="https://twitch.tv/${esc(a.login)}" target="_blank" rel="noopener">${esc(a.login)}</a> — ${esc(a.how)}</div>`).join("")
     : `<div class="meta">Nobody yet, so Chad has no one to clip.</div>`;
@@ -643,6 +645,14 @@ async function clipNow() {
   const res = await fetch("/api/tasks", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"},
     body: JSON.stringify({agent: "Chad", instructions: "Clip the most-viewed recent Twitch clips of streamers I have permission for", params: {twitch_top: 100, days: 7, per_streamer: 3}})});
   toast(res.ok ? "Chad is on it. Clips will show up in Approvals." : "Couldn't start Chad");
+}
+
+async function clipPast() {
+  const logins = allowedLogins;
+  if (!logins.length) { toast("Add a streamer you're allowed to clip first"); return; }
+  for (const login of logins) await fetch("/api/tasks", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"},
+    body: JSON.stringify({agent: "Chad", instructions: "Clip " + login + "'s past streams", params: {vods: login}})});
+  toast("Chad is going through their past streams. Clips will show up in Approvals.");
 }
 
 let shownCreators = null;

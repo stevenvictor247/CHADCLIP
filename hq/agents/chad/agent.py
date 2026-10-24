@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from ... import db
+from ... import db, ledger
 from ...config import CLIPS_DIR, CONFIG_DIR
 from ..base import Agent
 from . import editor, moments, sources, twitch
@@ -33,7 +33,7 @@ class Chad(Agent):
             role="Clipper. Finds the best moments in chosen creators' videos, cuts them into vertical clips "
                  "with captions, and queues them for posting to TikTok, YouTube Shorts and Instagram Reels.",
             params_help='{"creator": "name from creators.yaml"} to clip one creator; {"url": "video link"} for '
-                        'one video; {"twitch_top": 10, "days": 1, "per_streamer": 2} for the most-viewed recent Twitch clips of the top 10 streamers (only those with permission in streamers.yaml); {"clips": 3} clips per video. No params = check every permitted creator '
+                        'one video; {"twitch_top": 10, "days": 1, "per_streamer": 2} for the most-viewed recent Twitch clips of the top 10 streamers (only those with permission in streamers.yaml); {"vods": "jynxzi", "vod_count": 2, "per_vod": 3} for the funniest viewer-clipped moments in a permitted streamer\'s recent past streams (Twitch deletes VODs after ~14-60 days); {"clips": 3} clips per video. No params = check every permitted creator '
                         "for new videos.",
             schedule=[(every, "Check creators for new videos and clip them.", {})] if every else [],
         )
@@ -42,6 +42,10 @@ class Chad(Agent):
         params = json.loads(task.get("params") or "{}")
         cfg = settings()
         count = int(params.get("clips") or cfg.get("clips_per_video", 3))
+
+        if params.get("vods"):
+            return self.run_vods(task["id"], str(params["vods"]), int(params.get("vod_count", 2)),
+                                 int(params.get("per_vod", 3)), cfg)
 
         if params.get("twitch_top"):
             return self.run_twitch(task["id"], int(params["twitch_top"]), int(params.get("days", 1)),
@@ -103,6 +107,45 @@ class Chad(Agent):
         if skipped:
             out += f" Skipped (no permission recorded in streamers.yaml): {', '.join(skipped)}."
         return out
+
+    def run_vods(self, task_id, login, vod_count, per_vod, cfg) -> str:
+        """Clip the funniest moments out of a permitted streamer's recent past broadcasts (VODs)."""
+        login = login.lower().lstrip("@")
+        if not twitch.permissions().get(login):
+            return (f"Skipped: no permission recorded for {login} in streamers.yaml. "
+                    "Add how you're allowed to clip them first.")
+        if ledger.over_budget():
+            return "Today's budget is spent, so I'm paused until tomorrow."
+        uid = twitch.user_id(login)
+        if not uid:
+            return f"Couldn't find a Twitch channel called {login}."
+        vods = twitch.recent_vods(uid, vod_count)
+        if not vods:
+            return (f"{login} has no past broadcasts saved. Twitch deletes them after about 14 days "
+                    "(60 for partners), unless the streamer saved highlights.")
+        creator = {"name": login, "credit": f"{login} on Twitch", "notes": "Funny moments, big reactions, chaos."}
+        made, lines = 0, []
+        for vod in vods:
+            for m in twitch.vod_hot_moments(uid, vod["id"], per_vod):
+                key = f"vod:{vod['id']}:{int(m['offset'])}"
+                if key in sources._seen():
+                    continue
+                start = max(0.0, m["offset"] - 20)
+                end = m["offset"] + m["duration"] + 25
+                try:
+                    video = sources.download_section(vod["url"], start, end)
+                    n = self.clip_video(task_id, video["path"], m["title"] or vod["title"], video["url"],
+                                        creator, 1, cfg)
+                except Exception as e:  # sub-only or expired VOD, ffmpeg trouble: keep going with the rest
+                    db.log("Chad", f"Skipped a moment in {vod['title']}: {e}")
+                    continue
+                sources.mark_seen(key)
+                made += n
+                lines.append(f"\"{m['title']}\" ({m['views']:,} clip views)")
+        out = f"Made {made} clips from {login}'s last {len(vods)} streams. " + "; ".join(lines)
+        if not lines:
+            out += "No viewer-clipped moments found there yet (or all already done)."
+        return out + " Note: Twitch VODs expire after ~14-60 days, so this only reaches recent streams."
 
     def clip_whole(self, task_id, video, title, views, creator, cfg) -> int:
         """Twitch clips are already short and already picked by viewers, so use the whole thing."""
