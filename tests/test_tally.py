@@ -13,6 +13,7 @@ def posted(monkeypatch, tmp_path):
     db.init()
     monkeypatch.setattr(tally, "INSIGHTS_PATH", tmp_path / "insights.json")
     monkeypatch.setattr(tally, "TALLY_DIR", tmp_path)
+    monkeypatch.setattr(tally, "REPORT_PATH", tmp_path / "report.json")
     db.execute("UPDATE posts SET status = 'skipped' WHERE status = 'posted'")  # leftovers from other tests
 
     def clip(title, creator, seconds):
@@ -88,3 +89,31 @@ def test_chad_hears_what_steven_approved_and_rejected():
     line = tally.your_taste("TasteTest")
     assert "approved clips like \"Clean comeback line\"" in line and "rejected clips like \"Long boring intro\"" in line
     assert tally.your_taste("Nobody-yet")   # falls back to every creator
+
+
+def test_daily_report_shows_change_since_yesterday(posted, monkeypatch, tmp_path):
+    monkeypatch.setattr(tally, "REPORT_PATH", tmp_path / "report.json")
+    sent = []
+    from hq import relay
+    monkeypatch.setattr(relay, "notify", sent.append)
+    a, pa = posted("Huge reaction", "Kai", 31)
+    b, pb = posted("Quiet bit", "Kai", 50)
+    tally._save_views(pa, 1500)
+    tally._save_views(pb, 300)
+    db.execute("DELETE FROM view_snapshots")
+    for pid, v in ((pa, 1000), (pb, 290)):
+        db.execute("INSERT INTO view_snapshots (post_id, day, views) VALUES (?, '2000-01-01', ?)", pid, v)
+    r = tally.build_report()
+    assert r["total"] == 1800 and r["change"] == 510
+    assert r["top"]["name"] == "Huge reaction" and r["top"]["change"] == 500
+    text = tally.send_report()
+    assert "+510 since yesterday" in text and "Youtube: 1,800" in text and sent == [text]
+    assert tally.send_report() == ""                      # once a day on the schedule
+    assert tally.send_report(force=True) and len(sent) == 2   # the button always sends
+
+
+def test_first_report_has_no_change_yet(posted):
+    a, pa = posted("Huge reaction", "Kai", 31)
+    tally._save_views(pa, 40)
+    db.execute("DELETE FROM view_snapshots")
+    assert "first count" in tally.format_report(tally.build_report())

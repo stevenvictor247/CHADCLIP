@@ -248,6 +248,11 @@
     <section id="campsection">
       <h2>Campaigns <span class="count" id="campfound"></span></h2>
       <div class="camp">
+        <div class="meta"><b>Tally's daily view report</b> goes to your phone once a day. Free: it only reads numbers.</div>
+        <pre id="tallyreport" class="meta" style="white-space:pre-wrap;margin:6px 0"></pre>
+        <div class="row"><button class="ghost" onclick="sendTallyReport()">Send view report now</button></div>
+      </div>
+      <div class="camp">
         <div class="meta">Scout checks for campaigns every few hours. Paste campaign links, or a campaign page's text, and it rates them right away. It never joins anything for you.</div>
         <textarea id="inboxtext" rows="3" style="width:100%" placeholder="Paste campaign links (one per line) or the campaign's rules"></textarea>
         <div class="row"><button onclick="addInbox()">Send to Scout</button></div>
@@ -453,6 +458,7 @@ async function refresh() {
   }
   renderApprovals(s.approvals || []);
   renderCampaigns(s.campaigns || []);
+  $("tallyreport").textContent = s.tally?.report || "No report yet. Tap the button once a clip is posted.";
   renderInbox(s.scout_inbox || []);
   renderCreators(s.creator_picks || []);
   renderAllowed(s.allowed_creators || []);
@@ -590,6 +596,11 @@ window.hqShowApprovals = village => {
   $("apprsection").scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"});
   return true;
 };
+async function sendTallyReport() {
+  const r = await (await fetch("/api/tally/report", {method: "POST", headers: {"X-HQ": "1"}})).json();
+  toast("Tally is counting. The report shows here and goes to Telegram in a moment.");
+  refresh();
+}
 async function recheckEmails() {
   const r = await (await fetch("/api/pitch/recheck", {method: "POST", headers: {"X-HQ": "1"}})).json();
   toast(esc(r.message));
