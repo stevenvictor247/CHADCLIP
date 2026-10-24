@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from . import db, sweep
+from . import db, quality, sweep
 
 router = APIRouter()
 STATIC = Path(__file__).parent / "static"
@@ -31,6 +31,31 @@ def sweep_run(request: Request):
     """Ask Sweep to tidy up and send the report now. It runs in the background like any other job."""
     _from_hq_page(request)
     return {"task_id": db.create_task("Sweep", "Tidy up and send the report now.", {"report": True}, created_by="Steven")}
+
+
+@router.post("/api/sweep/fix/{fix_id}")
+def sweep_fix(fix_id: str, request: Request):
+    """A one-tap fix from the improvement report. Each is small and safe: none posts, emails, spends or changes settings."""
+    _from_hq_page(request)
+    try:
+        message = quality.apply_fix(fix_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    sweep._refresh_latest()
+    return {"message": message}
+
+
+@router.post("/api/sweep/hide/{tip_id}")
+def sweep_hide(tip_id: str, request: Request):
+    """Hide one improvement idea for a week (it comes back if it's still true)."""
+    _from_hq_page(request)
+    return {"message": sweep.snooze(tip_id[:80])}
+
+
+@router.post("/api/sweep/unhide/{tip_id}")
+def sweep_unhide(tip_id: str, request: Request):
+    _from_hq_page(request)
+    return {"message": sweep.unsnooze(tip_id[:80])}
 
 
 @router.post("/api/sweep/restore/{trash_id}")
