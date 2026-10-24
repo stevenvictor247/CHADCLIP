@@ -16,6 +16,7 @@ from .config import DATA_DIR
 
 TALLY_DIR = DATA_DIR / "tally"
 INSIGHTS_PATH = TALLY_DIR / "insights.json"
+REPORT_PATH = TALLY_DIR / "report.json"   # the latest daily report; also says which day it was last sent
 LOOK_BACK_DAYS = 60     # posts older than this stop being re-counted
 BEST_WINDOW_DAYS = 14   # "what worked lately"
 
@@ -145,10 +146,89 @@ def summary() -> dict:
     week = db.rows("SELECT COUNT(*) n, COALESCE(SUM(views), 0) v FROM posts WHERE status = 'posted' AND views IS NOT NULL "
                    "AND created_at >= ?", _ago(7))[0]
     return {"posts_counted_7d": week["n"], "views_7d": week["v"], "best": best_clips(limit=3),
-            "estimated_campaign_pay_usd": estimated_pay()}
+            "estimated_campaign_pay_usd": estimated_pay(), "report": _saved_report().get("text", "")}
 
 
-def run() -> str:
+def _today() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def snapshot() -> int:
+    """Save today's view count for every counted post, so tomorrow's report can say what changed."""
+    with db.connect() as c:
+        return c.execute("INSERT OR REPLACE INTO view_snapshots (post_id, day, views) SELECT id, ?, views FROM posts "
+                         "WHERE status = 'posted' AND views IS NOT NULL", (_today(),)).rowcount
+
+
+def build_report() -> dict:
+    """Views per platform and per clip, and the change since the last day we counted. No Claude, just arithmetic."""
+    today = _today()
+    posts = db.rows("SELECT p.id, p.platform, p.views, c.id clip_id, c.title, c.creator, "
+                    "(SELECT views FROM view_snapshots s WHERE s.post_id = p.id AND s.day < ? "
+                    "ORDER BY s.day DESC LIMIT 1) before FROM posts p JOIN clips c ON c.id = p.clip_id "
+                    "WHERE p.status = 'posted' AND p.views IS NOT NULL AND p.created_at >= ?", today, _ago(LOOK_BACK_DAYS))
+    platforms: dict[str, dict] = {}
+    clips: dict[int, dict] = {}
+    for p in posts:
+        change = None if p["before"] is None else p["views"] - p["before"]
+        for bucket, key, label in ((platforms, p["platform"], p["platform"]), (clips, p["clip_id"], p["title"])):
+            b = bucket.setdefault(key, {"name": label, "views": 0, "change": 0, "has_change": False})
+            b["views"] += p["views"]
+            if change is not None:
+                b["change"] += change
+                b["has_change"] = True
+    plat = sorted(platforms.values(), key=lambda b: -b["views"])
+    clip_list = sorted(clips.values(), key=lambda b: -b["views"])
+    gaining = [c for c in clip_list if c["has_change"] and c["change"] > 0]
+    top = max(gaining, key=lambda c: c["change"]) if gaining else (clip_list[0] if clip_list else None)
+    return {"day": today, "total": sum(b["views"] for b in plat),
+            "change": sum(b["change"] for b in plat) if any(b["has_change"] for b in plat) else None,
+            "platforms": plat, "clips": clip_list[:10], "top": top, "top_is_gain": bool(gaining)}
+
+
+def _delta(b: dict) -> str:
+    return f" ({b['change']:+,} since yesterday)" if b["has_change"] else " (first count)"
+
+
+def format_report(r: dict) -> str:
+    if not r["clips"]:
+        return "Tally: no counted views yet. Counting starts once a real account (YouTube first) is posting."
+    head = f"📊 Tally daily views: {r['total']:,} total"
+    if r["change"] is not None:
+        head += f", {r['change']:+,} since yesterday"
+    lines = [head, ""]
+    lines += [f"{b['name'].title()}: {b['views']:,}{_delta(b)}" for b in r["platforms"]]
+    if r["top"]:
+        t = r["top"]
+        lines += ["", ("Top climber: " if r["top_is_gain"] else "Top clip: ") + f"\"{t['name']}\" {t['views']:,}{_delta(t)}"]
+    lines += ["", "Per clip:"] + [f"• \"{c['name'][:50]}\" {c['views']:,}{_delta(c)}" for c in r["clips"]]
+    return "\n".join(lines)
+
+
+def _saved_report() -> dict:
+    try:
+        return json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def send_report(force: bool = False) -> str:
+    """Send the daily view report to the dashboard and Telegram. On a schedule it goes out once a day; force sends now."""
+    saved = _saved_report()
+    if not force and saved.get("sent_day") == _today():
+        return ""
+    text = format_report(build_report())
+    from . import relay
+    relay.notify(text)
+    db.log("Tally", text)
+    TALLY_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = REPORT_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"sent_day": _today(), "sent_at": db.now(), "text": text}, indent=2), encoding="utf-8")
+    tmp.replace(REPORT_PATH)
+    return text
+
+
+def run(send_now: bool = False) -> str:
     counted, problems = 0, []
     for platform, fetch in FETCHERS.items():
         if not _posts(platform):
@@ -158,7 +238,9 @@ def run() -> str:
         problems += errs
     synced = sync_submissions()
     data = write_insights()
+    snapshot()
     if not counted and not problems:
+        send_report(force=send_now)
         return "No posted clips to count yet. Tally starts once a real account (YouTube first) is posting."
     out = f"Counted views on {counted} posts; updated {synced} campaign submissions."
     if data["best"]:
@@ -167,4 +249,5 @@ def run() -> str:
     if problems:
         out += " Problems: " + "; ".join(problems)
     db.log("Tally", out)
+    send_report(force=send_now)
     return out

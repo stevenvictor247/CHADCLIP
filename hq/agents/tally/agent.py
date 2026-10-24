@@ -1,5 +1,7 @@
 """Tally: the counting house. Reads view counts for posted clips and tells Chad what worked."""
 
+import json
+
 from ... import tally
 from ..base import Agent
 
@@ -10,11 +12,11 @@ class Tally(Agent):
             name="Tally",
             role="The counter. Reads the views on every posted clip, fills in campaign submissions, works out what "
                  "the campaigns should pay, and tells Chad which clips did best so he picks better moments.",
-            params_help="No params: count views now. Tally only reads numbers; it never posts or changes anything "
+            params_help="No params: count views now. {\"report\": true} also sends the daily view report right away. Tally only reads numbers; it never posts or changes anything "
                         "on your accounts.",
             schedule=[(12, "Count views on posted clips.", {})],
             free=True,  # reads platform numbers only; never calls Claude
         )
 
     def run(self, task: dict) -> str:
-        return tally.run()
+        return tally.run(send_now=bool(json.loads(task.get("params") or "{}").get("report")))

@@ -368,6 +368,11 @@ def update_submission(submission_id: int, body: SubmissionIn):
     return {"ok": True}
 
 
+@app.post("/api/tally/report")
+def tally_report():
+    return {"task_id": db.create_task("Tally", "Count views and send the daily view report now.", {"report": True}, created_by="Steven")}
+
+
 @app.post("/api/pitch/recheck")
 def pitch_recheck():
     db.create_task("Pitch", "Look for emails for pitches waiting for approval that have none.", {"recheck": True}, created_by="Steven")

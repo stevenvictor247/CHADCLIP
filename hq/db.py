@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS posts (
     error TEXT,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS view_snapshots (
+    post_id INTEGER NOT NULL,
+    day TEXT NOT NULL,                           -- local date, one row per post per day (Tally's daily report)
+    views INTEGER NOT NULL,
+    PRIMARY KEY (post_id, day)
+);
 CREATE TABLE IF NOT EXISTS boss_messages (
     id INTEGER PRIMARY KEY,
     conversation INTEGER NOT NULL DEFAULT 1,
