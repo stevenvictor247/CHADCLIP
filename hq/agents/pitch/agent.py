@@ -346,6 +346,12 @@ class Pitch(Agent):
             found = finder.find_email(lead["platform"], lead["handle"], bio, links, retry_misses=True)
             if not found:
                 missing.append(lead["name"])
+                looked = ", ".join(finder.LAST_CHECKED[:3]) or "no links in their bio"
+                note = f"Checked {db.now()[:10]}: no public email found (Twitch bio, {looked}). Reach them on Twitch, X or Instagram."
+                lines = [l for l in a["preview"].split("\n") if not l.startswith("Checked ")]
+                with db.connect() as c:
+                    c.execute("UPDATE approvals SET preview = ? WHERE id = ? AND status = 'pending'",
+                              ("\n".join(lines[:1] + [note] + lines[1:]), a["id"]))
                 continue
             to, cfg_ok = found["email"], mailer.configured()
             how = f"Pressing Send email sends this from {mailer.credentials()[0]} to {to}.\n" if cfg_ok else ""

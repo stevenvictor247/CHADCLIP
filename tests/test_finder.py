@@ -131,6 +131,9 @@ def test_recheck_switches_waiting_cards_to_send_email(monkeypatch):
     assert linked["yes_label"] == "Send email" and linked["payload"]["email"] is True
     assert "Email found via their website" in linked["preview"] and "Contact: biz@linked.gg" in linked["preview"]
     assert bare["yes_label"] == "I'll send it"
+    assert "no public email found" in bare["preview"] and "Reach them on Twitch" in bare["preview"]
+    Pitch().run({"params": json.dumps({"recheck": True})})  # a second run replaces the note instead of stacking it
+    assert approvals.pending()[1]["preview"].count("Checked ") == 1
     assert db.rows("SELECT contact FROM leads WHERE handle = 'linked'")[0]["contact"] == "biz@linked.gg"
 
 
