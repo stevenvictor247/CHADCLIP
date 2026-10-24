@@ -572,7 +572,9 @@ function renderApprovals(list) {
   const key = want + JSON.stringify(list);
   if (key === shownApprovals) return;
   shownApprovals = key;
-  $("approvals").innerHTML = (list.length || !want ? "" : `<div class="muted">Nothing waiting in ${esc(VILLAGE[want])}.</div>`) +
+  const noEmail = list.some(a => a.kind === "pitch" && !(a.payload || {}).email);
+  $("approvals").innerHTML = (noEmail ? `<div class="row"><button class="ghost" onclick="recheckEmails()">Find emails for pitches that say "I'll send it"</button></div>` : "") +
+    (list.length || !want ? "" : `<div class="muted">Nothing waiting in ${esc(VILLAGE[want])}.</div>`) +
     list.map(a => `<div class="camp"><h3>${esc(a.title)} <span class="tag">${esc(a.agent)}</span>${villages.size > 1 || a.village === "football"
       ? `<span class="tag village-${esc(a.village || "business")}">${VILLAGE[a.village || "business"]}</span>` : ""}</h3>
     <pre>${esc(a.preview)}</pre>
@@ -588,6 +590,10 @@ window.hqShowApprovals = village => {
   $("apprsection").scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"});
   return true;
 };
+async function recheckEmails() {
+  const r = await (await fetch("/api/pitch/recheck", {method: "POST", headers: {"X-HQ": "1"}})).json();
+  toast(esc(r.message));
+}
 async function decideApproval(id, decision) {
   const r = await (await fetch(`/api/approvals/${id}/${decision}`, {method: "POST", headers: {"X-HQ": "1"}})).json();
   toast(esc((r.message || "Done").split("\n")[0]));
