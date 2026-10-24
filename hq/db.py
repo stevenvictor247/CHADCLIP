@@ -144,6 +144,15 @@ CREATE TABLE IF NOT EXISTS leads (
     updated_at TEXT NOT NULL,
     UNIQUE (platform, handle)
 );
+CREATE TABLE IF NOT EXISTS email_finds (
+    platform TEXT NOT NULL,
+    handle TEXT NOT NULL,
+    email TEXT,                                  -- NULL = looked and found nothing
+    source TEXT,
+    url TEXT,
+    found_at TEXT NOT NULL,
+    PRIMARY KEY (platform, handle)
+);
 CREATE TABLE IF NOT EXISTS do_not_contact (
     email TEXT PRIMARY KEY,
     reason TEXT,

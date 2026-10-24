@@ -61,6 +61,14 @@ def profile(user_id: str) -> dict:
     return {"bio": u.get("description", ""), "type": u.get("broadcaster_type", "")}
 
 
+def profile_by_login(login: str) -> dict:
+    """Same as profile(), looked up by channel name (for leads saved without their Twitch id)."""
+    r = requests.get(f"{HELIX}/users", headers=_headers(), params={"login": login}, timeout=30)
+    r.raise_for_status()
+    u = (r.json()["data"] or [{}])[0]
+    return {"bio": u.get("description", ""), "type": u.get("broadcaster_type", "")}
+
+
 def top_clips(broadcaster_id: str, days: int = 1, limit: int = 5) -> list[dict]:
     """Most-viewed clips from the last `days` days (Twitch returns them sorted by views)."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")

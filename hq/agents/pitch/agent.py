@@ -1,7 +1,6 @@
 """Pitch: finds creators who might pay for clipping and drafts the message. You approve and send it yourself."""
 
 import json
-import re
 from datetime import datetime, timedelta, timezone
 
 import yaml
@@ -10,7 +9,7 @@ from ... import approvals, db, llm, relay
 from ...config import CONFIG_DIR, model_for
 from ..base import Agent
 from ..chad import twitch
-from . import mailer
+from . import finder, mailer
 
 SYSTEM = """You write the first message from Steven, a clipper, to a streamer or podcaster who might pay him to clip
 their content for TikTok, YouTube Shorts and Instagram Reels.
@@ -51,7 +50,6 @@ SCHEMA = {
 }
 
 MAX_PROFILE_CHECKS = 150  # most Twitch profiles one find run looks at
-EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 STATUSES = ("new", "drafted", "pitched", "replied", "client", "dead", "dropped", "do_not_contact")
 
 
@@ -212,13 +210,14 @@ class Pitch(Agent):
                         '{"lead": {"name": "...", "platform": "youtube", "handle": "...", "contact": "email or link", '
                         '"notes": "what you know about them"}} to draft a pitch for someone you found; {"followups": true}; '
                         '{"mark": {"lead_id": 1, "status": "replied|client|dead|do_not_contact", "note": "..."}}; '
-                        '{"do_not_contact": "email@example.com"}; {"report": true}.',
+                        '{"do_not_contact": "email@example.com"}; {"recheck": true} to look for emails for pitches already waiting for your OK; {"report": true}.',
             schedule=self._schedule(),
         )
 
     @staticmethod
     def _schedule() -> list:
-        out = [(24, "Check which pitched leads need a follow-up.", {"followups": True})]
+        out = [(24, "Check which pitched leads need a follow-up.", {"followups": True}),
+               (24, "Look for emails for pitches waiting for approval that have none.", {"recheck": True})]
         try:
             cfg = settings()
         except Exception:
@@ -240,6 +239,8 @@ class Pitch(Agent):
             return self.mark(params["mark"])
         if params.get("followups"):
             return self.followups()
+        if params.get("recheck"):
+            return self.recheck()
         return self.report()
 
     # ---- finding and drafting ----
@@ -267,7 +268,8 @@ class Pitch(Agent):
                 break
             checked += 1
             info = twitch.profile(s["id"])
-            email = next(iter(EMAIL.findall(info["bio"])), None)
+            found = finder.find_email("twitch", s["login"], info["bio"])
+            email = found and found["email"]
             if only_email and not email:
                 continue
             clips = twitch.top_clips(s["id"], days=14, limit=1)
@@ -278,11 +280,12 @@ class Pitch(Agent):
                 facts.append(f"Their most-viewed clip lately: \"{clips[0]['title']}\" ({clips[0]['views']:,} views).")
             lead = {"name": s["name"], "platform": "twitch", "handle": s["login"], "followers": s["viewers"],
                     "contact": email or f"https://twitch.tv/{s['login']} (no email in bio: use their Twitch chat rules, "
-                                        "Discord or X; don't spam)", "notes": " ".join(facts)}
+                                        "Discord or X; don't spam)", "notes": " ".join(facts),
+                    "email_source": found and finder.describe(found)}
             made.append(self.draft_lead(lead, quiet=True))
         if not made:
             if only_email:
-                return (f"None of the {checked} streamers I checked had an email in their bio. Try again later, widen the "
+                return (f"None of the {checked} streamers I checked had a public email I could find. Try again later, widen the "
                         "viewer range, or turn off 'Only streamers with an email' in Settings.")
             return "No new streamers matched your viewer range. Widen min_viewers/max_viewers in config/pitch.yaml."
         return f"Drafted {len(made)} pitch(es). Approve the ones you'll send: " + ", ".join(made)
@@ -295,6 +298,10 @@ class Pitch(Agent):
         existing = db.rows("SELECT id FROM leads WHERE platform = ? AND handle = ?", lead["platform"], lead["handle"])
         if existing:
             return f"{lead['name']} is already a lead (#{existing[0]['id']})."
+        if not mailer.address_in(lead.get("contact")):  # a link or a note, not an email: look for one on their public pages
+            links = finder.urls_in(f"{lead.get('contact') or ''} {lead.get('notes') or ''}")
+            if found := finder.find_email(lead["platform"], lead["handle"], extra_urls=links):
+                lead = {**lead, "contact": found["email"], "email_source": finder.describe(found)}
         facts = "\n".join(f"- {x}" for x in [
             f"Creator: {lead['name']} ({lead['platform']})", lead.get("notes") or "No other facts known.",
             f"Steven offers: {cfg.get('what_you_offer')}",
@@ -312,10 +319,49 @@ class Pitch(Agent):
         to = mailer.address_in(lead.get("contact"))
         by_email = bool(to and mailer.configured())
         how = (f"Pressing Send email sends this from {mailer.credentials()[0]} to {to}.\n" if by_email else "")
+        if to and lead.get("email_source"):
+            how += f"{lead['email_source']}.\n"
         approvals.request("Pitch", "pitch", f"Pitch to {lead['name']} ({lead['platform']})",
                           f"{draft['why_this_lead']}\n{how}Contact: {lead.get('contact')}\n\n{text}",
                           {"lead_id": lid, "email": by_email}, yes="Send email" if by_email else "I'll send it", no="Drop")
         return f"{lead['name']} (lead #{lid})"
+
+    def recheck(self) -> str:
+        """Look for emails for pitches already waiting for approval with no address, and switch those cards to Send email."""
+        fixed, missing = [], []
+        for a in approvals.pending():
+            if a["kind"] != "pitch" or a["payload"].get("email"):
+                continue
+            rows = db.rows("SELECT * FROM leads WHERE id = ? AND status = 'drafted'", a["payload"]["lead_id"])
+            if not rows:
+                continue
+            lead = rows[0]
+            bio = lead["notes"] or ""
+            if lead["platform"] == "twitch":
+                try:
+                    bio = twitch.profile_by_login(lead["handle"])["bio"] or bio
+                except Exception:  # no Twitch keys or no network: fall back on the bio saved with the lead
+                    pass
+            links = finder.urls_in(f"{lead['contact'] or ''} {lead['notes'] or ''}")
+            found = finder.find_email(lead["platform"], lead["handle"], bio, links, retry_misses=True)
+            if not found:
+                missing.append(lead["name"])
+                continue
+            to, cfg_ok = found["email"], mailer.configured()
+            how = f"Pressing Send email sends this from {mailer.credentials()[0]} to {to}.\n" if cfg_ok else ""
+            why = a["preview"].split("\n", 1)[0]
+            text = lead["pitch"]
+            with db.connect() as c:
+                c.execute("UPDATE leads SET contact = ? WHERE id = ?", (to, lead["id"]))
+                c.execute("UPDATE approvals SET preview = ?, payload = ?, yes_label = ? WHERE id = ? AND status = 'pending'",
+                          (f"{why}\n{how}{finder.describe(found)}.\nContact: {to}\n\n{text}",
+                           json.dumps({"lead_id": lead["id"], "email": cfg_ok}),
+                           "Send email" if cfg_ok else "I'll send it", a["id"]))
+            fixed.append(f"{lead['name']} ({to})")
+        if not fixed and not missing:
+            return "Every waiting pitch already has an email."
+        out = f"Found emails for {len(fixed)}: " + ", ".join(fixed) + "." if fixed else "Found no new emails."
+        return out + (f" Still no public email for: {', '.join(missing)}." if missing else "")
 
     # ---- keeping track ----
 

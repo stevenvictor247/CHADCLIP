@@ -16,6 +16,7 @@ DRAFT = {"subject": "Clips for your stream", "message": "Hi Sam, great run on th
 def _setup(monkeypatch):
     db.init()
     db.execute("DELETE FROM leads")
+    db.execute("DELETE FROM email_finds")
     monkeypatch.setattr(pitch_mod, "settings", lambda: dict(CFG))
     monkeypatch.setattr(llm, "HAS_LLM", True)
     monkeypatch.setattr(llm, "ask_json", lambda *a, **k: dict(DRAFT))
@@ -361,4 +362,5 @@ def test_require_email_skips_streamers_without_one(monkeypatch):
     assert [l["handle"] for l in db.rows("SELECT handle FROM leads")] == ["hasemail"]
     monkeypatch.setattr(pitch_mod.twitch, "profile", lambda uid: {"bio": "nothing", "type": ""})
     db.execute("DELETE FROM leads")
-    assert "had an email" in run({"find": 5})
+    db.execute("DELETE FROM email_finds")
+    assert "public email" in run({"find": 5})
