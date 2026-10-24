@@ -104,16 +104,31 @@ def queue_scheduled(state: dict):
                 state[key] = now
 
 
+REPORT_MIN_GAP_HOURS = 20  # however the state file behaves, the Boss report never runs twice inside this
+
+
 def daily_report(state: dict):
     if not llm.HAS_LLM:
         return
+    now = time.time()
     today = datetime.now().strftime("%Y-%m-%d")
-    if datetime.now().hour >= REPORT_HOUR and state.get("last_report") != today:
-        state["last_report"] = today
+    if datetime.now().hour < REPORT_HOUR or state.get("last_report") == today:
+        return
+    if now - state.get("last_report_at", 0) < REPORT_MIN_GAP_HOURS * 3600:
+        return
+    # Mark it done and save BEFORE running: if the report raises, the next tick (15s later) must not try again.
+    # Without this a failing report was retried every tick, filling the Boss chat with the same prompt.
+    state["last_report"] = today
+    state["last_report_at"] = now
+    _save_state(state)
+    try:
         report = boss.report()
         db.log("Boss", "Daily report: " + report)
         from . import relay
         relay.notify("Daily report\n\n" + report)
+    except Exception as e:
+        traceback.print_exc()
+        db.log("HQ", f"Daily report failed (won't retry until tomorrow): {e}")
 
 
 def football_tick():
