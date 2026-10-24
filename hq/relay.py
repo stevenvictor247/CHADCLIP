@@ -5,6 +5,7 @@ Setup: message @BotFather on Telegram, send /newbot, put the token in .env as TE
 your new bot once and run `python -m hq relay-id` to find your TELEGRAM_OWNER_ID.
 """
 
+import json
 import os
 import threading
 import time
@@ -58,7 +59,6 @@ def ask(text: str, kind: str, ref: int, yes: str = "✅ Approve", no: str = "❌
 
 
 def _buttons(kind: str, ref: int, yes: str = "✅ Approve", no: str = "❌ Reject") -> str:
-    import json
     return json.dumps({"inline_keyboard": [[{"text": yes, "callback_data": f"{kind}:approve:{ref}"},
                                             {"text": no, "callback_data": f"{kind}:reject:{ref}"}]]})
 
@@ -89,8 +89,11 @@ def handle_callback(cb: dict) -> None:
     api("answerCallbackQuery", callback_query_id=cb["id"], text=done[:200])
     msg = cb.get("message") or {}
     if msg.get("message_id"):
+        # a message of several separate buttons (Sweep's fixes) keeps the ones not tapped yet; yes/no pairs all go
+        rows = [r for r in (msg.get("reply_markup") or {}).get("inline_keyboard", [])
+                if len(r) == 1 and r[0].get("callback_data") != cb["data"]]
         api("editMessageReplyMarkup", chat_id=msg["chat"]["id"], message_id=msg["message_id"],
-            reply_markup='{"inline_keyboard": []}')
+            reply_markup=json.dumps({"inline_keyboard": rows}))
         api("sendMessage", chat_id=msg["chat"]["id"], text=done, reply_to_message_id=msg["message_id"])
 
 

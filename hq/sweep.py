@@ -1,14 +1,16 @@
-"""Sweep, HQ's janitor: finds what is wasting Claude money, tidies up after the other agents, and reports once a day.
+"""Sweep, HQ's janitor and quality control: finds what is wasting Claude money, tidies up after the other agents, and
+once a day reports how HQ could run better (the checks themselves live in quality.py).
 
-Sweep never calls Claude itself, so it costs nothing to run. What it does on its own is limited to things that are
-low risk, written to the activity log and either undoable or harmless:
+Sweep's checks and fixes are plain rules and cost nothing. Its one Claude call is a short coach's note with the daily
+report (about a cent, skipped once the day's budget is spent or when HQ_SWEEP_COACH is false). What it does on its own
+is limited to things that are low risk, written to the activity log and either undoable or harmless:
   - a task stuck on "running" after a crash is put back in the queue once, then closed as failed
   - a task that failed on a network or overload error is retried once
   - old downloads, rejected clips, practice posts and big logs are moved to data/sweep/trash (restorable for a
     week), never deleted straight away
   - an idle Boss conversation that has grown huge is closed so the next chat starts small (old messages are kept)
-Everything else (switching a model, posting, emailing, spending, settings and keys) is only ever reported, or asked
-for through the Approvals queue.
+The improvement report's one-tap fixes only run when Steven presses them. Everything else (switching a model, posting,
+emailing, spending, settings and keys) is only ever reported, or asked for through the Approvals queue.
 """
 
 import json
@@ -19,7 +21,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import approvals, db, ledger
+from . import approvals, db, ledger, quality, relay
 from .config import CLIPS_DIR, DAILY_BUDGET, DATA_DIR, FOOTBALL_DAILY_BUDGET, PRICES, SOURCES_DIR
 
 SWEEP_DIR = DATA_DIR / "sweep"
@@ -435,59 +437,233 @@ def _state() -> dict:
     return _read_json(STATE_PATH, {})
 
 
-def build_report(spend: dict, problems: list[dict], actions: list[str]) -> dict:
+def snoozed(state: dict | None = None) -> dict:
+    """Tips Steven hid, and until when (UTC). Expired ones drop out."""
+    now = db.now()
+    return {k: v for k, v in (state if state is not None else _state()).get("snoozed", {}).items() if v > now}
+
+
+def snooze(tip_id: str, days: int = 7) -> str:
+    state = _state()
+    state["snoozed"] = {**snoozed(state), tip_id: _ago(days=-days)}
+    _write_json(STATE_PATH, state)
+    _refresh_latest(state)
+    _log(f"Hid \"{tip_id}\" from the improvement report for {days} days")
+    return f"Hidden for {days} days. It comes back after that if it's still true."
+
+
+def unsnooze(tip_id: str) -> str:
+    state = _state()
+    state["snoozed"] = {k: v for k, v in snoozed(state).items() if k != tip_id}
+    _write_json(STATE_PATH, state)
+    _refresh_latest(state)
+    return "Showing it again."
+
+
+def improvement(state: dict, daily: bool = False) -> dict:
+    """The "How to improve HQ" part: tips (minus hidden ones), the health score, what got fixed since the last daily
+    report and how long each tip has been open. `daily` moves the comparison point to today."""
+    tips, broken = quality.find_tips()
+    hidden = snoozed(state)
+    shown = [t for t in tips if t["id"] not in hidden]
+    today = datetime.now().strftime("%Y-%m-%d")
+    first_seen = {k: v for k, v in state.get("first_seen", {}).items() if k in {t["id"] for t in tips}}
+    for t in tips:
+        first_seen.setdefault(t["id"], today)
+    for t in shown:
+        t["open_days"] = (datetime.strptime(today, "%Y-%m-%d") - datetime.strptime(first_seen[t["id"]], "%Y-%m-%d")).days
+    state["first_seen"] = first_seen
+    last = state.get("last_daily_tips", {})
+    now_ids = {t["id"] for t in tips}
+    fixed = [title for tid, title in last.items() if tid not in now_ids]
+    value = quality.score(shown)
+    if daily:   # the day's report becomes the new comparison point; the score keeps comparing with the day before
+        if state.get("last_report_day") != today:
+            state["yesterday_score"] = state.get("last_daily_score")
+        state["last_report_day"] = today
+        state["last_daily_tips"] = {t["id"]: t["title"] for t in tips}
+        state["last_daily_score"] = value
+    # compare with the last daily report before today's (before today's report goes out, that's the newest one)
+    prev = state.get("yesterday_score") if state.get("last_report_day") == today else state.get("last_daily_score")
+    return {"score": value, "change": None if prev is None else value - prev, "tips": shown, "top": [t["id"] for t in shown[:3]],
+            "fixed": fixed, "hidden": len(tips) - len(shown), "broken_checks": broken, "units": quality.unit_costs(),
+            "coach": None}
+
+
+def _coach_facts(spend: dict, problems: list[dict], improve: dict) -> dict:
+    return {"claude_cost": {k: round(v or 0, 3) for k, v in spend.items() if isinstance(v, (int, float))},
+            "health_score": improve["score"], "change_since_yesterday": improve["change"],
+            "fixed_since_last_report": improve["fixed"],
+            "findings": [{k: t[k] for k in ("severity", "area", "title", "why", "do", "open_days")} for t in improve["tips"]],
+            "cost_findings": [{"title": p["title"], "detail": p["detail"]} for p in problems],
+            "cost_per_result_this_week": improve["units"],
+            "history": [h["score"] for h in score_history()][-7:]}
+
+
+def build_report(spend: dict, problems: list[dict], actions: list[str], improve: dict | None = None) -> dict:
     day = datetime.now().strftime("%Y-%m-%d")
     agents24 = by_agent(_ago(hours=24))
-    lines = [f"Sweep's daily report for {day}", ""]
+    improve = improve or {"score": 100, "change": None, "tips": [], "top": [], "fixed": [], "hidden": 0,
+                          "broken_checks": [], "units": [], "coach": None}
+    lines = [f"🧹 Sweep's daily report for {day}", ""]
+    change = improve["change"]
+    trend = "" if not change else (f" (up {change} since yesterday)" if change > 0 else f" (down {-change} since yesterday)")
+    lines.append(f"HQ health: {improve['score']}/100{trend}")
+    if improve["coach"]:
+        lines += ["", f"Coach's note: {improve['coach']}"]
+    tips = improve["tips"]
+    if tips:
+        lines += ["", "How to improve HQ today:"]
+        for i, t in enumerate(tips[:3], 1):
+            lines.append(f"{i}. {t['title']}. {t['do']}")
+        if len(tips) > 3:
+            lines.append("Also: " + "; ".join(t["title"] for t in tips[3:8]) + ("; and more on the Sweep tab." if len(tips) > 8 else "."))
+    else:
+        lines += ["", "Nothing to improve today: every agent's work looks clean. ✨"]
+    if improve["fixed"]:
+        lines.append("Fixed since the last report: " + "; ".join(improve["fixed"][:5]) + ".")
+    lines.append("")
     cap = f" of {_usd(spend['budget'])} budget" if spend["budget"] else ""
     lines.append(f"Claude cost: {_usd(spend['yesterday'])} yesterday, {_usd(spend['today'])} so far today{cap}. "
                  f"7-day average {_usd(spend['week_avg'])}/day. This month {_usd(spend['month'])} "
                  f"(on pace for about {_usd(spend['month_projected'])}).")
     if agents24:
         lines.append("Last 24 hours by agent: " + ", ".join(f"{a['agent']} {_usd(a['usd'])}" for a in agents24[:5]) + ".")
+    each = [u for u in improve["units"] if u["each"] is not None]
+    if each:
+        lines.append("Cost per result this week: " + ", ".join(f"{u['agent']} {_usd(u['each'])}/{u['unit']}" for u in each) + ".")
     lines.append("")
     lines.append("What I tidied up on my own:" if actions else "I had nothing to tidy up today.")
     lines += [f"- {a}" for a in actions]
     if problems:
-        lines += ["", "Needs a look:"] + [f"- {p['title']}. {p['detail']}" for p in problems]
+        lines += ["", "Costs to look at:"] + [f"- {p['title']}. {p['detail']}" for p in problems]
     else:
         lines += ["", "Nothing is wasting money right now."]
     trash_n = len(trash_summary())
     if trash_n:
-        lines.append(f"\n{trash_n} file(s) are in the trash for {TRASH_DAYS} days. You can put any back from the Sweep card.")
+        lines.append(f"\n{trash_n} file(s) are in the trash for {TRASH_DAYS} days. You can put any back on the Sweep tab.")
     return {"day": day, "created_at": db.now(), "spend": spend, "by_agent": agents24, "actions": actions,
-            "problems": problems, "text": "\n".join(lines)}
+            "problems": problems, "improve": improve, "text": "\n".join(lines)}
+
+
+def _send_fix_buttons(improve: dict):
+    """One Telegram message with a button per safe fix on offer. A tap runs it, like pressing it on the dashboard."""
+    offers = [t for t in improve["tips"] if t.get("fix")][:4]
+    if not offers or not relay.enabled():
+        return
+    rows = [[{"text": f"🧹 {t['fix']['label']}", "callback_data": f"sweepfix:approve:{quality.FIXES[t['fix']['id']][0]}"}]
+            for t in offers]
+    try:
+        relay.api("sendMessage", chat_id=relay.owner_id(), text="One-tap fixes (none of them posts, emails or spends):",
+                  reply_markup=json.dumps({"inline_keyboard": rows}))
+    except Exception:
+        import traceback
+        traceback.print_exc()
+
+
+def _decide_fix(number: int, decision: str) -> str:
+    fix_id = quality.fix_by_number(number)
+    if decision != "approve" or not fix_id:
+        return "Left it as it is."
+    done = quality.apply_fix(fix_id, who="Steven, from Telegram")
+    _refresh_latest()
+    return done
+
+
+def _refresh_latest(state: dict | None = None):
+    """Re-check after a fix or a hide so the Sweep tab shows the new state straight away (rules only, no Claude)."""
+    state = state if state is not None else _state()
+    rep = _read_json(REPORTS_DIR / "latest.json", {})
+    if not rep:
+        return
+    coach = (rep.get("improve") or {}).get("coach")
+    improve = improvement(state)
+    improve["coach"] = coach
+    rep = build_report(rep.get("spend") or spend_numbers(), rep.get("problems", []), rep.get("actions", []), improve)
+    _write_json(REPORTS_DIR / "latest.json", rep)
+    _write_json(STATE_PATH, state)
 
 
 def run(force_report: bool = False) -> str:
-    """One round: fix what is safe to fix, look for waste, and send the report if it is due. Returns a summary."""
+    """One round: fix what is safe to fix, look for waste and for ways to run HQ better, and send the report if it is
+    due. Returns a summary."""
     spend = spend_numbers()
     actions = fix_stuck_tasks() + fix_failed_tasks() + tidy_files() + fix_boss_chat()
     problems = find_problems(spend)
     state = _state()
     today = datetime.now().strftime("%Y-%m-%d")
     due = force_report or (datetime.now().hour >= report_hour() and state.get("last_report") != today)
+    if due:   # marked before sending, so a report that fails half way is never sent again and again
+        state["last_report"] = today
+        _write_json(STATE_PATH, state)
+    improve = improvement(state, daily=due)
+    todays_note = (_read_json(REPORTS_DIR / "latest.json", {}).get("improve") or {}).get("coach")
+    if due and state.get("coach_day") != today:   # at most one Claude call a day, even if you press the button again
+        improve["coach"] = quality.coach_note(_coach_facts(spend, problems, improve))
+        if improve["coach"]:
+            state["coach_day"] = today
+    else:   # later rounds (and extra reports the same day) keep the day's note
+        improve["coach"] = todays_note if state.get("coach_day") == today else None
     # the report and the dashboard list what Sweep did in the last 24 hours
     cutoff = _ago(hours=24)
     state["recent"] = [r for r in state.get("recent", []) if r["at"] >= cutoff] + [{"at": db.now(), "what": a} for a in actions]
-    report = build_report(spend, problems, [r["what"] for r in state["recent"]])
+    report = build_report(spend, problems, [r["what"] for r in state["recent"]], improve)
     _write_json(REPORTS_DIR / "latest.json", report)    # the dashboard always shows the newest round
     if due:
-        state["last_report"] = today
         _write_json(REPORTS_DIR / f"{today}.json", report)
         for old in sorted(REPORTS_DIR.glob("2*.json"))[:-30]:
             old.unlink()
-        _log("Daily report sent: " + report["text"].split("\n")[2])
-        from . import relay
+        _log(f"Daily report sent: HQ health {improve['score']}/100, {_plural_s(len(improve['tips']), 'idea')} to improve")
         relay.notify(report["text"])
+        _send_fix_buttons(improve)
     _write_json(STATE_PATH, state)
     n = len(actions)
-    return (f"{'Sent the daily report. ' if due else ''}Tidied up {n} thing(s), {len(problems)} thing(s) need a look."
-            if n or problems or due else "All clean.")
+    return (f"{'Sent the daily report. ' if due else ''}Tidied up {n} thing(s), {len(problems)} cost thing(s) and "
+            f"{len(improve['tips'])} improvement(s) to look at. HQ health {improve['score']}/100.")
+
+
+def _plural_s(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def report_due() -> bool:
+    state = _state()
+    return datetime.now().hour >= report_hour() and state.get("last_report") != datetime.now().strftime("%Y-%m-%d")
+
+
+def queue_report_if_due() -> bool:
+    """Called by the worker every round, so the daily report goes out at its hour rather than at Sweep's next 6-hourly
+    round. Queues one ordinary Sweep round (it sends the report itself), never two."""
+    if not report_due():
+        return False
+    state = _state()
+    today = datetime.now().strftime("%Y-%m-%d")
+    if state.get("report_queued") == today:   # once a day: a round that fails must not be queued again every tick
+        return False
+    state["report_queued"] = today
+    _write_json(STATE_PATH, state)
+    if db.rows("SELECT 1 FROM tasks WHERE agent = 'Sweep' AND status IN ('queued', 'running') LIMIT 1"):
+        return False   # a round is about to run anyway, and it sends the report
+    db.create_task("Sweep", "Send the daily report.", {}, created_by="Schedule")
+    return True
+
+
+def score_history(days: int = 14) -> list[dict]:
+    out = []
+    for p in sorted(REPORTS_DIR.glob("2*.json"))[-days:]:
+        rep = _read_json(p, {})
+        if (rep.get("improve") or {}).get("score") is not None:
+            out.append({"day": rep["day"], "score": rep["improve"]["score"]})
+    return out
 
 
 def latest() -> dict:
-    """For the dashboard: the newest report, what is in the trash, and how much mess is open."""
+    """For the dashboard: the newest report, what is in the trash, how much mess is open and the score's history."""
     rep = _read_json(REPORTS_DIR / "latest.json", {})
-    return {"report": rep or None, "trash": trash_summary(), "mess": len(rep.get("problems", [])) if rep else 0,
-            "hour": report_hour()}
+    tips = ((rep.get("improve") or {}).get("tips") or []) if rep else []
+    mess = len(rep.get("problems", [])) + sum(t["severity"] != "low" for t in tips) if rep else 0
+    return {"report": rep or None, "trash": trash_summary(), "mess": mess, "hour": report_hour(),
+            "history": score_history(), "snoozed": snoozed(), "coach_on": quality.coach_enabled()}
+
+
+relay.DECIDERS["sweepfix"] = _decide_fix   # a tap on a Telegram fix button

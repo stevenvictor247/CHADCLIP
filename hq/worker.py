@@ -177,6 +177,11 @@ def tick():
         _save_state(state)
         return
     queue_scheduled(state)
+    try:
+        from . import sweep
+        sweep.queue_report_if_due()   # Sweep's daily report on time, not at its next 6-hourly round
+    except Exception:
+        traceback.print_exc()
     football_tick()
     if not REQUIRE_APPROVAL:
         db.execute("UPDATE clips SET status = 'approved' WHERE status = 'pending_approval'")

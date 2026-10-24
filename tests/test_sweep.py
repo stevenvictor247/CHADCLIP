@@ -164,7 +164,8 @@ def test_daily_report_sent_once_and_listed(monkeypatch, tmp_path):
     hq.sweep.run()
     assert len(sent) == 1                                                          # only once a day
     latest = hq.sweep.latest()
-    assert latest["report"]["day"] == datetime.now().strftime("%Y-%m-%d") and latest["mess"] == len(latest["report"]["problems"])
+    assert latest["report"]["day"] == datetime.now().strftime("%Y-%m-%d") and latest["mess"] == len(latest["report"]["problems"]) + \
+        sum(t["severity"] != "low" for t in latest["report"]["improve"]["tips"])
 
 
 def test_sweep_is_an_agent_that_still_runs_when_the_budget_is_spent(monkeypatch, tmp_path):
