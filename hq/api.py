@@ -368,6 +368,12 @@ def update_submission(submission_id: int, body: SubmissionIn):
     return {"ok": True}
 
 
+@app.post("/api/pitch/recheck")
+def pitch_recheck():
+    db.create_task("Pitch", "Look for emails for pitches waiting for approval that have none.", {"recheck": True}, created_by="Steven")
+    return {"message": "Pitch is looking for emails now. Cards update when it finds one."}
+
+
 @app.post("/api/approvals/{approval_id}/{decision}")
 def decide_approval(approval_id: int, decision: str):
     if decision not in ("approve", "reject"):

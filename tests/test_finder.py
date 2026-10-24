@@ -132,3 +132,13 @@ def test_recheck_switches_waiting_cards_to_send_email(monkeypatch):
     assert "Email found via their website" in linked["preview"] and "Contact: biz@linked.gg" in linked["preview"]
     assert bare["yes_label"] == "I'll send it"
     assert db.rows("SELECT contact FROM leads WHERE handle = 'linked'")[0]["contact"] == "biz@linked.gg"
+
+
+def test_recheck_button_endpoint_queues_a_pitch_task():
+    from fastapi.testclient import TestClient
+    from hq import api
+    db.execute("DELETE FROM tasks")
+    r = TestClient(api.app).post("/api/pitch/recheck", headers={"X-HQ": "1"})
+    assert r.status_code == 200
+    t = db.rows("SELECT agent, params FROM tasks")[-1]
+    assert t["agent"] == "Pitch" and json.loads(t["params"]) == {"recheck": True}
