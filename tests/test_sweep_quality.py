@@ -323,6 +323,8 @@ def test_report_has_score_top_three_hiding_and_fixed_since_yesterday(monkeypatch
     state["last_report"] = state["last_report_day"] = "2000-01-01"
     state["first_seen"]["scout_waiting"] = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
     hq.sweep.STATE_PATH.write_text(json.dumps(state))
+    (hq.sweep.REPORTS_DIR / f"{datetime.now():%Y-%m-%d}.json").unlink(missing_ok=True)   # "it is a new day"
+    hq.sweep.SENT_PATH.unlink(missing_ok=True)
     hq.sweep.run()
     imp = hq.sweep.latest()["report"]["improve"]
     assert imp["change"] == 12 and any("waiting over 2 hours" in f for f in imp["fixed"])

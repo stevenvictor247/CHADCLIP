@@ -1,6 +1,7 @@
 """Chad: clips creators' videos into Shorts, Reels and TikToks for the clipping accounts."""
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -75,7 +76,8 @@ class Chad(Agent):
         summary, total = [], 0
         for creator in creators:
             if not sources.is_permitted(creator):
-                summary.append(f"{creator.get('name')}: skipped, no permission recorded")
+                if params.get("creator"):   # asked for by name: say why; on the schedule it is just not on the list
+                    summary.append(f"{creator.get('name')}: skipped, no permission recorded")
                 continue
             for src in creator.get("sources", []):
                 for v in sources.new_videos(src, int(creator.get("max_videos_per_run", 1))):
@@ -85,9 +87,31 @@ class Chad(Agent):
                     sources.mark_seen(v["id"])
                     total += made
                     summary.append(f"{creator['name']}: {made} clips from \"{video['title']}\"")
+        if not params.get("creator"):   # the scheduled round also covers streamers with permission in streamers.yaml
+            total, summary = self.run_permitted_streamers(task["id"], cfg, total, summary)
         if not summary:
             return "No creators set up yet. Add some to config/creators.yaml."
         return f"Made {total} clips. " + "; ".join(summary)
+
+    def run_permitted_streamers(self, task_id, cfg, total, summary):
+        """Newest viewer clips from every streamer with permission recorded (the Clips tab box), skipping clips seen before."""
+        if not (os.getenv("TWITCH_CLIENT_ID") and os.getenv("TWITCH_CLIENT_SECRET")):
+            return total, summary
+        for login, how in twitch.permissions().items():
+            if not how:
+                continue
+            try:
+                uid = twitch.user_id(login)
+                clips = [c for c in twitch.top_clips(uid, 7, 3) if c["id"] not in sources._seen()] if uid else []
+                for c in clips:
+                    creator = {"name": c["streamer"], "credit": f"{c['streamer']} on Twitch",
+                               "notes": "Funny moments, big reactions, chaos."}
+                    video = sources.download(c["url"])
+                    total += self.clip_whole(task_id, video, c["title"], c["views"], creator, cfg)
+                    summary.append(f"{c['streamer']}: \"{c['title']}\" ({c['views']:,} views)")
+            except Exception as e:   # one streamer failing shouldn't stop the rest
+                db.log("Chad", f"Couldn't check {login}'s clips: {e}")
+        return total, summary
 
     def run_twitch(self, task_id, top_n, days, per_streamer, cfg) -> str:
         """Most-viewed recent Twitch clips from the top streamers, for the ones you have permission to clip."""

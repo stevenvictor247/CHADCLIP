@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -592,8 +593,11 @@ def run(force_report: bool = False) -> str:
     problems = find_problems(spend)
     state = _state()
     today = datetime.now().strftime("%Y-%m-%d")
-    due = force_report or (datetime.now().hour >= report_hour() and state.get("last_report") != today)
+    due = force_report or report_due()
+    if due and not force_report:   # claimed under a lock, in a file of its own, before anything is sent
+        due = _claim_report_day(today)
     if due:   # marked before sending, so a report that fails half way is never sent again and again
+        state = _state()   # fresh copy: another writer (a hide, a fix button) may have saved since the one above
         state["last_report"] = today
         _write_json(STATE_PATH, state)
     improve = improvement(state, daily=due)
@@ -626,9 +630,33 @@ def _plural_s(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
+_report_lock = threading.Lock()
+SENT_PATH = SWEEP_DIR / "report_sent.txt"   # the day of the last daily report, kept apart from state.json so that a
+                                            # lost or overwritten state file can never make the report go out twice
+
+
+def _report_sent_on(day: str) -> bool:
+    try:
+        if SENT_PATH.read_text().strip() == day:
+            return True
+    except OSError:
+        pass
+    return _state().get("last_report") == day or (REPORTS_DIR / f"{day}.json").exists()
+
+
+def _claim_report_day(day: str) -> bool:
+    """True for the one caller that gets to send today's daily report. Only the manual "Run a round" button skips this."""
+    with _report_lock:
+        if _report_sent_on(day):
+            return False
+        SENT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        SENT_PATH.write_text(day)
+        return True
+
+
 def report_due() -> bool:
-    state = _state()
-    return datetime.now().hour >= report_hour() and state.get("last_report") != datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
+    return datetime.now().hour >= report_hour() and not _report_sent_on(today)
 
 
 def queue_report_if_due() -> bool:
