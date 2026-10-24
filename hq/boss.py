@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import threading
 
 from . import agents, db, football, ledger, llm, review, tally
@@ -275,6 +276,10 @@ def _offline(text: str) -> str:
     t = text.strip().lower()
     if t.startswith("clip"):
         rest = text.strip()[4:].strip()
+        m = re.match(r"(?i)@?(\w+?)(?:'s)?\s+past (?:streams|vods)$", rest)
+        if m:
+            tid = db.create_task("Chad", f"Clip {m.group(1)}'s past streams", {"vods": m.group(1)}, created_by="Steven")
+            return f"Queued task #{tid} for Chad."
         params = {"url": rest} if rest.startswith("http") else ({"creator": rest} if rest else {})
         tid = db.create_task("Chad", f"Clip {rest or 'all creators'}", params, created_by="Steven")
         return f"Queued task #{tid} for Chad."

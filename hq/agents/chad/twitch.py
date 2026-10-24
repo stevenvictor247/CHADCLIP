@@ -79,6 +79,34 @@ def top_clips(broadcaster_id: str, days: int = 1, limit: int = 5) -> list[dict]:
              "duration": c["duration"], "streamer": c["broadcaster_name"]} for c in r.json()["data"]]
 
 
+def user_id(login: str) -> str | None:
+    r = requests.get(f"{HELIX}/users", headers=_headers(), params={"login": login}, timeout=30)
+    r.raise_for_status()
+    data = r.json()["data"]
+    return data[0]["id"] if data else None
+
+
+def recent_vods(broadcaster_id: str, limit: int = 3) -> list[dict]:
+    """Newest past broadcasts. Twitch only keeps them ~14 days (60 for partners), so this is a recent window."""
+    r = requests.get(f"{HELIX}/videos", headers=_headers(), timeout=30,
+                     params={"user_id": broadcaster_id, "type": "archive", "first": limit})
+    r.raise_for_status()
+    return [{"id": v["id"], "url": v["url"], "title": v["title"], "views": v["view_count"],
+             "created_at": v["created_at"]} for v in r.json()["data"]]
+
+
+def vod_hot_moments(broadcaster_id: str, vod_id: str, limit: int = 3) -> list[dict]:
+    """Moments in one VOD that viewers clipped, most-viewed first. Each has the offset (seconds) into the VOD.
+    Viewer clips are the best 'this was funny' signal Twitch exposes without chat replay."""
+    r = requests.get(f"{HELIX}/clips", headers=_headers(), timeout=30,
+                     params={"broadcaster_id": broadcaster_id, "first": 100})
+    r.raise_for_status()
+    hits = [c for c in r.json()["data"] if str(c.get("video_id")) == str(vod_id) and c.get("vod_offset") is not None]
+    hits.sort(key=lambda c: -c["view_count"])
+    return [{"offset": float(c["vod_offset"]), "duration": float(c["duration"]), "title": c["title"],
+             "views": c["view_count"]} for c in hits[:limit]]
+
+
 def permissions() -> dict:
     """login -> how you're allowed to clip them, from config/streamers.yaml."""
     path = CONFIG_DIR / "streamers.yaml"

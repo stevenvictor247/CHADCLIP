@@ -74,3 +74,20 @@ def download(url: str) -> dict:
         path = Path(ydl.prepare_filename(info)).with_suffix(".mp4")
     return {"id": info["id"], "title": info.get("title") or info["id"], "path": str(path),
             "url": info.get("webpage_url") or url, "duration": info.get("duration")}
+
+
+def download_section(url: str, start: float, end: float) -> dict:
+    """Download only start..end seconds of a long video (a Twitch VOD can be many hours)."""
+    opts = {
+        "quiet": True,
+        "format": "bv*[height<=1080]+ba/b[height<=1080]/b",
+        "merge_output_format": "mp4",
+        "download_ranges": yt_dlp.utils.download_range_func(None, [(start, end)]),
+        "force_keyframes_at_cuts": True,
+        "outtmpl": str(SOURCES_DIR / f"%(id)s-{int(start)}.%(ext)s"),
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        path = Path(ydl.prepare_filename(info)).with_suffix(".mp4")
+    return {"id": f"{info['id']}-{int(start)}", "title": info.get("title") or info["id"], "path": str(path),
+            "url": f"{url}?t={int(start)}s"}
