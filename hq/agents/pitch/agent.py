@@ -258,9 +258,8 @@ class Pitch(Agent):
             return problem
         cfg = settings()
         known = {r["handle"].lower() for r in db.rows("SELECT handle FROM leads WHERE platform = 'twitch'")}
-        only_email = bool(cfg.get("require_email"))
         candidates = [s for s in twitch.small_streamers(int(cfg.get("min_viewers", 50)), int(cfg.get("max_viewers", 2000)),
-                                                         cfg.get("language", "en"), max_pages=20 if only_email else 8)
+                                                         cfg.get("language", "en"), max_pages=20)
                       if s["login"].lower() not in known]
         made, checked = [], 0
         for s in candidates:
@@ -270,7 +269,7 @@ class Pitch(Agent):
             info = twitch.profile(s["id"])
             found = finder.find_email("twitch", s["login"], info["bio"])
             email = found and found["email"]
-            if only_email and not email:
+            if not email:  # Pitch only drafts for creators it can email
                 continue
             clips = twitch.top_clips(s["id"], days=14, limit=1)
             facts = [f"Streams {s['game'] or 'various games'} on Twitch, about {s['viewers']} live viewers right now."]
@@ -279,14 +278,13 @@ class Pitch(Agent):
             if clips:
                 facts.append(f"Their most-viewed clip lately: \"{clips[0]['title']}\" ({clips[0]['views']:,} views).")
             lead = {"name": s["name"], "platform": "twitch", "handle": s["login"], "followers": s["viewers"],
-                    "contact": email or f"https://twitch.tv/{s['login']} (no email in bio: use their Twitch chat rules, "
-                                        "Discord or X; don't spam)", "notes": " ".join(facts),
+                    "contact": email, "notes": " ".join(facts),
                     "email_source": found and finder.describe(found)}
             made.append(self.draft_lead(lead, quiet=True))
         if not made:
-            if only_email:
-                return (f"None of the {checked} streamers I checked had a public email I could find. Try again later, widen the "
-                        "viewer range, or turn off 'Only streamers with an email' in Settings.")
+            if checked:
+                return (f"None of the {checked} streamers I checked had a public email I could find. Try again later or "
+                        "widen the viewer range in Settings.")
             return "No new streamers matched your viewer range. Widen min_viewers/max_viewers in config/pitch.yaml."
         return f"Drafted {len(made)} pitch(es). Approve the ones you'll send: " + ", ".join(made)
 

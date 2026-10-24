@@ -21,7 +21,6 @@ daily_leads: 5                  # how many new pitches to draft per run
 min_viewers: 50
 max_viewers: 2000
 language: en
-require_email: true             # true = only draft pitches for streamers whose public email Pitch can find (Twitch bio, their links, their site)
 auto_find: false                # true = draft new pitches once a day on its own
 
 # Follow-ups
