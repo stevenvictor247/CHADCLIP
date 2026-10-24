@@ -2,10 +2,11 @@
 
 import json
 import os
+import re
 import threading
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from . import agents, boss, db, ledger, llm
 from .agents.chad.publish import publish_approved
@@ -92,6 +93,22 @@ def recover_interrupted():
             db.log("HQ", f"HQ restarted task #{t['id']} ({t['agent']}): it was cut off when HQ last closed")
 
 
+EMPTY_RESULT = re.compile(r"(Made 0 clips|No |None |Nothing |Skipped)")
+MAX_BACKOFF = 4   # a job that keeps finding nothing is asked at most 4x less often
+
+
+def backoff(agent_name: str, instructions: str) -> int:
+    """2x, 3x, 4x longer between rounds after 3, 6, 9 empty scheduled rounds in a row; back to 1x after a useful one."""
+    last = db.rows("SELECT result FROM tasks WHERE agent = ? AND instructions = ? AND created_by = 'Schedule' "
+                   "AND status = 'done' ORDER BY id DESC LIMIT 12", agent_name, instructions)
+    n = 0
+    for t in last:
+        if not EMPTY_RESULT.match(t["result"] or ""):
+            break
+        n += 1
+    return min(1 + n // 3, MAX_BACKOFF)
+
+
 def queue_scheduled(state: dict):
     now = time.time()
     for agent in agents.AGENTS.values():
@@ -99,7 +116,10 @@ def queue_scheduled(state: dict):
             continue  # that village's Claude budget is spent: nothing new starts on its own there until tomorrow
         for every_hours, instructions, params in agent.schedule:
             key = f"sched:{agent.name}:{instructions}"
-            if now - state.get(key, 0) >= every_hours * 3600:
+            if now - state.get(key, 0) >= every_hours * 3600 * backoff(agent.name, instructions):
+                if db.rows("SELECT 1 FROM tasks WHERE agent = ? AND instructions = ? AND status IN ('queued', 'running') "
+                           "LIMIT 1", agent.name, instructions):
+                    continue   # the last round hasn't finished: never stack a second one behind it
                 db.create_task(agent.name, instructions, params, created_by="Schedule")
                 state[key] = now
 
@@ -116,6 +136,10 @@ def daily_report(state: dict):
         return
     if now - state.get("last_report_at", 0) < REPORT_MIN_GAP_HOURS * 3600:
         return
+    if db.rows("SELECT 1 FROM boss_messages WHERE role = 'user' AND created_at >= ? AND content LIKE ? LIMIT 1",
+               (datetime.now(timezone.utc) - timedelta(hours=REPORT_MIN_GAP_HOURS)).isoformat(timespec="seconds"),
+               "%Daily report, please.%"):
+        return   # the chat itself shows one went out, even if the state file was lost
     # Mark it done and save BEFORE running: if the report raises, the next tick (15s later) must not try again.
     # Without this a failing report was retried every tick, filling the Boss chat with the same prompt.
     state["last_report"] = today
@@ -177,6 +201,7 @@ def tick():
         _save_state(state)
         return
     queue_scheduled(state)
+    _save_state(state)   # now, not at the end: if a later step raises, the schedule must not forget it just queued jobs
     try:
         from . import sweep
         sweep.queue_report_if_due()   # Sweep's daily report on time, not at its next 6-hourly round
@@ -187,7 +212,10 @@ def tick():
         db.execute("UPDATE clips SET status = 'approved' WHERE status = 'pending_approval'")
     while run_next_task("quick"):
         pass
-    publish_approved()
+    try:
+        publish_approved()
+    except Exception:
+        traceback.print_exc()
     daily_report(state)
     daily_backup(state)
     _save_state(state)
