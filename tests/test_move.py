@@ -212,6 +212,8 @@ def _pc_with_data(hq, tmp_path):
     (d / "sources" / "big.mp4").write_bytes(b"x" * 1000)
     (d / "backups").mkdir(exist_ok=True)
     (d / "backups" / "old.zip").write_bytes(b"z")
+    for own in ("health.json", "good-version.txt", "bad-version.txt"):
+        (d / own).write_text("this computer only")
     hq.settings.save({"ANTHROPIC_API_KEY": "sk-1", "HQ_FOOTBALL_DIR": r"G:\My Drive\Football",
                       "HQ_BACKUP_COPY_DIR": r"D:\Backups"})
     return pend
@@ -228,7 +230,8 @@ def test_move_zip_carries_everything_hq_needs_and_nothing_it_doesnt(monkeypatch,
                  "data/clips/approved.mp4", "data/clips/old-posted.mp4", "config/vision.md",
                  "config/secrets/yt_token.json", "hq-move.json"):
         assert need in names, need
-    for never in ("data/clips/rejected.mp4", "data/sources/big.mp4", "data/backups/old.zip"):
+    for never in ("data/clips/rejected.mp4", "data/sources/big.mp4", "data/backups/old.zip", "data/health.json",
+                  "data/good-version.txt", "data/bad-version.txt"):
         assert never not in names, never
     settings = json.loads(zipfile.ZipFile(out).read("data/settings.json"))
     assert settings["HQ_PASSWORD"] == "pw"     # even when it only came from .env

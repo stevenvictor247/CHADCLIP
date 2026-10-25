@@ -44,7 +44,9 @@ UPLOAD_LIMIT = 12 * 1024 ** 3
 # desktop window's browser storage, the trash, and files that only mean something on this computer.
 SKIP_DIRS = ("backups", "update-backups", "sources", "clips", "desktop-app", "sweep/trash", "move-in",
              "drive", "before-move")
+# Each computer keeps its own: which copy it is, its watchdog notes and which HQ versions ran fine on it.
 SKIP_FILES = {"standby.json", "instance.json", "worker_alive.txt", "move-log.json", "move-code.json", "move-in.zip",
+              "health.json", "good-version.txt", "bad-version.txt",
               "tiktok_state.txt", "desktop-app.log", "settings.json", DB_PATH.name, DB_PATH.name + "-wal",
               DB_PATH.name + "-shm", DB_PATH.name + ".before-restore"}
 MEDIA = (".mp4", ".mov", ".mkv", ".webm", ".m4a", ".mp3", ".wav", ".part", ".ytdl")

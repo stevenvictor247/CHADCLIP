@@ -222,12 +222,12 @@ def _held() -> bool:
 
 def tick():
     from .agents.chad.publish import paused
-    if _held():  # another copy of HQ runs the agents: nothing starts, nothing posts, nothing is backed up here
-        return
-    try:
+    try:   # the loop is alive even while it holds, so the watchdog doesn't restart a copy that's holding on purpose
         ALIVE_PATH.write_text(datetime.now().isoformat(timespec="seconds"))
     except OSError:
         pass
+    if _held():  # another copy of HQ runs the agents: nothing starts, nothing posts, nothing is backed up here
+        return
     state = _state()
     if paused():  # Pause All: nothing starts and nothing posts; the Boss still chats and the backup still runs
         daily_backup(state)
