@@ -145,7 +145,8 @@ Description=Agent HQ: go back to the last version that ran fine
 [Service]
 Type=oneshot
 WorkingDirectory=$APP_DIR
-ExecStart=/bin/sh -c '/usr/local/lib/agent-hq/rollback.sh $APP_DIR && systemctl reset-failed agent-hq && systemctl start agent-hq'
+# systemd calls this after every crash; it only acts when HQ crashed 8 times in 5 minutes (a normal crash just restarts).
+ExecStart=/bin/sh -c '/usr/local/lib/agent-hq/rollback.sh $APP_DIR --if-stuck; r=\$\$?; if [ \$\$r -eq 0 ]; then systemctl reset-failed agent-hq; systemctl start agent-hq; fi; [ \$\$r -ne 1 ]'
 UNIT
 
 cat > "$UNITS/agent-hq-health.service" <<UNIT

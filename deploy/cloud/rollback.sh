@@ -7,9 +7,13 @@
 # - The good version is data/good-version.txt, written by the watchdog after HQ has run fine for 10 minutes.
 # - Your edited config/ files (vision, accounts, creators...) are kept.
 # - The bad version goes in data/bad-version.txt, so the updater skips it and waits for a newer one.
-# Exit code 0 = rolled back (start HQ again), 1 = nothing to roll back to.
+# Exit code 0 = rolled back (start HQ again), 1 = nothing to roll back to, 2 = HQ isn't stuck (systemd also calls this
+# after a single crash, which a normal restart fixes, so with --if-stuck it only acts once HQ hit the start limit).
 set -u
 APP_DIR="${1:-/opt/agent-hq}"
+if [ "${2:-}" = --if-stuck ] && [ "$(systemctl show -P Result agent-hq 2>/dev/null)" != start-limit-hit ]; then
+    exit 2
+fi
 DATA="${HQ_DATA_DIR:-$APP_DIR/data}"
 cd "$APP_DIR" || exit 1
 as_hq() { if [ "$(id -u)" = 0 ] && id hq >/dev/null 2>&1; then runuser -u hq -- "$@"; else "$@"; fi; }
