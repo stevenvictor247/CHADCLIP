@@ -1,32 +1,53 @@
-# Move Agent HQ to a cloud server (so it runs with your PC off)
+# Run Agent HQ on a cloud server (so it runs with your PC off)
 
-Cost: about $10 a month (Hetzner CX32, Ubuntu 24.04). You open HQ from any computer over Tailscale, with your password.
+Everything is done from HQ's **🚚 Move HQ** page (Settings → Move HQ). No terminal, no SSH. You open the cloud HQ from
+your PC and Mac over Tailscale, with your usual password.
 
-## One time: set up the server
-1. Make a Hetzner account, create a server (Ubuntu 24.04, CX32). Open its console (or SSH in as root).
-2. Put Tailscale on it: `curl -fsSL https://tailscale.com/install.sh | sh` then `tailscale up`, and sign in with the same account as your PC.
-3. Get HQ and install it:
-   ```
-   git clone https://github.com/stevenvictor247/CHADCLIP /opt/agent-hq
-   bash /opt/agent-hq/deploy/cloud/install.sh
-   ```
-   It asks for a dashboard password and your time zone. It then starts HQ, restarts it if it crashes or the server reboots,
-   updates it by itself (only to versions that passed every test, and never in the middle of a clip), and locks the server so only your Tailscale devices can reach it.
+Cost: **$0** on Oracle Cloud's Always Free plan (Ampere A1, 4 processors, 24 GB memory, Ubuntu 24.04).
+If Oracle has no free servers left, Vultr (4 GB, Chicago, about $24 a month with backups) works the same way.
 
-## Moving your HQ over (only one computer runs the agents at a time)
-1. On your PC, in the HQ folder, with HQ closed: `python -m hq handoff`.
-   It saves a backup zip in `data\backups` and puts the PC on **standby**, so the PC can't post anything.
-2. Copy that zip to the server (from PowerShell: `scp data\backups\hq-backup-XXXX.zip root@<server tailscale name>:/tmp/`).
-3. On the server: `systemctl stop agent-hq`, then `cd /opt/agent-hq && sudo -u hq .venv/bin/python -m hq restore /tmp/hq-backup-XXXX.zip`, then `systemctl start agent-hq`.
-   This brings your database, Settings, keys, YouTube sign-ins, TikTok sign-in, what was already clipped, and the football data.
-4. Open `http://<server tailscale name>:8000`. Instagram, Twitch, Telegram and Gmail keys came along in Settings. If a sign-in ever says expired, press Connect again in Settings.
+## 1. Make the server (one time)
+1. On the Move HQ page, paste a Tailscale auth key and press **Make my server setup text**, then **Copy**.
+2. Make the server (the page lists every choice):
+   - Oracle: Compute → Instances → Create instance, name `agent-hq`, Canonical Ubuntu 24.04, shape VM.Standard.A1.Flex
+     (4 OCPUs, 24 GB), 100 GB boot volume, and paste the text under Show advanced options → Management → cloud-init script.
+     Upgrading the account to Pay As You Go keeps it $0 and stops Oracle reclaiming a quiet free server.
+   - Vultr: Cloud Compute, Shared CPU, Chicago, Ubuntu 24.04, 4 GB, Automatic Backups, paste into Cloud-Init User-Data.
+3. Wait about 10 minutes. The server installs HQ by itself (`install.sh`, log in `/var/log/agent-hq-install.log`) and
+   waits on standby: it can't post anything until your HQ moves in.
 
-Clip video files stay on the PC (big). Pending clips need re-making or `python -m hq backup --with-clips` before the move.
+## 2. Move HQ (one click)
+On the PC's Move HQ page: **Find my server** → **Check** → **Move HQ now**. HQ waits for any post in progress to
+finish, packs the database, Settings, keys, sign-ins, clips still to post and football data, sends it over Tailscale, and
+waits until the cloud HQ is running. Then the PC goes on standby ("HQ runs in the cloud now", with a link) and the desktop
+icon opens the cloud HQ. Your Windows paths are fixed for Linux and your time zone comes along.
 
-## Going back to the PC
-Run `python -m hq handoff` on the server, copy the zip to the PC, run `python -m hq restore <zip>` there, and start HQ. Restoring turns the PC back on and the server stays on standby.
-Check any computer with `python -m hq standby status`. The dashboard shows a "standby" bar on a copy that is off duty.
+## 3. After the move
+- In the Tailscale admin page: Machines → agent-hq → ⋯ → **Disable key expiry**.
+- Cloud HQ → Settings → **Google Drive**: connect it, so the football folders sync (files are never deleted; a clash
+  keeps both copies as "(HQ copy)").
+- Cloud HQ → Settings → **HQ_PRINTER_EMAIL**: your printer's HP ePrint address. Thursday's print goes out by email
+  (one file per email) through the Pitch Gmail. In HP Smart, allow that Gmail as a sender.
 
-## What can't move
-- **Thursday printing** needs your PC and its printer. Keep Thursday print on the PC (or leave the PC copy's football folder alone).
-- Football Inbox/Outbox folders in Google Drive are synced to the PC, not the server.
+## What the server does by itself
+- Starts at boot, restarts if HQ crashes, and its own restarts (after an update or move) are normal.
+- Updates itself, only to versions that passed every test and never mid-post. If a new version crashes 8 times in
+  5 minutes, `rollback.sh` goes back to the last version that ran fine and skips the bad one.
+- A watchdog every 5 minutes: restarts HQ if two checks in a row fail, and texts you about a full disk, an old backup
+  or the Tailscale key expiring. Optional `HQ_HEALTHCHECK_URL` (healthchecks.io) tells you if the whole server is down.
+- Daily backups, also copied (without secrets) to "My Drive/Agent HQ backups" once Drive is connected.
+- Security updates install themselves (reboots at 04:30 if needed). Only your Tailscale devices can reach it.
+
+## Never posting twice
+Only one copy runs the agents. The copy that moved away is on standby (read-only). If both are ever switched on, each
+checks the other over Tailscale (`HQ_PEER_URL`), and the one that took over last stops and tells you.
+
+## Moving back to the PC
+Start HQ on the PC (it opens on standby), then on the cloud HQ's Move HQ page: **Move HQ to another computer** with the
+PC's Tailscale address. Your Windows folders come back as they were.
+
+By hand on any computer: `python -m hq standby status|on|off`, `python -m hq health`, `python -m hq rollback`.
+
+## Honest limits
+- Clipping runs on the server's processor (no graphics card), so making clips is slower than on a gaming PC.
+- YouTube sometimes blocks downloads from cloud servers. Twitch and Kick clips are normally fine.
