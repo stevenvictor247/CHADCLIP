@@ -36,6 +36,14 @@ def main():
     b = sub.add_parser("backup", help="Zip the database and settings into data/backups")
     b.add_argument("--with-clips", action="store_true", help="Include the clip videos too (much bigger)")
 
+    r = sub.add_parser("restore", help="Put a backup zip back (stop HQ first, start it again after)")
+    r.add_argument("zip")
+
+    sub.add_parser("handoff", help="Back up and put this computer on standby, ready to restore on another one")
+
+    st = sub.add_parser("standby", help="Turn this copy's agents and posting off (on) or back on (off)")
+    st.add_argument("mode", choices=["on", "off", "status"])
+
     y = sub.add_parser("connect-youtube", help="Sign in a YouTube account from accounts.yaml")
     y.add_argument("account")
 
@@ -103,6 +111,21 @@ def main():
     elif args.cmd == "backup":
         from .backup import make_backup
         print(f"Saved {make_backup(with_clips=args.with_clips)}")
+    elif args.cmd == "restore":
+        from .backup import restore
+        print(f"Restored {len(restore(args.zip))} files. This copy now runs the agents. Start HQ again.")
+    elif args.cmd == "handoff":
+        from .backup import make_backup
+        from .standby import set_standby
+        out = make_backup()
+        set_standby(True)
+        print(f"Saved {out}\nThis computer is now on standby: its agents and posting are off.\n"
+              f"Restore that file on the other computer: python -m hq restore <the file>")
+    elif args.cmd == "standby":
+        from .standby import is_standby, set_standby
+        if args.mode != "status":
+            set_standby(args.mode == "on")
+        print("standby" if is_standby() else "running the agents")
     elif args.cmd == "connect-youtube":
         from .agents.chad.publish import load_accounts, youtube
         account = next(a for a in load_accounts() if a["name"] == args.account)

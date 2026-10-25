@@ -200,7 +200,8 @@ def pause_status():
     from .agents.chad.publish import paused
     from .worker import seconds_since_last_round
     ago = seconds_since_last_round()
-    return {"paused": paused(), "worker_seconds_ago": None if ago is None else round(ago)}
+    from .standby import is_standby
+    return {"paused": paused(), "standby": is_standby(), "worker_seconds_ago": None if ago is None else round(ago)}
 
 
 @app.post("/api/pause")

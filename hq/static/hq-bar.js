@@ -110,11 +110,14 @@
     try { await fetch("/api/restart", {method: "POST", headers: {"X-HQ": "1"}}); } catch (err) {}
     if (window.hqWaitForRestart) window.hqWaitForRestart();
   };
+  pausedBar.insertAdjacentHTML("afterend", `<div id="hq-standby" style="display:none;gap:12px;align-items:center;padding:10px 22px;background:var(--panel2,#1d2430);border-bottom:1px solid var(--line,#2a3342)"><b>💤 This copy of HQ is on standby.</b><span class="what" style="color:var(--muted);font-size:13px">Another computer is running the agents, so nothing runs or posts here.</span></div>`);
+  const standbyBar = document.getElementById("hq-standby");
   async function checkPause() {
     try {
       const s = await (await fetch("/api/pause")).json();
       showPaused(s.paused);
-      const quiet = s.worker_seconds_ago;
+      standbyBar.style.display = s.standby ? "flex" : "none";
+      const quiet = s.standby ? null : s.worker_seconds_ago;
       stoppedBar.style.display = quiet !== null && quiet !== undefined && quiet > 20 * 60 ? "flex" : "none";
       if (quiet) document.getElementById("hq-stopped-min").textContent = Math.round(quiet / 60);
     } catch (e) {}

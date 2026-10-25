@@ -171,7 +171,11 @@ def loop() -> None:
     db.init()
     offset = None
     print("[relay] connected to Telegram.")
+    from .standby import is_standby
     while True:
+        if is_standby():  # two bots can't both listen to one Telegram bot, so the standby copy stays quiet
+            time.sleep(10)
+            continue
         try:
             params = {"timeout": 25, "allowed_updates": '["message", "callback_query"]'}
             if offset:

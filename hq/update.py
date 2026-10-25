@@ -181,10 +181,28 @@ def restart(delay: float = 1.0):
     threading.Thread(target=go, daemon=True).start()
 
 
+def auto_apply_if_idle() -> bool:
+    """On the cloud server (HQ_AUTO_UPDATE=1): take an update by itself, but only while no task is mid-run, so a
+    clip is never cut off. Returns True when it updated and asked for a restart."""
+    if os.getenv("HQ_AUTO_UPDATE", "").strip().lower() not in ("1", "true", "yes") or not _status.get("available"):
+        return False
+    from . import db
+    if db.rows("SELECT 1 FROM tasks WHERE status = 'running' LIMIT 1"):
+        return False
+    if update():
+        restart()
+        return True
+    return False
+
+
 def check_in_background():
     """Look for updates every CHECK_EVERY seconds so the dashboard can say when one is ready."""
     def loop():
         while True:
             check(force=True)
+            try:
+                auto_apply_if_idle()
+            except Exception as e:  # a failed auto-update must never stop the checks
+                print(f"Auto-update skipped: {e}")
             time.sleep(CHECK_EVERY)
     threading.Thread(target=loop, daemon=True).start()

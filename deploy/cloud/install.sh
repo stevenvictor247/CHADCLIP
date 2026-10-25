@@ -13,7 +13,7 @@ SERVICE=/etc/systemd/system/agent-hq.service
 echo "==> Installing Python, ffmpeg and the firewall"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y -q python3 python3-venv python3-pip ffmpeg ufw
+apt-get install -y -q python3 python3-venv python3-pip ffmpeg ufw git
 
 id hq >/dev/null 2>&1 || useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin hq
 mkdir -p "$APP_DIR/data"
@@ -49,6 +49,8 @@ User=hq
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
 Environment=HQ_SUPERVISED=1
+Environment=HQ_AUTO_UPDATE=1
+ExecStartPre=-$APP_DIR/.venv/bin/python -m hq update
 ExecStart=$APP_DIR/.venv/bin/python -m hq serve --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5

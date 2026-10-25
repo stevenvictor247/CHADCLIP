@@ -204,6 +204,9 @@ def seconds_since_last_round() -> float | None:
 
 def tick():
     from .agents.chad.publish import paused
+    from .standby import is_standby
+    if is_standby():  # another computer runs the agents: nothing starts, nothing posts, nothing is backed up here
+        return
     try:
         ALIVE_PATH.write_text(datetime.now().isoformat(timespec="seconds"))
     except OSError:
@@ -236,9 +239,10 @@ def tick():
 
 def slow_loop(interval: float = 15):
     """The video lane: Chad's clipping jobs, one at a time, beside the main loop."""
+    from .standby import is_standby
     while True:
         try:
-            if run_next_task("slow"):
+            if not is_standby() and run_next_task("slow"):
                 continue
         except Exception:
             traceback.print_exc()

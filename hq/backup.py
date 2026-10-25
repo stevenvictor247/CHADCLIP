@@ -41,10 +41,55 @@ def _write(out: Path, with_clips: bool, secrets: bool):
             files.append(ROOT / ".env")
         if secrets and SETTINGS_PATH.exists():
             files.append(SETTINGS_PATH)
+        files += _state_files(secrets)
         if with_clips:
             files += [p for p in CLIPS_DIR.rglob("*") if p.is_file()]
         for p in files:
             z.write(p, p.relative_to(ROOT) if p.is_relative_to(ROOT) else f"data/{p.relative_to(DATA_DIR)}")
+
+
+# Files in data/ that HQ needs to carry on where it left off: what was already clipped (so nothing posts twice), when the
+# daily jobs last ran, and the football and tally folders. TikTok's sign-in lives here too, so it's kept to the full backup.
+_STATE_FILES = ("worker_state.json", "chad_seen.json")
+_STATE_DIRS = ("football", "tally")
+
+
+def _state_files(secrets: bool) -> list[Path]:
+    found = [DATA_DIR / n for n in _STATE_FILES] + ([DATA_DIR / "tiktok_tokens.json"] if secrets else [])
+    for d in _STATE_DIRS:
+        found += (DATA_DIR / d).rglob("*") if (DATA_DIR / d).is_dir() else []
+    return [p for p in found if p.is_file()]
+
+
+def restore(zip_path: Path) -> list[str]:
+    """Put a backup back: database, Settings, keys, sign-ins. The database it replaces is kept beside it as
+    hq.sqlite3.before-restore. This copy becomes the one that runs the agents (standby is switched off)."""
+    from .standby import set_standby
+    zip_path = Path(zip_path)
+    restored = []
+    with zipfile.ZipFile(zip_path) as z:
+        if f"data/{DB_PATH.name}" not in z.namelist():
+            raise ValueError(f"{zip_path.name} isn't an HQ backup (no database inside).")
+        for info in z.infolist():
+            if info.is_dir():
+                continue
+            parts = Path(info.filename).parts
+            if parts[0] == "data":
+                dest = DATA_DIR.joinpath(*parts[1:])
+                base = DATA_DIR
+            else:
+                dest = ROOT.joinpath(*parts)
+                base = ROOT
+            if ".." in parts or not dest.resolve().is_relative_to(base.resolve()):
+                raise ValueError(f"{info.filename} is outside the HQ folder; not restoring.")
+            if dest == DB_PATH and dest.exists():
+                shutil.copy2(dest, dest.with_name(dest.name + ".before-restore"))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(info) as src, open(dest, "wb") as out:
+                shutil.copyfileobj(src, out)
+            restored.append(info.filename)
+    set_standby(False)
+    return restored
 
 
 def _keep_newest(folder: Path, keep: int):
