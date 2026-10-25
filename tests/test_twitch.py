@@ -40,3 +40,36 @@ def test_vods_clip_viewer_clipped_moments(monkeypatch):
     assert got == {"s": 80.0, "e": 145.0}
     assert "Made 1 clips" in out and "expire" in out
     assert "Made 0 clips" in bot.run_vods(1, "jynxzi", 1, 3, {})  # same moment isn't clipped twice
+
+
+def test_scheduled_round_clips_added_streamers_and_says_what_happened(monkeypatch):
+    from hq.agents.chad import sources
+    db.init()
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+    monkeypatch.setattr(twitch, "permissions", lambda: {"jynxzi": "clipping policy", "ghost": "ok policy"})
+    monkeypatch.setattr(twitch, "user_id", lambda login: "7" if login == "jynxzi" else None)
+    monkeypatch.setattr(twitch, "top_clips", lambda uid, days, n: [{"id": "c1", "url": "u", "title": "T", "views": 9, "streamer": "Jynxzi"}])
+    monkeypatch.setattr(sources, "_seen", lambda: set())
+    monkeypatch.setattr(sources, "download", lambda url: {"path": "x.mp4", "url": url, "id": "c1"})
+    monkeypatch.setattr(chad_agent.Chad, "clip_whole", lambda self, *a: 1)
+    total, summary = chad_agent.Chad().run_permitted_streamers(1, {}, 0, [])
+    assert total == 1
+    assert any("Jynxzi" in s for s in summary) and any("ghost" in s for s in summary)
+
+
+def test_missing_twitch_keys_are_reported_not_silent(monkeypatch):
+    monkeypatch.delenv("TWITCH_CLIENT_ID", raising=False)
+    monkeypatch.setattr(twitch, "permissions", lambda: {"jynxzi": "clipping policy"})
+    total, summary = chad_agent.Chad().run_permitted_streamers(1, {}, 0, [])
+    assert total == 0 and "Twitch keys missing" in summary[0]
+
+
+def test_adding_a_streamer_queues_a_chad_round_once(tmp_path, monkeypatch):
+    from hq import creators
+    db.init()
+    (tmp_path / "streamers.yaml").write_text("permissions:\n")
+    monkeypatch.setattr(creators, "CONFIG_DIR", tmp_path)
+    creators.add_allowed("jynxzi", "public open-clipping policy")
+    creators.add_allowed("xqc", "public open-clipping policy")
+    assert len(db.rows("SELECT 1 FROM tasks WHERE agent = 'Chad' AND status = 'queued'")) == 1

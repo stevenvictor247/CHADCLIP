@@ -95,14 +95,21 @@ class Chad(Agent):
 
     def run_permitted_streamers(self, task_id, cfg, total, summary):
         """Newest viewer clips from every streamer with permission recorded (the Clips tab box), skipping clips seen before."""
+        permitted = [login for login, how in twitch.permissions().items() if how]
         if not (os.getenv("TWITCH_CLIENT_ID") and os.getenv("TWITCH_CLIENT_SECRET")):
+            if permitted:   # say so, instead of looking like nothing was set up
+                summary.append("Twitch keys missing, so I can't look up clips for " + ", ".join(permitted)
+                               + ". Add them in Settings.")
             return total, summary
-        for login, how in twitch.permissions().items():
-            if not how:
-                continue
+        for login in permitted:
             try:
                 uid = twitch.user_id(login)
-                clips = [c for c in twitch.top_clips(uid, 7, 3) if c["id"] not in sources._seen()] if uid else []
+                if not uid:
+                    summary.append(f"{login}: couldn't find a Twitch channel with that name")
+                    continue
+                clips = [c for c in twitch.top_clips(uid, 7, 3) if c["id"] not in sources._seen()]
+                if not clips:
+                    summary.append(f"{login}: no new clips in the last 7 days")
                 for c in clips:
                     creator = {"name": c["streamer"], "credit": f"{c['streamer']} on Twitch",
                                "notes": "Funny moments, big reactions, chaos."}
@@ -111,6 +118,7 @@ class Chad(Agent):
                     summary.append(f"{c['streamer']}: \"{c['title']}\" ({c['views']:,} views)")
             except Exception as e:   # one streamer failing shouldn't stop the rest
                 db.log("Chad", f"Couldn't check {login}'s clips: {e}")
+                summary.append(f"{login}: couldn't check clips ({e})")
         return total, summary
 
     def run_twitch(self, task_id, top_n, days, per_streamer, cfg) -> str:
