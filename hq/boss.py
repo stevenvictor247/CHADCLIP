@@ -155,18 +155,79 @@ def run_tool(name: str, args: dict) -> tuple[str, bool]:
 
 
 # ---- conversation ----------------------------------------------------------
-# History is append-only (never edited), which keeps Claude's thinking blocks valid
-# and the prompt cache warm. "New conversation" starts a fresh thread instead of trimming.
+# History is append-only (never edited), which keeps Claude's thinking blocks valid and the prompt cache warm.
+# Every message re-sends the whole conversation, so a long one gets expensive. Instead of trimming it in place, the
+# chat rolls over: a new conversation starts with a short recap of the last few exchanges (the vision file and the
+# Boss's notes are sent again by themselves). That happens by itself past AUTO_ROLL_TOKENS, and on "New conversation".
+
+AUTO_ROLL_TOKENS = 30_000   # about what a chat costs a few cents per message at; roll over before it grows further
+RECAP_TAG = "[Recap of the earlier chat, for context only]"
+RECAP_ACK = "Got it. I'll carry on from there."
+RECAP_TURNS = 8             # most recent text exchanges kept in the recap
+RECAP_TURN_CHARS = 350
+RECAP_MAX_CHARS = 3000
+
 
 def current_conversation() -> int:
     r = db.rows("SELECT MAX(conversation) c FROM boss_messages")
     return r[0]["c"] or 1
 
 
-def new_conversation() -> int:
-    conv = current_conversation() + 1
+def chat_tokens(conv: int | None = None) -> int:
+    """Rough size of what is re-sent with every message (4 characters to a token)."""
+    r = db.rows("SELECT COALESCE(SUM(LENGTH(content)), 0) chars FROM boss_messages WHERE conversation = ? "
+                "AND role != 'marker'", current_conversation() if conv is None else conv)
+    return r[0]["chars"] // 4
+
+
+def _plain_text(blocks: list, skip_vision: bool = True) -> str:
+    out = []
+    for b in blocks:
+        if b.get("type") == "text":
+            t = b.get("text", "")
+            if skip_vision and t.startswith("<vision"):
+                continue
+            out.append(t)
+    return " ".join(" ".join(out).split())
+
+
+def recap(conv: int) -> str:
+    """The last few things Steven and the Boss said, as plain short lines. No tool results and no Claude call."""
+    turns = []
+    for m in history(conv):
+        if not isinstance(m["content"], list):
+            continue
+        text = _plain_text(m["content"])
+        if not text or text.startswith(RECAP_TAG) or text == RECAP_ACK or text == "Daily report, please.":
+            continue
+        who = "Steven" if m["role"] == "user" else "Boss"
+        turns.append(f"{who}: {text[:RECAP_TURN_CHARS]}{'...' if len(text) > RECAP_TURN_CHARS else ''}")
+    out = ""
+    for line in reversed(turns[-RECAP_TURNS * 2:]):   # newest first, so the cap cuts the oldest
+        if len(out) + len(line) + 1 > RECAP_MAX_CHARS:
+            break
+        out = line + "\n" + out
+    return out.strip()
+
+
+def new_conversation(carry: bool = True) -> int:
+    """Start a fresh conversation. With carry (the default) it opens with a short recap of the old one."""
+    old = current_conversation()
+    summary = recap(old) if carry else ""
+    conv = old + 1
     db.execute("INSERT INTO boss_messages (conversation, role, content, created_at) VALUES (?, 'marker', '[]', ?)", conv, db.now())
+    if summary:
+        _save(conv, "user", [{"type": "text", "text": f"{RECAP_TAG}\n{summary}"}])
+        _save(conv, "assistant", [{"type": "text", "text": RECAP_ACK}])
     return conv
+
+
+def is_recap(m: dict) -> bool:
+    """Recap messages are for Claude; the dashboard chat doesn't show them."""
+    if not isinstance(m.get("content"), list):
+        return False
+    text = _plain_text(m["content"])
+    return text.startswith(RECAP_TAG) or text == RECAP_ACK
 
 
 def history(conv: int) -> list[dict]:
@@ -201,6 +262,9 @@ def chat(text: str) -> str:
 
 def _chat(text: str) -> str:
     conv = current_conversation()
+    if chat_tokens(conv) >= AUTO_ROLL_TOKENS:   # between messages only, never in the middle of a tool round
+        conv = new_conversation()
+        db.log("HQ", "The Boss chat got long, so I started a fresh one with a short recap to keep each message cheap")
     if football.notebook.is_nb(text):   # "NB: ..." goes straight to Scribe, from the dashboard or your phone
         from .agents.football.scribe import note
         reply = note(text)

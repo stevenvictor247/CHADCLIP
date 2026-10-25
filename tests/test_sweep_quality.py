@@ -538,3 +538,15 @@ def test_score_change_between_reports_compares_with_the_last_daily_report(monkey
     assert "Sent the daily report" not in hq.sweep.run()
     imp = hq.sweep.latest()["report"]["improve"]
     assert imp["change"] == 12 and imp["fixed"]
+
+
+def test_routine_nothing_due_checks_are_not_flagged_as_waste(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    for _ in range(4):
+        _task(hq.db, "Pitch", "done", {"hours": 2}, "No follow-ups due.", created_by="Schedule",
+              instructions="Check which pitched leads need a follow-up.")
+    assert "empty_pitch" not in _ids(hq)
+    for _ in range(3):   # a different empty result still counts
+        _task(hq.db, "Pitch", "done", {"hours": 1}, "No new streamers matched.", created_by="Schedule",
+              instructions="Find new leads and draft pitches.")
+    assert "empty_pitch" in _ids(hq)

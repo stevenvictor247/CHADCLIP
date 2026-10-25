@@ -32,6 +32,7 @@ QUEUE_LATE_HOURS = 2
 BOSS_CHAT_LONG_TOKENS = 40_000     # a chat this long is worth restarting; Sweep closes it by itself at 120k when idle
 REPEAT_MESSAGES = 3                # the same Boss prompt this many times in a day is a loop, not Steven
 REPEAT_TASKS = 4                   # the same job asked for this many times in a day (not by the schedule)
+ROUTINE_OK = ("No follow-ups due",)   # results of free checks that are fine to come back empty
 EMPTY_RUNS = 3                     # this many empty rounds in a row from one scheduled job
 REJECT_RATE = 0.4                  # share of Chad's decided clips that were rejected
 SET_ASIDE_NOTE = "Sweep: video file missing, set aside."
@@ -110,9 +111,7 @@ def _queue_duplicates() -> list[tuple[int, int]]:
 
 def _boss_chat_tokens() -> int:
     from . import boss
-    r = db.rows("SELECT COALESCE(SUM(LENGTH(content)), 0) chars FROM boss_messages WHERE conversation = ? "
-                "AND role != 'marker'", boss.current_conversation())
-    return r[0]["chars"] // 4
+    return boss.chat_tokens()
 
 
 def _pitch_cards_without_email() -> tuple[list[dict], list[dict]]:
@@ -340,6 +339,8 @@ def check_tasks() -> list[dict]:
         key = (t["agent"], t["instructions"])
         if key in ended:
             continue
+        if (t["result"] or "").startswith(ROUTINE_OK):
+            continue     # a routine "nothing due" check is working as intended, not waste (it is free in code now)
         if re.match(r"(Made 0 clips|No |None |Nothing |Skipped)", t["result"] or ""):
             streaks[key] = streaks.get(key, 0) + 1
         else:
@@ -604,7 +605,8 @@ def _fix_fresh_boss_chat() -> str:
     if _boss_chat_tokens() < 2000:
         return "The Boss chat is already fresh."
     boss.new_conversation()
-    return "Started a fresh Boss chat. The old one is saved, and your vision file carries over."
+    return ("Started a fresh Boss chat. The old one is saved, and your vision file and the Boss's notes carry over "
+            "along with a short recap of the last few messages.")
 
 
 FIXES = {  # id -> (number used on Telegram buttons, what it does)

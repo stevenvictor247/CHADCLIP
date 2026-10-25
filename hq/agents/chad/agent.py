@@ -39,6 +39,17 @@ class Chad(Agent):
             schedule=[(every, "Check creators for new videos and clip them.", {})] if every else [],
         )
 
+    def nothing_to_do(self, instructions: str, params: dict) -> bool | None:
+        """The scheduled round only has work when someone is allowed to be clipped: a creator with permission and a
+        source, a joined campaign, or a Twitch streamer with permission (and the Twitch keys to look them up)."""
+        if params:
+            return None
+        if any(sources.is_permitted(c) and c.get("sources") for c in sources.load_creators()):
+            return None   # there is someone to check; if they keep having nothing new, the round backs off
+        if os.getenv("TWITCH_CLIENT_ID") and os.getenv("TWITCH_CLIENT_SECRET") and any(twitch.permissions().values()):
+            return None
+        return True
+
     def run(self, task: dict) -> str:
         params = json.loads(task.get("params") or "{}")
         cfg = settings()
