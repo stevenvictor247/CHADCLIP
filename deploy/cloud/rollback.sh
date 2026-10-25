@@ -8,10 +8,11 @@
 # - Your edited config/ files (vision, accounts, creators...) are kept.
 # - The bad version goes in data/bad-version.txt, so the updater skips it and waits for a newer one.
 # Exit code 0 = rolled back (start HQ again), 1 = nothing to roll back to, 2 = HQ isn't stuck (systemd also calls this
-# after a single crash, which a normal restart fixes, so with --if-stuck it only acts once HQ hit the start limit).
+# after a single crash, which a normal restart fixes, so with --if-stuck it only acts once systemd gave up restarting
+# HQ: the unit is "failed" then, while after a single crash it's waiting to restart).
 set -u
 APP_DIR="${1:-/opt/agent-hq}"
-if [ "${2:-}" = --if-stuck ] && [ "$(systemctl show -P Result agent-hq 2>/dev/null)" != start-limit-hit ]; then
+if [ "${2:-}" = --if-stuck ] && [ "$(systemctl show -P ActiveState agent-hq 2>/dev/null)" != failed ]; then
     exit 2
 fi
 DATA="${HQ_DATA_DIR:-$APP_DIR/data}"
