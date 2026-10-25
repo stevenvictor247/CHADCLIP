@@ -98,3 +98,56 @@ def test_broken_state_file_is_ignored(tmp_path, monkeypatch):
     assert worker._state() == {}
     worker._save_state({"a": 1})
     assert worker._state() == {"a": 1}
+
+
+class Checked(Agent):
+    """An agent with a free look in code before its scheduled round is queued."""
+    def __init__(self, verdict):
+        super().__init__(name="Checked", role="test", schedule=[(1, "Look around.", {})])
+        self.verdict = verdict
+
+    def nothing_to_do(self, instructions, params):
+        return self.verdict
+
+
+def _scheduled(monkeypatch, verdict, state):
+    monkeypatch.setitem(agents.AGENTS, "checked", Checked(verdict))
+    worker.queue_scheduled(state)
+    return db.rows("SELECT * FROM tasks WHERE agent = 'Checked' AND status = 'queued'")
+
+
+@pytest.fixture(autouse=True)
+def _no_checked_tasks():
+    db.init()
+    db.execute("DELETE FROM tasks WHERE agent = 'Checked'")
+
+
+def test_a_free_check_that_finds_nothing_queues_no_task(monkeypatch):
+    state = {}
+    assert _scheduled(monkeypatch, True, state) == []
+    assert state["sched:Checked:Look around."] > 0          # and it asks again only after the usual interval
+    worker.queue_scheduled(state)
+    assert db.rows("SELECT * FROM tasks WHERE agent = 'Checked' AND status = 'queued'") == []
+
+
+def test_a_free_check_that_finds_work_ignores_backoff(monkeypatch):
+    db.init()
+    for _ in range(12):   # a long run of empty rounds would normally slow this job to a quarter speed
+        db.update_task(db.create_task("Checked", "Look around.", created_by="Schedule"), "done", "No news.")
+    state = {"sched:Checked:Look around.": time.time() - 3700}
+    assert len(_scheduled(monkeypatch, False, state)) == 1
+
+
+def test_no_check_still_backs_off_and_a_broken_check_still_runs(monkeypatch):
+    db.init()
+    for _ in range(12):
+        db.update_task(db.create_task("Checked", "Look around.", created_by="Schedule"), "done", "No news.")
+    assert _scheduled(monkeypatch, None, {"sched:Checked:Look around.": time.time() - 3700}) == []
+
+    class Broken(Checked):
+        def nothing_to_do(self, instructions, params):
+            raise RuntimeError("boom")
+    db.execute("DELETE FROM tasks WHERE agent = 'Checked'")
+    monkeypatch.setitem(agents.AGENTS, "checked", Broken(None))
+    worker.queue_scheduled({})
+    assert len(db.rows("SELECT * FROM tasks WHERE agent = 'Checked' AND status = 'queued'")) == 1

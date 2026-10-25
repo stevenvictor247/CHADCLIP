@@ -116,12 +116,24 @@ def queue_scheduled(state: dict):
             continue  # that village's Claude budget is spent: nothing new starts on its own there until tomorrow
         for every_hours, instructions, params in agent.schedule:
             key = f"sched:{agent.name}:{instructions}"
-            if now - state.get(key, 0) >= every_hours * 3600 * backoff(agent.name, instructions):
-                if db.rows("SELECT 1 FROM tasks WHERE agent = ? AND instructions = ? AND status IN ('queued', 'running') "
-                           "LIMIT 1", agent.name, instructions):
-                    continue   # the last round hasn't finished: never stack a second one behind it
-                db.create_task(agent.name, instructions, params, created_by="Schedule")
-                state[key] = now
+            waited = now - state.get(key, 0)
+            if waited < every_hours * 3600:
+                continue
+            if db.rows("SELECT 1 FROM tasks WHERE agent = ? AND instructions = ? AND status IN ('queued', 'running') "
+                       "LIMIT 1", agent.name, instructions):
+                continue   # the last round hasn't finished: never stack a second one behind it
+            try:
+                nothing = agent.nothing_to_do(instructions, params)
+            except Exception:
+                traceback.print_exc()   # a broken check must never stop the round from being queued
+                nothing = None
+            if nothing:
+                state[key] = now   # a free look in code found nothing: no task, so no worker slot and no Claude call
+                continue
+            if nothing is None and waited < every_hours * 3600 * backoff(agent.name, instructions):
+                continue   # no free check for this job: back off after empty rounds instead
+            db.create_task(agent.name, instructions, params, created_by="Schedule")
+            state[key] = now
 
 
 REPORT_MIN_GAP_HOURS = 20  # however the state file behaves, the Boss report never runs twice inside this

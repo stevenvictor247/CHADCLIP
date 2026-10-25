@@ -79,3 +79,78 @@ def test_boss_review_flags_problem_clips_and_never_approves(tmp_path):
     assert clip == {"status": "pending_approval", "boss_note": "No captions and a dull moment"}
     db.set_clip_status(ok, "posted")
     assert "error" in boss.flag_clip(ok, "too late")
+
+
+def test_scheduled_round_is_skipped_when_nobody_can_be_clipped(monkeypatch, tmp_path):
+    from hq import agents
+    from hq.agents.chad import sources, twitch
+    chad = agents.get("Chad")
+    sched = "Check creators for new videos and clip them."
+    monkeypatch.setattr(sources, "load_creators", lambda: [
+        {"name": "Example Creator", "sources": ["https://example.com"], "permission": ""},
+        {"name": "No Source", "permission": "written OK"}])
+    monkeypatch.setattr(twitch, "permissions", lambda: {"jynxzi": ""})
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+    assert chad.nothing_to_do(sched, {}) is True
+    monkeypatch.setattr(twitch, "permissions", lambda: {"jynxzi": "open clipping policy"})
+    assert chad.nothing_to_do(sched, {}) is None                       # someone to check: back off if empty
+    monkeypatch.delenv("TWITCH_CLIENT_SECRET")
+    assert chad.nothing_to_do(sched, {}) is True                       # can't look streamers up without keys
+    monkeypatch.setattr(sources, "load_creators", lambda: [{"name": "Real", "sources": ["u"], "permission": "OK"}])
+    assert chad.nothing_to_do(sched, {}) is None
+    assert chad.nothing_to_do("Clip jynxzi", {"url": "x"}) is None     # asked-for jobs always run
+
+
+def test_example_creator_placeholder_is_ignored(monkeypatch, tmp_path):
+    from hq.agents.chad import sources
+    monkeypatch.setattr(sources, "CONFIG_DIR", tmp_path)
+    (tmp_path / "creators.yaml").write_text(
+        "creators:\n  - name: Example Creator\n    sources: [u]\n    permission: ''\n"
+        "  - name: Real\n    sources: [u]\n    permission: ok\n")
+    assert [c["name"] for c in sources.load_creators()] == ["Real"]
+
+
+def test_boss_chat_rolls_over_with_a_recap(monkeypatch):
+    import json
+    from hq import boss, db
+    db.init()
+    db.execute("DELETE FROM boss_messages")
+    boss._save(1, "user", [{"type": "text", "text": '<vision id="a">\nbig vision\n</vision>'},
+                           {"type": "text", "text": "Have Pitch find 5 streamers"}])
+    boss._save(1, "assistant", [{"type": "thinking", "thinking": "hmm"}, {"type": "text", "text": "Queued task #7."}])
+    boss._save(1, "user", [{"type": "tool_result", "tool_use_id": "t", "content": "x" * 5000}])
+    r = boss.recap(1)
+    assert "Steven: Have Pitch find 5 streamers" in r and "Boss: Queued task #7." in r
+    assert "vision" not in r and "xxxx" not in r
+    conv = boss.new_conversation()
+    msgs = boss.history(conv)
+    assert conv == 2 and len(msgs) == 2 and msgs[0]["content"][0]["text"].startswith(boss.RECAP_TAG)
+    assert all(boss.is_recap(m) for m in msgs) and boss.chat_tokens(conv) < 2000
+    assert boss.new_conversation(carry=False) == 3 and boss.history(3) == []
+    # an empty chat has nothing to carry over
+    assert boss.history(boss.new_conversation()) == []
+
+
+def test_long_chat_rolls_over_before_the_next_message(monkeypatch):
+    from hq import boss, db, llm
+    db.init()
+    db.execute("DELETE FROM boss_messages")
+    boss._save(1, "user", [{"type": "text", "text": "Plan the week"}])
+    boss._save(1, "assistant", [{"type": "text", "text": "y" * (boss.AUTO_ROLL_TOKENS * 4)}])
+    seen = {}
+
+    class R:
+        stop_reason, content = "end_turn", []
+
+    def fake_create(model, system, messages, **kw):
+        seen["n"] = len(messages)
+        seen["first"] = messages[0]["content"][0]["text"]
+        return R()
+
+    monkeypatch.setattr(llm, "HAS_LLM", True)
+    monkeypatch.setattr(llm, "create", fake_create)
+    monkeypatch.setattr(llm, "text_of", lambda r: "ok")
+    assert boss.chat("What next?") == "ok"
+    assert boss.current_conversation() == 2
+    assert seen["n"] == 3 and seen["first"].startswith(boss.RECAP_TAG)   # recap, ack, new message: not 30k tokens

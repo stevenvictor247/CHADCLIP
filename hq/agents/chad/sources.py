@@ -16,7 +16,13 @@ def load_creators() -> list[dict]:
     from ... import campaigns
     with open(CONFIG_DIR / "creators.yaml") as f:
         listed = (yaml.safe_load(f) or {}).get("creators") or []
+    listed = [c for c in listed if not _is_placeholder(c)]
     return listed + campaigns.as_creators()
+
+
+def _is_placeholder(creator: dict) -> bool:
+    """The "Example Creator" entry from the old sample file is not a real creator: never count or report it."""
+    return str(creator.get("name", "")).strip().lower() == "example creator" and not is_permitted(creator)
 
 
 def find_creator(name: str) -> dict | None:

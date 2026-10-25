@@ -240,7 +240,7 @@ def state():
         "posts": db.rows("SELECT * FROM posts ORDER BY id DESC LIMIT 20"),
         "activity": db.rows("SELECT * FROM activity ORDER BY id DESC LIMIT 40"),
         "chat": [m for m in boss.history(boss.current_conversation())
-                 if isinstance(m["content"], list) and any(b.get("type") == "text" for b in m["content"])
+                 if not boss.is_recap(m) and isinstance(m["content"], list) and any(b.get("type") == "text" for b in m["content"])
                  and not any(b.get("type") == "tool_result" for b in m["content"])],
     }
 

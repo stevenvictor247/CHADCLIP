@@ -226,6 +226,13 @@ class Pitch(Agent):
             out.append((24, "Find new leads and draft pitches.", {"find": int(cfg.get("daily_leads", 5))}))
         return out
 
+    def nothing_to_do(self, instructions: str, params: dict) -> bool | None:
+        """Follow-up rounds are a plain database look: when no pitched lead is due, no task is queued at all."""
+        if params.get("followups") and set(params) == {"followups"}:
+            return not db.rows("SELECT 1 FROM leads WHERE status = 'pitched' AND followup_at IS NOT NULL "
+                               "AND followup_at <= ? LIMIT 1", _iso())
+        return None
+
     def run(self, task: dict) -> str:
         params = json.loads(task.get("params") or "{}")
         if params.get("find"):

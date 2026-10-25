@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from hq import approvals, db, llm, relay
+from hq import agents, approvals, db, llm, relay
 from hq.agents.pitch import agent as pitch_mod
 from hq.agents.pitch.agent import Pitch
 
@@ -364,3 +364,14 @@ def test_require_email_skips_streamers_without_one(monkeypatch):
     db.execute("DELETE FROM leads")
     db.execute("DELETE FROM email_finds")
     assert "public email" in run({"find": 5})
+
+
+def test_scheduled_followup_check_is_free_when_nothing_is_due(_setup):
+    pitch = agents.get("Pitch")
+    assert pitch.nothing_to_do("Check which pitched leads need a follow-up.", {"followups": True}) is True
+    assert pitch.nothing_to_do("Find new leads.", {"find": 5}) is None   # other jobs are not decided here
+    run({"lead": {"name": "Sam", "platform": "youtube", "handle": "sam", "contact": "c"}})
+    db.execute("UPDATE leads SET status = 'pitched', followup_at = '2999-01-01T00:00:00+00:00'")
+    assert pitch.nothing_to_do("x", {"followups": True}) is True         # pitched, but not yet due
+    db.execute("UPDATE leads SET followup_at = '2000-01-01T00:00:00+00:00'")
+    assert pitch.nothing_to_do("x", {"followups": True}) is False        # due: the round runs
