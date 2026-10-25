@@ -44,7 +44,7 @@ Unattended-Upgrade::Automatic-Reboot "true";
 Unattended-Upgrade::Automatic-Reboot-Time "04:30";
 CONF
 
-if ! swapon --show | grep -q .; then
+if ! systemd-detect-virt --container -q 2>/dev/null && ! swapon --show | grep -q .; then
     say "Adding 4 GB of swap, so a big video job can't run the server out of memory"
     fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
     grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
