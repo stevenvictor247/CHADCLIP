@@ -143,7 +143,8 @@ def describe() -> dict:
     last = {name: {"ok": r["ok"], "message": r["message"]} for name, r in tests.items()}
     from . import tiktok_auth
     from . import youtube_auth
-    return {"tiktok": tiktok_auth.status(), "youtube": youtube_auth.status(), "sections": sections, "accounts": accts, "tests": last, "pitch": pitch_describe()}
+    from . import instagram_auth
+    return {"instagram": instagram_auth.status(), "tiktok": tiktok_auth.status(), "youtube": youtube_auth.status(), "sections": sections, "accounts": accts, "tests": last, "pitch": pitch_describe()}
 
 
 def save(values: dict) -> list[str]:

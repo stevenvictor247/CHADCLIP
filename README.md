@@ -98,7 +98,7 @@ Tune it in `config/chad.yaml` (clips per video, length, how often it checks, cap
 | --- | --- |
 | TikTok | A developer app with the Content Posting API, and an access token per clipping account. Unaudited apps can only send clips to the account's inbox (`mode: inbox`), where you tap Post; direct posting needs TikTok's audit. |
 | YouTube Shorts | A Google Cloud project with YouTube Data API v3 and a Desktop-app OAuth client. Paste its file under **Connect YouTube** in ⚙️ Settings and press **Open Google sign-in**, approve, then paste back the address you land on (works from the Mac). Publish the consent screen first or Google signs you out every 7 days. New projects get roughly 6 uploads per day of quota. |
-| Instagram Reels | A Business or Creator account linked to a Facebook page, the account's ID and token, and `HQ_PUBLIC_BASE_URL` pointing at where `data/clips` is reachable from the internet. |
+| Instagram Reels | A Business or Creator account linked to a Facebook page and a Meta developer app. Follow **Connect Instagram** in ⚙️ Settings: paste the app's ID and secret, then a token from the Graph API Explorer, and HQ swaps it for one that doesn't expire. Clips are uploaded straight to Instagram, so no public address is needed (`HQ_PUBLIC_BASE_URL` is optional). |
 
 Paste each account's secrets under ⚙️ Settings, then switch the account on there.
 

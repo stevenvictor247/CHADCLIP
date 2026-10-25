@@ -151,3 +151,86 @@ def test_dashboard_can_tell_when_the_agents_stopped(monkeypatch, tmp_path):
     old = _time.time() - 3600
     os.utime(tmp_path / "worker_alive.txt", (old, old))
     assert c.get("/api/pause").json()["worker_seconds_ago"] >= 3599
+
+
+# ---- Instagram ----
+
+class _R:
+    def __init__(self, data, status=200):
+        self._d, self.status_code, self.text = data, status, str(data)
+
+    def json(self):
+        return self._d
+
+
+def test_instagram_uploads_straight_when_no_public_url(monkeypatch, tmp_path):
+    from hq.agents.chad.publish import instagram as ig
+    video = tmp_path / "c.mp4"
+    video.write_bytes(b"12345")
+    monkeypatch.delenv("HQ_PUBLIC_BASE_URL", raising=False)
+    monkeypatch.setenv("IG_U", "42")
+    monkeypatch.setenv("IG_T", "tok")
+    calls = []
+
+    def post(url, **k):
+        calls.append((url, k))
+        if url.endswith("/media"):
+            return _R({"id": "cont1"})
+        if "rupload" in url:
+            return _R({"success": True})
+        return _R({"id": "media9"})
+    monkeypatch.setattr(ig.requests, "post", post)
+    monkeypatch.setattr(ig.requests, "get", lambda *a, **k: _R({"status_code": "FINISHED"}))
+    ext, url = ig.publish({"path": str(video), "post_text": "hi"}, {"ig_user_id_env": "IG_U", "access_token_env": "IG_T"})
+    assert ext == "media9"
+    assert calls[0][1]["data"]["upload_type"] == "resumable" and "video_url" not in calls[0][1]["data"]
+    assert calls[1][1]["headers"] == {"Authorization": "OAuth tok", "offset": "0", "file_size": "5"}
+
+
+def test_instagram_uses_public_url_when_set(monkeypatch, tmp_path):
+    from hq.agents.chad.publish import instagram as ig
+    monkeypatch.setenv("HQ_PUBLIC_BASE_URL", "https://x.example/")
+    monkeypatch.setenv("IG_U", "42")
+    monkeypatch.setenv("IG_T", "tok")
+    seen = []
+    monkeypatch.setattr(ig.requests, "post", lambda url, **k: seen.append(url) or _R({"id": "a"}))
+    monkeypatch.setattr(ig.requests, "get", lambda *a, **k: _R({"status_code": "FINISHED"}))
+    ig.publish({"path": "/d/c.mp4", "post_text": "hi"}, {"ig_user_id_env": "IG_U", "access_token_env": "IG_T"})
+    assert not any("rupload" in u for u in seen)
+
+
+def test_connect_instagram_saves_page_token_and_account(monkeypatch):
+    from hq import instagram_auth as ia
+    monkeypatch.setenv("IG_APP_ID", "app")
+    monkeypatch.setenv("IG_APP_SECRET", "sec")
+    saved = {}
+    monkeypatch.setattr(ia.settings, "save", lambda v: saved.update(v) or list(v))
+
+    def get(url, params=None, **k):
+        if url.endswith("oauth/access_token"):
+            return _R({"access_token": "LONGUSER"})
+        if url.endswith("me/accounts"):
+            assert params["access_token"] == "LONGUSER"
+            return _R({"data": [{"name": "NoIG", "access_token": "x"},
+                                {"name": "Pg", "access_token": "PAGETOK", "instagram_business_account": {"id": "17841"}}]})
+        return _R({"username": "chadclips"})
+    monkeypatch.setattr(ia.requests, "get", get)
+    msg = ia.connect("s" * 30)
+    assert saved == {"IG_USER_ID_MAIN": "17841", "IG_ACCESS_TOKEN_MAIN": "PAGETOK"}
+    assert "@chadclips" in msg
+
+
+def test_connect_instagram_explains_problems(monkeypatch):
+    from hq import instagram_auth as ia
+    monkeypatch.setenv("IG_APP_ID", "app")
+    monkeypatch.setenv("IG_APP_SECRET", "sec")
+    monkeypatch.setattr(ia.settings, "save", lambda v: [])
+    monkeypatch.setattr(ia.requests, "get", lambda url, **k: _R({"access_token": "L"}) if "oauth" in url else _R({"data": []}))
+    with pytest.raises(ia.InstagramError, match="Pages"):
+        ia.connect("s" * 30)
+    monkeypatch.setattr(ia.requests, "get", lambda url, **k: _R({"error": {"message": "bad"}}))
+    with pytest.raises(ia.InstagramError, match="bad"):
+        ia.connect("s" * 30)
+    monkeypatch.delenv("IG_APP_ID")
+    with pytest.raises(ia.InstagramError, match="IG_APP_ID"):
+        ia.connect("s" * 30)
