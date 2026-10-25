@@ -64,7 +64,9 @@ fi
 mkdir -p "$HQ_HOME" "$APP_DIR/data"
 chown -R hq:hq "$APP_DIR" "$HQ_HOME"
 # Your data and sign-ins are readable by HQ only.
+chmod -R go-w "$APP_DIR"
 chmod 750 "$APP_DIR/data" "$HQ_HOME"
+[ -f "$APP_DIR/.env" ] && chmod 600 "$APP_DIR/.env"
 [ -d "$APP_DIR/config/secrets" ] && chmod -R go-rwx "$APP_DIR/config/secrets"
 
 say "Installing HQ's Python packages (a few minutes)"
