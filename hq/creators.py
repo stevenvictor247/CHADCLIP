@@ -110,4 +110,16 @@ def add_allowed(raw_login: str, how: str) -> str:
         raise ValueError(f"{login} is already on the list")
     record_permission(login, how)
     db.log("Steven", f"Permission recorded for {login}: {' '.join(how.split())}")
-    return f"Saved. Chad can now clip {login}."
+    queue_chad_round()
+    return f"Saved. Chad is checking {login}'s clips now."
+
+
+CHAD_ROUND = "Check creators for new videos and clip them."
+
+
+def queue_chad_round() -> None:
+    """Start Chad's round right away, so a streamer just added isn't left waiting for the next scheduled one
+    (which can be hours away, or a day after several empty rounds)."""
+    if not db.rows("SELECT 1 FROM tasks WHERE agent = 'Chad' AND instructions = ? AND status IN ('queued', 'running') "
+                   "LIMIT 1", CHAD_ROUND):
+        db.create_task("Chad", CHAD_ROUND, {}, created_by="Steven")
