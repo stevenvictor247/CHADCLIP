@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs (or repairs, or updates) Agent HQ on an Ubuntu 24.04 cloud server. Safe to run again at any time: it never
+# Installs (or repairs, or updates) Agent HQ on an Ubuntu 24.04 cloud server (Oracle Always Free, Vultr, any other). Safe to run again at any time: it never
 # touches data/, config/ or your settings.
 #
 # Normally you never run this yourself. HQ's Move page makes a "setup text" that you paste into the cloud provider's
@@ -174,7 +174,15 @@ systemctl stop agent-hq-health.timer 2>/dev/null || true
 systemctl restart agent-hq
 
 # Only devices on your Tailscale network can reach the server. The public internet sees nothing at all.
-if ip link show tailscale0 >/dev/null 2>&1; then
+if grep -qi oraclecloud /sys/class/dmi/id/chassis_asset_tag 2>/dev/null; then
+    # Oracle's Ubuntu already blocks everything coming in except SSH (with its own iptables rules) and asks people
+    # not to use ufw, so HQ just lets your Tailscale devices in on top of those rules.
+    say "Letting your Tailscale devices in (Oracle's firewall blocks everyone else)"
+    for t in iptables ip6tables; do
+        $t -C INPUT -i tailscale0 -j ACCEPT 2>/dev/null || $t -I INPUT 1 -i tailscale0 -j ACCEPT
+    done
+    command -v netfilter-persistent >/dev/null && netfilter-persistent save >/dev/null 2>&1 || true
+elif ip link show tailscale0 >/dev/null 2>&1; then
     say "Locking the server to your Tailscale devices"
     ufw default deny incoming >/dev/null
     ufw default allow outgoing >/dev/null

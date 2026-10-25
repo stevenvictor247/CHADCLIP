@@ -554,7 +554,7 @@ def cloud_script(tailscale_key: str) -> str:
     tz = local_timezone() or "America/New_York"
     return f"""#!/bin/bash
 # Agent HQ cloud server. Made by your HQ on {datetime.now():%b %d %Y}. Paste ALL of this into the
-# "Cloud-Init User-Data" box when you create the server. It installs HQ by itself in about 10 minutes.
+# cloud-init box when you create the server (Oracle: "Paste cloud-init script"; Vultr: "Cloud-Init User-Data"). It installs HQ by itself in about 10 minutes.
 export HQ_PASSWORD='{move_code()}'
 export HQ_TZ='{tz}'
 export TS_AUTHKEY='{key}'
@@ -580,6 +580,8 @@ def find_servers() -> list[dict]:
     found = []
     for p in peers:
         name = (p.get("HostName") or "").lower()
+        if not name.startswith("agent-hq"):
+            name = (p.get("DNSName") or "").split(".")[0].lower()
         ips = [ip for ip in p.get("TailscaleIPs") or [] if "." in ip]
         if name.startswith("agent-hq") and ips:
             found.append({"name": p.get("HostName"), "url": f"http://{ips[0]}:8000", "online": bool(p.get("Online"))})
