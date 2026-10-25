@@ -84,7 +84,7 @@ FOOTBALL_REMINDER_HOUR = int(os.getenv("HQ_FOOTBALL_REMINDER_HOUR", "8") or 8)
 
 # Thursday print: what's in this folder gets printed once a week, then moves to its Printed subfolder. Blank = a
 # "Print Thursday" folder in the football Outbox. Point it at a Google Drive folder (synced to this PC) to drop files in from anywhere.
-FOOTBALL_PRINT_DIR = Path(os.getenv("HQ_PRINT_DIR", "").strip() or FOOTBALL_DIR / "Print Thursday")
+FOOTBALL_PRINT_DIR = Path(os.getenv("HQ_PRINT_DIR", "").strip() or FOOTBALL_DIR / "2026 WSU FOOTBALL")
 # Printer name exactly as Windows lists it. Blank = the Windows default printer.
 FOOTBALL_PRINTER = os.getenv("HQ_PRINTER", "").strip()
 FOOTBALL_PRINT_WEEKDAY = int(os.getenv("HQ_PRINT_WEEKDAY", "").strip() or "3") % 7   # 0 = Monday ... 3 = Thursday

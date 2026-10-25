@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ... import approvals, db
 from ...config import FOOTBALL_DATA, FOOTBALL_OUTBOX
-from ...football import files, reports, season, sheet, tendencies
+from ...football import files, printing, reports, season, sheet, tendencies
 from ..base import Agent
 
 DRAFTS = FOOTBALL_DATA / "drafts"
@@ -40,7 +40,7 @@ def build(name: str, opponent: str | None = None) -> str:
     if opp == "Opponent":
         preview += "\n\n(I couldn't tell the opponent from the file name. Tell the Boss who it is and I'll rebuild it.)"
     approvals.request("Tells", "football_report", f"Scouting report: {opp} ({a['plays']} plays)", preview,
-                      {"draft": str(draft), "name": out_name}, yes="Save to Outbox", no="Throw away")
+                      {"draft": str(draft), "name": out_name, "opponent": opp}, yes="Save to Outbox", no="Throw away")
     return f"Scouting report for {opp} is ready for your OK ({a['plays']} plays)."
 
 
@@ -55,7 +55,14 @@ def _decide(payload: dict, decision: str) -> str:
     dest = FOOTBALL_OUTBOX / payload["name"]
     shutil.move(str(draft), dest)
     db.log("Tells", f"Saved {dest.name} to the football Outbox")
-    return f"Saved {dest.name} in the football Outbox. Sending it to your DC is up to you."
+    where = ""
+    try:
+        copy = printing.deliver(dest, payload.get("opponent"))
+        if copy:
+            where = f" and in the {copy.parent.name} folder, ready to print"
+    except OSError as e:
+        where = f" (couldn't copy it into the opponent folder: {e})"
+    return f"Saved {dest.name} in the football Outbox{where}. Sending it to your DC is up to you."
 
 
 approvals.HANDLERS["football_report"] = _decide

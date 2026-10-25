@@ -1,9 +1,11 @@
-"""Thursday print: once a week (Thursday 8 PM by default) Clock prints everything in the print folder on your printer.
+"""Thursday print: once a week (Thursday 8 PM by default) Clock prints this week's opponent folder on your printer.
 
-Only files you or an agent put in that folder are printed. A printed file moves to the folder's Printed subfolder, so
-nothing prints twice. If the folder is empty nothing happens. Pause stops it, Print now runs it on the spot, and the last
-prints are listed on the dashboard. Printing goes through whatever app Windows uses for that file type (Word for .docx,
-Excel for .xlsx, your PDF reader for .pdf), so files print the way they'd print if you right-clicked them yourself.
+The print folder (2026 WSU FOOTBALL) holds one subfolder per opponent. Clock prints the documents in the subfolder for the
+team Wayne State plays that week, and nothing else. HQ creates the opponent folders for you, and agents drop their finished
+documents into the right one. Files stay where they are: a file prints once, and prints again only if it changes. If the
+folder is empty nothing happens. Pause stops it, Print now runs it on the spot, and the last prints are listed on the
+dashboard. Printing goes through whatever app Windows uses for that file type (Word for .docx, Excel for .xlsx, your PDF
+reader for .pdf), so files print the way they'd print if you right-clicked them yourself.
 """
 
 import json
@@ -16,6 +18,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .. import db
+from . import season
 from ..config import FOOTBALL_DATA, FOOTBALL_PRINT_DIR, FOOTBALL_PRINT_HOUR, FOOTBALL_PRINT_WEEKDAY, FOOTBALL_PRINTER
 
 STATE_PATH = FOOTBALL_DATA / "print.json"
@@ -79,12 +82,75 @@ def next_slot(now: datetime | None = None) -> datetime:
     return slot if slot > now else slot + timedelta(days=7)
 
 
+def week_opponent(now: datetime | None = None) -> str | None:
+    g = season.current_game((now or datetime.now()).date())
+    return g["opponent"] if g else None
+
+
+def folder_for(opponent: str) -> Path | None:
+    """The subfolder for an opponent: its exact name, or any folder name that points to it (NMU, Grand Valley...)."""
+    try:
+        kids = sorted(p for p in FOOTBALL_PRINT_DIR.iterdir() if p.is_dir() and not p.name.startswith("."))
+    except OSError:
+        return None
+    for p in kids:
+        if p.name.casefold() == opponent.casefold():
+            return p
+    return next((p for p in kids if season.find_opponent(p.name) == opponent), None)
+
+
+def ensure_folders() -> list[str]:
+    """Make a folder for every opponent on the schedule that doesn't have one yet. Returns the ones it made."""
+    made = []
+    for g in season.games():
+        if folder_for(g["opponent"]) is None:
+            try:
+                (FOOTBALL_PRINT_DIR / g["opponent"]).mkdir(parents=True, exist_ok=True)
+                made.append(g["opponent"])
+            except OSError:
+                break
+    return made
+
+
+def ensure_folders_daily() -> None:
+    """Keeps the opponent folders there (a deleted one comes back, a new opponent gets one), checked once a day."""
+    s = _state()
+    today = datetime.now().strftime("%Y-%m-%d")
+    if s.get("folders_day") == today:
+        return
+    made = ensure_folders()
+    s = _state()
+    s["folders_day"] = today
+    _save(s)
+    if made:
+        _log("Made opponent folders: " + ", ".join(made) + ".")
+
+
+def deliver(src: Path, opponent: str | None) -> Path | None:
+    """Copy a finished document into the opponent's folder so it's ready to print. Never overwrites a file."""
+    if not opponent or season.find_opponent(opponent) is None:
+        return None
+    folder = folder_for(opponent) or FOOTBALL_PRINT_DIR / season.find_opponent(opponent)
+    folder.mkdir(parents=True, exist_ok=True)
+    dest = folder / src.name
+    n = 2
+    while dest.exists():
+        dest = folder / f"{src.stem} ({n}){src.suffix}"
+        n += 1
+    shutil.copy2(src, dest)
+    return dest
+
+
 def waiting(now: float | None = None) -> list[dict]:
     """Files that would print now. Each has a reason when it can't: still syncing, or a type that can't print."""
     now = now or time.time()
     s, out = _state().get("printed", {}), []
+    opp = week_opponent()
+    folder = folder_for(opp) if opp else None
+    if folder is None:
+        return []
     try:
-        entries = sorted(p for p in FOOTBALL_PRINT_DIR.iterdir() if p.is_file())
+        entries = sorted(p for p in folder.iterdir() if p.is_file())
     except OSError:
         return []
     for p in entries:
@@ -94,9 +160,10 @@ def waiting(now: float | None = None) -> list[dict]:
             mtime = p.stat().st_mtime
         except OSError:
             continue
-        if s.get(p.name) == mtime:
-            continue   # printed already but couldn't be moved: never print the same version twice
-        item = {"name": p.name, "path": p, "mtime": mtime, "problem": None}
+        key = f"{folder.name}/{p.name}"
+        if s.get(key) == mtime:
+            continue   # printed already: never print the same version twice
+        item = {"name": p.name, "path": p, "key": key, "mtime": mtime, "problem": None}
         if p.suffix.lower() not in PRINTABLE:
             item["problem"] = ("A Google Doc/Sheet shortcut can't print: download it as a PDF into the folder."
                                if p.suffix.lower() in (".gdoc", ".gsheet", ".gslides") else
@@ -127,21 +194,15 @@ def _send(path: Path) -> None:
         raise RuntimeError(msg[0][:200] if msg else "Windows couldn't print it")
 
 
-def _archive(path: Path) -> None:
-    dest_dir = FOOTBALL_PRINT_DIR / "Printed" / datetime.now().strftime("%Y-%m-%d")
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / path.name
-    n = 2
-    while dest.exists():
-        dest = dest_dir / f"{path.stem} ({n}){path.suffix}"
-        n += 1
-    shutil.move(str(path), dest)
-
-
 def print_now(reason: str = "Print now") -> str:
     """Print everything waiting. Returns the one-line summary (also logged and sent to your phone by the caller)."""
     files = waiting()
     ready = [f for f in files if not f["problem"]]
+    opp = week_opponent()
+    if not files and opp and folder_for(opp) is None:
+        msg = f"There's no {opp} folder in {FOOTBALL_PRINT_DIR.name} yet, so nothing printed."
+        _log(msg)
+        return msg
     notes = [f"{f['name']}: {f['problem']}" for f in files if f["problem"]]
     if not ready:
         msg = "Nothing to print." if not files else "Nothing ready to print yet."
@@ -155,15 +216,12 @@ def print_now(reason: str = "Print now") -> str:
             failed.append(f"{f['name']} ({e})")
             continue
         printed.append(f["name"])
-        try:
-            _archive(f["path"])
-        except OSError:   # the app may still hold the file: remember it so it can't print twice
-            s = _state()
-            s.setdefault("printed", {})[f["name"]] = f["mtime"]
-            _save(s)
+        s = _state()
+        s.setdefault("printed", {})[f["key"]] = f["mtime"]
+        _save(s)
     lines = []
     if printed:
-        lines.append(f"Printed {len(printed)} file{'s' if len(printed) > 1 else ''}: " + ", ".join(printed) + ".")
+        lines.append(f"Printed {len(printed)} file{'s' if len(printed) > 1 else ''} from the {opp} folder: " + ", ".join(printed) + ".")
     if failed:
         lines.append("Couldn't print: " + "; ".join(failed) + ". They're still in the folder.")
     lines += notes
@@ -199,8 +257,13 @@ def run_if_due(now: datetime | None = None) -> str | None:
         relay.notify(msg)
         return msg
     if not waiting():
-        _log("Thursday print: nothing in the folder, so nothing printed.")
-        return "Nothing to print."
+        opp = week_opponent()
+        msg = ("Thursday print: " + (f"nothing in the {opp} folder, so nothing printed." if opp and folder_for(opp)
+                                    else f"no folder for {opp} yet, so nothing printed." if opp else "no game this week."))
+        _log(msg)
+        if opp and not folder_for(opp):
+            relay.notify("🖨️ Clock\n" + msg)
+        return msg
     text = print_now("Thursday print")
     relay.notify("🖨️ Clock\n" + text)
     return text
@@ -211,6 +274,7 @@ def state() -> dict:
     files = waiting()
     return {
         "folder": str(FOOTBALL_PRINT_DIR), "folder_found": FOOTBALL_PRINT_DIR.is_dir(),
+        "opponent": week_opponent(), "week_folder": (folder_for(week_opponent() or "") or Path("")).name or None,
         "printer": FOOTBALL_PRINTER or "Windows default printer",
         "when": f"{DAYS[FOOTBALL_PRINT_WEEKDAY]}s at {_hour_text(FOOTBALL_PRINT_HOUR)}",
         "next": next_slot().isoformat(timespec="minutes"), "paused": bool(s.get("paused")),

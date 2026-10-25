@@ -175,6 +175,7 @@ def football_tick():
             db.create_task("Ref", f"Check {name}", {"file": name}, created_by="Inbox")
         season.remind_if_due(FOOTBALL_REMINDER_HOUR)
         printing.run_if_due()
+        printing.ensure_folders_daily()
     except Exception as e:  # never let the football side stop the business side
         traceback.print_exc()
         db.log("HQ", f"Football rounds failed: {e}")
