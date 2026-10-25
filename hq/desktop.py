@@ -47,15 +47,18 @@ def open_app(port=PORT, update=True, wait_port=False):
                 break
             time.sleep(0.2)
 
+    # Once HQ has moved to the cloud, this copy is on standby and the icon opens the cloud HQ instead.
+    from .standby import info
+    moved = info() or {}
+    url = moved["moved_to"] if moved.get("reason") == "moved" and moved.get("moved_to") else f"http://127.0.0.1:{port}"
     try:
         import webview
     except ImportError:
         # pywebview didn't install: use Edge's app mode instead, and keep HQ running until you sign out.
-        subprocess.Popen([r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                          f"--app=http://127.0.0.1:{port}"])
+        subprocess.Popen([r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", f"--app={url}"])
         threading.Event().wait()
 
-    webview.create_window("Agent HQ", f"http://127.0.0.1:{port}", width=1400, height=900, min_size=(900, 600))
+    webview.create_window("Agent HQ", url, width=1400, height=900, min_size=(900, 600))
     # Remember the login between launches.
     webview.start(private_mode=False, storage_path=str(DATA_DIR / "desktop-app"))
 

@@ -24,7 +24,23 @@ def make_backup(with_clips: bool = False, keep: int = 14) -> Path:
     copy_dir = os.getenv("HQ_BACKUP_COPY_DIR", "").strip()
     if copy_dir:
         _copy_elsewhere(Path(copy_dir), out.name, keep)
+    _copy_to_drive(out.name, keep)
     return out
+
+
+def _copy_to_drive(name: str, keep: int):
+    """On the cloud server with Google Drive connected, a copy (without keys, like the one above) goes to
+    My Drive/Agent HQ backups, so even losing the whole server loses nothing."""
+    from . import db, drive_sync
+    if not drive_sync.connected():
+        return
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            staged = Path(tmp) / name
+            _write(staged, with_clips=False, secrets=False)
+            drive_sync.upload_backup(staged, keep)
+    except Exception as e:   # no internet or Drive full: say so, but keep the local backup
+        db.log("HQ", f"Couldn't put the backup copy in Google Drive: {str(e)[:200]}")
 
 
 def _write(out: Path, with_clips: bool, secrets: bool):
@@ -59,37 +75,6 @@ def _state_files(secrets: bool) -> list[Path]:
     for d in _STATE_DIRS:
         found += (DATA_DIR / d).rglob("*") if (DATA_DIR / d).is_dir() else []
     return [p for p in found if p.is_file()]
-
-
-def restore(zip_path: Path) -> list[str]:
-    """Put a backup back: database, Settings, keys, sign-ins. The database it replaces is kept beside it as
-    hq.sqlite3.before-restore. This copy becomes the one that runs the agents (standby is switched off)."""
-    from .standby import set_standby
-    zip_path = Path(zip_path)
-    restored = []
-    with zipfile.ZipFile(zip_path) as z:
-        if f"data/{DB_PATH.name}" not in z.namelist():
-            raise ValueError(f"{zip_path.name} isn't an HQ backup (no database inside).")
-        for info in z.infolist():
-            if info.is_dir():
-                continue
-            parts = Path(info.filename).parts
-            if parts[0] == "data":
-                dest = DATA_DIR.joinpath(*parts[1:])
-                base = DATA_DIR
-            else:
-                dest = ROOT.joinpath(*parts)
-                base = ROOT
-            if ".." in parts or not dest.resolve().is_relative_to(base.resolve()):
-                raise ValueError(f"{info.filename} is outside the HQ folder; not restoring.")
-            if dest == DB_PATH and dest.exists():
-                shutil.copy2(dest, dest.with_name(dest.name + ".before-restore"))
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            with z.open(info) as src, open(dest, "wb") as out:
-                shutil.copyfileobj(src, out)
-            restored.append(info.filename)
-    set_standby(False)
-    return restored
 
 
 def _keep_newest(folder: Path, keep: int):

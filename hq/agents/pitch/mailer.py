@@ -117,6 +117,10 @@ def _explain(e: Exception) -> SendError:
 
 
 def send(msg: EmailMessage) -> None:
+    from ...standby import blocked
+    why = blocked()
+    if why:   # only the copy of HQ that runs the agents sends email, so nothing goes out twice
+        raise SendError(f"Not sent. {why}")
     try:
         with _connect() as s:
             s.send_message(msg)

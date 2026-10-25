@@ -110,14 +110,43 @@
     try { await fetch("/api/restart", {method: "POST", headers: {"X-HQ": "1"}}); } catch (err) {}
     if (window.hqWaitForRestart) window.hqWaitForRestart();
   };
-  pausedBar.insertAdjacentHTML("afterend", `<div id="hq-standby" style="display:none;gap:12px;align-items:center;padding:10px 22px;background:var(--panel2,#1d2430);border-bottom:1px solid var(--line,#2a3342)"><b>💤 This copy of HQ is on standby.</b><span class="what" style="color:var(--muted);font-size:13px">Another computer is running the agents, so nothing runs or posts here.</span></div>`);
-  const standbyBar = document.getElementById("hq-standby");
+  // Standby: another copy of HQ (the cloud server, or your PC) runs the agents, so this one is read-only.
+  pausedBar.insertAdjacentHTML("afterend", `<div id="hq-standby" style="display:none;position:relative;z-index:2;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 22px;background:rgba(124,196,255,.16);border-bottom:1px solid var(--line)"></div>
+    <div id="hq-moved" style="display:none;position:fixed;inset:0;z-index:50;background:rgba(10,8,16,.94);align-items:center;justify-content:center;padding:16px">
+      <div style="max-width:520px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;text-align:center">
+        <div style="font-size:40px">☁️</div><h2 style="margin:6px 0 10px">HQ runs in the cloud now</h2>
+        <p style="color:var(--muted);margin:0 0 18px">Your agents work there, even with this computer off. This copy is on standby, so nothing runs or posts here.</p>
+        <a id="hq-moved-go" class="hqbar-btn" style="justify-content:center;font-size:17px;padding:12px 20px" href="#">Open HQ</a>
+        <p style="color:var(--muted);font-size:13px;margin:16px 0 0">Address: <span id="hq-moved-url"></span> · <a href="/move" style="color:var(--muted)">Move HQ</a> · <a href="#" id="hq-moved-stay" style="color:var(--muted)">look around here (read-only)</a></p>
+      </div></div>
+    <div id="hq-clash" style="display:none;position:relative;z-index:2;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 22px;background:rgba(248,113,113,.22);border-bottom:1px solid var(--line)"></div>`);
+  const standbyBar = document.getElementById("hq-standby"), moved = document.getElementById("hq-moved"),
+        clashBar = document.getElementById("hq-clash");
+  let stayHere = false;
+  document.getElementById("hq-moved-stay").onclick = e => { e.preventDefault(); stayHere = true; moved.style.display = "none"; };
+  const WHY = {
+    waiting: "This new cloud HQ is waiting for your HQ. On the computer HQ runs on now, open ⚙️ Settings → 🚚 Move HQ.",
+    moving: "HQ is moving to another computer right now. Nothing runs or posts here.",
+    starting: "Your HQ just moved in. It's restarting to take over.",
+    moved: "Another computer runs the agents, so nothing runs or posts here.",
+    manual: "Nothing runs or posts on this copy."};
   async function checkPause() {
     try {
       const s = await (await fetch("/api/pause")).json();
       showPaused(s.paused);
-      standbyBar.style.display = s.standby ? "flex" : "none";
-      const quiet = s.standby ? null : s.worker_seconds_ago;
+      const sb = s.standby;
+      pauseBtn.style.display = sb ? "none" : "";
+      if (sb && sb.reason === "moved" && sb.moved_to && !stayHere) {
+        moved.style.display = "flex";
+        document.getElementById("hq-moved-go").href = sb.moved_to;
+        document.getElementById("hq-moved-url").textContent = sb.moved_to;
+      } else moved.style.display = "none";
+      standbyBar.style.display = sb ? "flex" : "none";
+      if (sb) standbyBar.innerHTML = `<b>💤 This copy of HQ is on standby.</b><span class="what">${esc(WHY[sb.reason] || WHY.manual)}</span>` +
+        (sb.moved_to ? `<a class="hqbar-btn" href="${esc(sb.moved_to)}">Open HQ</a>` : "");
+      clashBar.style.display = s.clash ? "flex" : "none";
+      if (s.clash) clashBar.innerHTML = `<b>⚠️ Two copies of HQ are running.</b><span class="what">${esc(s.clash)}</span>`;
+      const quiet = sb ? null : s.worker_seconds_ago;
       stoppedBar.style.display = quiet !== null && quiet !== undefined && quiet > 20 * 60 ? "flex" : "none";
       if (quiet) document.getElementById("hq-stopped-min").textContent = Math.round(quiet / 60);
     } catch (e) {}

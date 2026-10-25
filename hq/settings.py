@@ -144,7 +144,8 @@ def describe() -> dict:
     from . import tiktok_auth
     from . import youtube_auth
     from . import instagram_auth
-    return {"instagram": instagram_auth.status(), "tiktok": tiktok_auth.status(), "youtube": youtube_auth.status(), "sections": sections, "accounts": accts, "tests": last, "pitch": pitch_describe()}
+    from . import drive_sync
+    return {"drive": drive_sync.status(), "instagram": instagram_auth.status(), "tiktok": tiktok_auth.status(), "youtube": youtube_auth.status(), "sections": sections, "accounts": accts, "tests": last, "pitch": pitch_describe()}
 
 
 def save(values: dict) -> list[str]:

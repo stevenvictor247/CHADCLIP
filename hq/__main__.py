@@ -1,6 +1,7 @@
 """Command line entry point: python -m hq <command>"""
 
 import argparse
+import os
 
 from . import db
 
@@ -36,13 +37,20 @@ def main():
     b = sub.add_parser("backup", help="Zip the database and settings into data/backups")
     b.add_argument("--with-clips", action="store_true", help="Include the clip videos too (much bigger)")
 
-    r = sub.add_parser("restore", help="Put a backup zip back (stop HQ first, start it again after)")
+    r = sub.add_parser("restore", help="Put a backup or move zip back (with HQ closed). A backup comes back paused")
     r.add_argument("zip")
 
-    sub.add_parser("handoff", help="Back up and put this computer on standby, ready to restore on another one")
+    sub.add_parser("handoff", help="Put this copy on standby and pack it into a move zip for another computer "
+                                   "(with HQ closed; the Move button in Settings does all of this for you)")
 
     st = sub.add_parser("standby", help="Turn this copy's agents and posting off (on) or back on (off)")
     st.add_argument("mode", choices=["on", "off", "status"])
+
+    h = sub.add_parser("health", help="Check HQ is alive (the cloud server runs this every 5 minutes)")
+    h.add_argument("--fix", action="store_true", help="Restart HQ if it's stuck and send an alert")
+
+    sub.add_parser("rollback", help="Go back to the last version of HQ that ran fine (the cloud server does this "
+                                    "by itself when a new version won't start)")
 
     y = sub.add_parser("connect-youtube", help="Sign in a YouTube account from accounts.yaml")
     y.add_argument("account")
@@ -57,6 +65,7 @@ def main():
         if args.host not in ("127.0.0.1", "localhost") and not PASSWORD:
             p.error("set HQ_PASSWORD in .env before opening HQ to other computers")
 
+        os.environ["HQ_PORT"] = str(args.port)
         if args.wait_port:  # restarting: let the old HQ finish closing first
             from .update import wait_for_port
             wait_for_port(args.port)
@@ -112,20 +121,53 @@ def main():
         from .backup import make_backup
         print(f"Saved {make_backup(with_clips=args.with_clips)}")
     elif args.cmd == "restore":
-        from .backup import restore
-        print(f"Restored {len(restore(args.zip))} files. This copy now runs the agents. Start HQ again.")
+        from . import move
+        from .update import port_in_use
+        if port_in_use(8000):
+            p.error("close HQ first (it's running), then run this again")
+        try:
+            manifest = move.apply_bundle(args.zip)
+        except move.MoveError as e:
+            p.error(str(e))
+        if manifest.get("kind") == "move":
+            from .standby import set_standby
+            set_standby(False)
+            print("Restored. This copy runs the agents now. Start HQ.")
+        else:
+            print("Restored, and PAUSED: if another copy of HQ might still be running, put it on standby first, "
+                  "then press Resume on the dashboard. Start HQ.")
     elif args.cmd == "handoff":
-        from .backup import make_backup
+        from datetime import datetime
+
+        from . import move
+        from .config import DATA_DIR
         from .standby import set_standby
-        out = make_backup()
-        set_standby(True)
-        print(f"Saved {out}\nThis computer is now on standby: its agents and posting are off.\n"
-              f"Restore that file on the other computer: python -m hq restore <the file>")
+        from .update import port_in_use
+        if port_in_use(8000):
+            p.error("close HQ first, or use Settings > Move HQ in the dashboard, which does this for you")
+        set_standby(True, reason="moved")
+        out = DATA_DIR / "backups" / f"hq-move-{datetime.now():%Y%m%d-%H%M%S}.zip"
+        move.make_bundle(out)
+        print(f"Saved {out}\nThis copy is on standby now: its agents, posting and Telegram bot are off.\n"
+              f"On the other computer, with HQ closed: python -m hq restore <that file>")
     elif args.cmd == "standby":
-        from .standby import is_standby, set_standby
-        if args.mode != "status":
-            set_standby(args.mode == "on")
-        print("standby" if is_standby() else "running the agents")
+        from .standby import info, set_standby
+        if args.mode == "on":
+            set_standby(True, reason="manual")
+        elif args.mode == "off":
+            set_standby(False)
+            print("Only do this if no other copy of HQ runs the agents, or both will post.")
+        s = info()
+        print(f"standby ({s.get('reason')}{', HQ runs at ' + s['moved_to'] if s.get('moved_to') else ''})"
+              if s else "running the agents")
+    elif args.cmd == "health":
+        from .health import check
+        problems = check(fix=args.fix)
+        print("\n".join(problems) or "HQ is healthy.")
+        raise SystemExit(1 if problems else 0)
+    elif args.cmd == "rollback":
+        from .health import rollback
+        print(rollback())
     elif args.cmd == "connect-youtube":
         from .agents.chad.publish import load_accounts, youtube
         account = next(a for a in load_accounts() if a["name"] == args.account)

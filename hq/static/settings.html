@@ -54,7 +54,7 @@
 </head>
 <body>
 <div class="wrap">
-  <header><a class="back" href="/">← Back to HQ</a><h1>⚙️ Settings</h1></header>
+  <header><a class="back" href="/">← Back to HQ</a><h1>⚙️ Settings</h1><a class="back" href="/move">🚚 Move HQ (to the cloud or back)</a></header>
   <p class="intro">Paste your keys here instead of editing files. They're saved on this computer in HQ's data folder, which updates
     never touch. Keys stay hidden after you save them. Press <b>Test</b> to check a key works (it tests what you typed, even before
     saving). Restart HQ after saving so every agent picks up the change.</p>
@@ -207,12 +207,52 @@ function wireYouTube() {
   });
 }
 
+function driveSection(d) {
+  if (!d || (d.on_windows && !d.configured && !d.connected)) return "";   // on the PC, Google Drive for desktop does this
+  const state = d.connected ? `<span class="tag">Connected</span>` : d.waiting ? `<span class="tag no">Waiting for the address you land on after Google…</span>` : `<span class="tag no">Not connected</span>`;
+  const folders = d.folders.length ? d.folders.map(f => `<div>📁 ${esc(f)}</div>`).join("")
+    : `<div>No folders yet. Moving HQ from your PC brings the football folders you keep in Google Drive.</div>`;
+  const last = d.last ? `Last synced ${esc(new Date(d.last).toLocaleString())}.` : "";
+  return `<section id="drive"><h2>Google Drive (football folders)</h2>
+    <p class="help" style="margin:0 0 6px">HQ syncs these Drive folders every 3 minutes: files you add in Drive come here, files HQ makes go to Drive.
+      Nothing is ever deleted. Daily backups also get a copy in <b>My Drive/Agent HQ backups</b> (without your keys).</p>
+    <div class="help" style="margin:0 0 8px">${folders}</div>
+    <details class="help" style="margin:8px 0"><summary>First time: turn on Google Drive in your Google Cloud project (1 minute)</summary>
+      <ol style="margin:6px 0 0 18px;padding:0"><li>Open <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank">Google Drive API</a> in the same Google Cloud project you made for YouTube, and press <b>Enable</b>.</li>
+      <li>HQ uses the same Google client file as YouTube. If YouTube isn't set up here, paste a Desktop-app client file below.</li></ol></details>
+    <div class="field" style="border-top:0"><label>Google Drive</label><div>
+      <div class="row">${state}${d.connected ? `<button class="link" type="button" id="dr-off">Disconnect</button><button class="link" type="button" id="dr-sync">Sync now</button>` : ""}</div>
+      ${d.has_client ? "" : `<div class="row" style="margin-top:8px;align-items:stretch"><textarea id="dr-client" rows="3" style="flex:1" placeholder="Paste everything in the Google client file (.json) here"></textarea><button class="plain" type="button" id="dr-save">Save file</button></div>`}
+      <div class="row" style="margin-top:8px"><button class="plain" type="button" id="dr-sign" ${d.has_client ? "" : "disabled"}>Open Google sign-in</button></div>
+      <div class="row" style="margin-top:8px"><input id="dr-answer" placeholder="Then paste the address from the page Google sends you to (it won't load; that's fine)"><button class="plain" type="button" id="dr-connect">Connect</button></div>
+      <div class="result" id="dr-msg">${d.problem ? "⚠️ " + esc(d.problem) : esc(last)}</div></div></div></section>`;
+}
+function wireDrive() {
+  const msg = t => { const m = $("dr-msg"); if (m) m.textContent = t; };
+  if ($("dr-save")) $("dr-save").onclick = async () => {
+    try { msg("✅ " + (await tiktokCall("/api/drive/client", {text: $("dr-client").value})).message); setTimeout(load, 800); } catch (e) { msg("⚠️ " + e.message); }
+  };
+  if ($("dr-sign")) $("dr-sign").onclick = async () => {
+    try { window.open((await tiktokCall("/api/drive/sign-in", {})).url, "_blank"); msg("Approve it in the new tab. At the end the page won't load; copy the address from the address bar and paste it below."); }
+    catch (e) { msg("⚠️ " + e.message); }
+  };
+  if ($("dr-connect")) $("dr-connect").onclick = async () => {
+    try { msg("✅ " + (await tiktokCall("/api/drive/connect", {text: $("dr-answer").value})).message); setTimeout(load, 800); } catch (e) { msg("⚠️ " + e.message); }
+  };
+  if ($("dr-off")) $("dr-off").onclick = async () => { await tiktokCall("/api/drive/disconnect", {}); load(); };
+  if ($("dr-sync")) $("dr-sync").onclick = async () => {
+    msg("Syncing…");
+    try { const r = await tiktokCall("/api/drive/sync", {}); msg(r.problem ? "⚠️ " + r.problem : `✅ Synced: ${r.down} down, ${r.up} up.`); } catch (e) { msg("⚠️ " + e.message); }
+  };
+}
+
 function render(d) {
   lastTests = d.tests || {};
   let html = d.sections.map(s => `<section><h2>${esc(s.title)}</h2>${s.fields.map(field).join("")}</section>`).join("");
   if (d.tiktok) html += tiktokSection(d.tiktok);
   html += instagramSection(d.instagram);
   html += youtubeSection(d.youtube);
+  html += driveSection(d.drive);
   if (d.accounts.length) {
     html += `<section id="accounts"><h2>Posting accounts</h2><p class="help" style="margin:0 0 6px">Turn an account on once its keys are saved above. Chad only posts to accounts that are on.</p>` +
       d.accounts.map(a => `<label class="switch"><input type="checkbox" data-account="${esc(a.name)}" ${a.enabled ? "checked" : ""}>
@@ -233,6 +273,7 @@ function render(d) {
   wireTikTok();
   wireInstagram();
   wireYouTube();
+  wireDrive();
   document.querySelectorAll("[data-pitch]").forEach(el => el.addEventListener("input", () => {
     if (el.value !== (el.dataset.orig ?? "")) { pitchChanges[el.dataset.pitch] = el.value; el.classList.add("changed"); }
     else { delete pitchChanges[el.dataset.pitch]; el.classList.remove("changed"); }

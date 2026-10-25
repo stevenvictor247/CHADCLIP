@@ -67,6 +67,17 @@ def _target() -> str:
     return TESTED if _run("git", "rev-parse", "--verify", "--quiet", TESTED).returncode == 0 else "@{u}"
 
 
+BAD_PATH = DATA_DIR / "bad-version.txt"   # a version that wouldn't start here and was rolled back (see health.py)
+
+
+def _is_bad(target: str) -> bool:
+    try:
+        bad = BAD_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
+    return bool(bad) and _out("git", "rev-parse", target) == bad
+
+
 def check(force: bool = False) -> dict:
     """Is there new code on GitHub? Cached for CHECK_EVERY seconds unless force."""
     with _lock:
@@ -81,7 +92,7 @@ def check(force: bool = False) -> dict:
                 target = _target()
                 status["tested"] = target == TESTED
                 status["count"] = int(_out("git", "rev-list", "--count", f"HEAD..{target}") or 0)
-                status["available"] = status["count"] > 0
+                status["available"] = status["count"] > 0 and not _is_bad(target)
                 if status["tested"]:  # changes on GitHub still waiting for their tests to pass
                     status["testing"] = int(_out("git", "rev-list", "--count", f"HEAD..@{{u}}", f"^{TESTED}") or 0)
                 if status["available"]:
@@ -113,6 +124,9 @@ def update():
         _out("git", "fetch", "--quiet", "origin", timeout=120)
         target = _target()
         if _out("git", "rev-list", "--count", f"HEAD..{target}") == "0":
+            return False
+        if _is_bad(target):
+            print("Update skipped: that version wouldn't start here and was rolled back. Waiting for a newer one.")
             return False
         before, reqs = _out("git", "rev-parse", "HEAD"), _requirements_hash()
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -168,9 +182,12 @@ def wait_for_port(port: int, seconds: float = 20):
 
 
 def restart(delay: float = 1.0):
-    """Start HQ again (new code, new settings). Runs after a short delay so the web page gets its answer first."""
+    """Start HQ again (new code, new settings). Runs after a short delay so the web page gets its answer first.
+    It waits for a clip that's being posted to finish first: a post cut off halfway could go out twice."""
     def go():
         time.sleep(delay)
+        from .standby import posting_lock
+        posting_lock.acquire(timeout=20 * 60)   # kept until HQ exits, so no new post starts either
         if os.getenv("HQ_SUPERVISED"):  # start-hq.bat or the cloud service will start HQ again
             os._exit(RESTART_CODE)
         args = [a for a in sys.argv[1:] if a != "--wait-port"]
@@ -182,14 +199,16 @@ def restart(delay: float = 1.0):
 
 
 def auto_apply_if_idle() -> bool:
-    """On the cloud server (HQ_AUTO_UPDATE=1): take an update by itself, but only while no task is mid-run, so a
-    clip is never cut off. Returns True when it updated and asked for a restart."""
+    """On the cloud server (HQ_AUTO_UPDATE=1): install a tested update by itself, but only while no task is running,
+    so a clip being made is never cut off (restart() also waits for any post in progress). Returns True when it
+    updated and asked for a restart."""
     if os.getenv("HQ_AUTO_UPDATE", "").strip().lower() not in ("1", "true", "yes") or not _status.get("available"):
         return False
     from . import db
     if db.rows("SELECT 1 FROM tasks WHERE status = 'running' LIMIT 1"):
         return False
     if update():
+        db.log("HQ", "Installed an HQ update by itself (it passed every test first) and restarted.")
         restart()
         return True
     return False
