@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
+from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
 from . import sweep_api
 from .config import CLIPS_DIR, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
@@ -504,6 +504,29 @@ def tiktok_disconnect(request: Request):
     tiktok_auth.disconnect()
     db.log("Steven", "Disconnected TikTok")
     return tiktok_auth.status()
+
+
+class InstagramIn(BaseModel):
+    token: str
+
+
+@app.post("/api/instagram/connect")
+def instagram_connect(body: InstagramIn, request: Request):
+    _from_hq_page(request)
+    try:
+        message = instagram_auth.connect(body.token)
+    except instagram_auth.InstagramError as e:
+        raise HTTPException(400, str(e))
+    db.log("Steven", "Connected Instagram")
+    return {"message": message, **instagram_auth.status()}
+
+
+@app.post("/api/instagram/disconnect")
+def instagram_disconnect(request: Request):
+    _from_hq_page(request)
+    instagram_auth.disconnect()
+    db.log("Steven", "Disconnected Instagram")
+    return instagram_auth.status()
 
 
 class YouTubeIn(BaseModel):

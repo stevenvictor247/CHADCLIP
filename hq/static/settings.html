@@ -128,6 +128,36 @@ function wireTikTok() {
   if ($("tt-off")) $("tt-off").onclick = async () => { await tiktokCall("/api/tiktok/disconnect", {}); load(); };
 }
 
+function instagramSection(i) {
+  if (!i) return "";
+  const state = i.connected ? `<span class="tag">Connected · token doesn't expire</span>` : `<span class="tag no">Not connected</span>`;
+  const guide = `<details class="help" style="margin:8px 0" ${i.connected ? "" : "open"}><summary>Step by step: connect Instagram (one time, about 20 minutes)</summary>
+    <ol style="margin:6px 0 0 18px;padding:0">
+      <li><b>Instagram account type.</b> On your phone: Instagram app, Settings, <i>Account type and tools</i>, <i>Switch to professional account</i>, pick <b>Creator</b> (or Business). It must be professional or posting won't work.</li>
+      <li><b>Facebook Page.</b> Make a free Page at <a href="https://www.facebook.com/pages/create" target="_blank">facebook.com/pages/create</a> (any name). Then in Instagram: Edit profile, <i>Page</i>, and link the Page to your Instagram account.</li>
+      <li><b>Meta developer app.</b> Go to <a href="https://developers.facebook.com/apps/creation/" target="_blank">developers.facebook.com</a>, sign in with the same Facebook, and press <i>Create app</i>. Name it anything, choose use case <i>Other</i>, then app type <i>Business</i>.</li>
+      <li>In the app, open <i>App settings, Basic</i>. Copy the <b>App ID</b> and <b>App secret</b> into <b>IG_APP_ID</b> and <b>IG_APP_SECRET</b> above, then press <b>Save and restart HQ</b>.</li>
+      <li><b>Get a token.</b> Open <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Graph API Explorer</a>. Pick your app on the right. Under <i>Permissions</i> add <code>instagram_basic</code>, <code>instagram_content_publish</code>, <code>pages_show_list</code> and <code>pages_read_engagement</code>. Press <i>Generate Access Token</i>, and when Facebook asks, tick your Page <b>and</b> your Instagram account.</li>
+      <li>Copy the long token from the Explorer, paste it below, and press <b>Connect</b>. HQ swaps it for a token that doesn't expire and finds your Instagram account by itself.</li>
+      <li>Turn on <b>instagram_main</b> under Posting accounts. Clips still wait in Approvals first, and the limits (1 an hour, 4 a day) apply.</li>
+    </ol>
+    <p style="margin:6px 0 0">While your Meta app is in <i>Development</i> mode, posting works for your own account (you are the app's admin), so you don't need Meta's app review. Reels must be 3 to 90 seconds.</p></details>`;
+  const form = i.configured
+    ? `<div class="row"><input id="ig-token" placeholder="Paste the access token from the Graph API Explorer"><button class="plain" id="ig-connect" type="button">Connect</button></div>`
+    : `<p class="help">First save <b>IG_APP_ID</b> and <b>IG_APP_SECRET</b> above (step 4) and press "Save and restart HQ".</p>`;
+  return `<section id="instagram"><h2>Connect Instagram</h2><div class="row">${state}${i.connected ? `<button class="link" id="ig-off" type="button">Disconnect</button>` : ""}</div>
+    ${guide}${form}<div class="result" id="ig-msg"></div></section>`;
+}
+function wireInstagram() {
+  const msg = t => { const m = $("ig-msg"); if (m) m.textContent = t; };
+  if ($("ig-connect")) $("ig-connect").onclick = async () => {
+    msg("Connecting...");
+    try { const r = await tiktokCall("/api/instagram/connect", {token: $("ig-token").value}); msg("✅ " + r.message); setTimeout(load, 800); }
+    catch (e) { msg("⚠️ " + e.message); }
+  };
+  if ($("ig-off")) $("ig-off").onclick = async () => { await tiktokCall("/api/instagram/disconnect", {}); load(); };
+}
+
 function youtubeSection(list) {
   if (!list || !list.length) return "";
   const steps = `<details class="help" style="margin:8px 0"><summary>How to get the Google client file (one time, about 10 minutes)</summary>
@@ -181,6 +211,7 @@ function render(d) {
   lastTests = d.tests || {};
   let html = d.sections.map(s => `<section><h2>${esc(s.title)}</h2>${s.fields.map(field).join("")}</section>`).join("");
   if (d.tiktok) html += tiktokSection(d.tiktok);
+  html += instagramSection(d.instagram);
   html += youtubeSection(d.youtube);
   if (d.accounts.length) {
     html += `<section id="accounts"><h2>Posting accounts</h2><p class="help" style="margin:0 0 6px">Turn an account on once its keys are saved above. Chad only posts to accounts that are on.</p>` +
@@ -200,6 +231,7 @@ function render(d) {
   }
   $("sections").innerHTML = html;
   wireTikTok();
+  wireInstagram();
   wireYouTube();
   document.querySelectorAll("[data-pitch]").forEach(el => el.addEventListener("input", () => {
     if (el.value !== (el.dataset.orig ?? "")) { pitchChanges[el.dataset.pitch] = el.value; el.classList.add("changed"); }

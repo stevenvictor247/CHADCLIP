@@ -171,8 +171,7 @@ def instagram(account: dict, values=None) -> dict:
     except (requests.RequestException, ValueError):
         return _offline("Instagram")
     if "username" in data:
-        note = "" if os.getenv("HQ_PUBLIC_BASE_URL") else " Posting also needs HQ_PUBLIC_BASE_URL, so Instagram can fetch clips."
-        return {"ok": not note, "message": f"Instagram works (@{data['username']}).{note}"}
+        return _ok(f"Instagram works (@{data['username']}).")
     err = (data.get("error") or {})
     if err.get("code") == 190:
         return _bad("Instagram says this token has expired. Make a new long-lived token in Meta's developer tools.")
