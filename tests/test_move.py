@@ -9,7 +9,6 @@ import sqlite3
 import subprocess
 import time
 import zipfile
-from email import message_from_bytes
 from pathlib import Path
 
 import pytest
@@ -39,6 +38,8 @@ def _back_to_normal():
 
 
 def _fresh(monkeypatch, tmp_path, password=""):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(tmp_path)     # a Windows-style folder setting must not leave folders in the repo
     data = tmp_path / "data"
     monkeypatch.setenv("HQ_DATA_DIR", str(data))
     monkeypatch.setenv("HQ_PASSWORD", password)
@@ -626,10 +627,12 @@ def test_watchdog_restarts_a_stuck_hq_and_remembers_a_good_version(monkeypatch, 
     monkeypatch.setattr(hq.relay, "notify", sent.append)
     monkeypatch.setattr(hq.health, "_tailscale_expiry", lambda: None)
     monkeypatch.setattr(hq.health, "_healthz", lambda port: None)
+    assert hq.health.check(fix=True) and not sent       # one bad check may just be HQ starting up
     with pytest.raises(SystemExit) as e:
-        hq.health.check(fix=True)
+        hq.health.check(fix=True)                       # two in a row: restart
     assert e.value.code == 2 and "restarted" in sent[0]
     monkeypatch.setattr(hq.health, "_healthz", lambda port: {"role": "active", "worker_seconds_ago": 30 * 60, "uptime": 99})
+    hq.health.check(fix=True)
     with pytest.raises(SystemExit):
         hq.health.check(fix=True)
     assert len(sent) == 1                               # one alert an hour, not one every 5 minutes
@@ -656,12 +659,14 @@ def _git(cwd, *args):
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
 
-def test_rollback_goes_back_to_the_good_version_and_keeps_config(monkeypatch, tmp_path):
-    hq = _fresh(monkeypatch, tmp_path)
+@pytest.mark.skipif(shutil.which("bash") is None or os.name == "nt", reason="the rollback runs on the Linux server")
+def test_rollback_goes_back_to_the_good_version_and_keeps_config(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "main")
     (repo / "config").mkdir()
+    (repo / "data").mkdir()
+    (repo / ".gitignore").write_text("data/\n")
     (repo / "config" / "vision.md").write_text("v1\n")
     (repo / "app.py").write_text("good\n")
     _git(repo, "add", "-A")
@@ -671,14 +676,18 @@ def test_rollback_goes_back_to_the_good_version_and_keeps_config(monkeypatch, tm
     _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "bad")
     bad = _git(repo, "rev-parse", "HEAD")
     (repo / "config" / "vision.md").write_text("v1\nremember this\n")    # Steven's edit
-    monkeypatch.setattr(hq.health, "ROOT", repo)
-    monkeypatch.setattr(hq.relay, "notify", lambda t: None)
-    assert "no earlier version" in hq.health.rollback()
-    hq.health.GOOD_PATH.write_text(good)
-    assert "went back" in hq.health.rollback()
+    script = Path(__file__).resolve().parent.parent / "deploy" / "cloud" / "rollback.sh"
+    run = lambda: subprocess.run(["bash", str(script), str(repo)], capture_output=True, text=True,
+                                 env={**os.environ, "HQ_DATA_DIR": str(repo / "data")})
+    r = run()
+    assert r.returncode == 1 and "Nothing to roll back" in r.stdout
+    (repo / "data" / "good-version.txt").write_text(good + "\n")
+    r = run()
+    assert r.returncode == 0, r.stderr
     assert _git(repo, "rev-parse", "HEAD") == good and (repo / "app.py").read_text() == "good\n"
     assert (repo / "config" / "vision.md").read_text() == "v1\nremember this\n"
-    assert hq.update.BAD_PATH.read_text() == bad
+    assert (repo / "data" / "bad-version.txt").read_text().strip() == bad
+    assert run().returncode == 1                                          # already on the good one: no loop
 
 
 def test_update_skips_a_version_that_was_rolled_back(monkeypatch, tmp_path):

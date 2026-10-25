@@ -1,14 +1,14 @@
 """The cloud server's watchdog: every 5 minutes it checks HQ is alive and well, fixes what it can, and tells you.
 
 What it checks (python -m hq health --fix, run by a systemd timer on the server):
-- the dashboard answers, and the agents' loop went round in the last 10 minutes. If not, HQ is restarted
-  (exit code 2 tells the timer to restart it) and you get a Telegram message;
+- the dashboard answers, and the agents' loop went round in the last 10 minutes. If not, two checks in a row, HQ is
+  restarted (exit code 2 tells the timer to restart it) and you get a Telegram message;
 - the disk isn't nearly full, the last backup isn't more than a day and a half old, and Tailscale won't sign the server
   out (key expiry), each sent to your phone at most once a day;
 - HQ_HEALTHCHECK_URL (optional, from healthchecks.io) gets a ping when all is well. That service messages you when the
   pings stop, which covers the one thing HQ can't report itself: the whole server being down.
 After HQ has run fine for 10 minutes on a version, that version is remembered as good. If a new version won't start,
-`python -m hq rollback` (run by systemd when HQ fails 8 times in 5 minutes) goes back to it and skips the bad one
+deploy/cloud/rollback.sh (run by systemd when HQ fails 8 times in 5 minutes) goes back to it and skips the bad one
 until a newer update arrives.
 """
 
@@ -17,8 +17,6 @@ import os
 import shutil
 import subprocess
 import time
-from datetime import datetime
-from pathlib import Path
 
 from .config import DATA_DIR, ROOT
 
@@ -130,8 +128,13 @@ def check(fix: bool = False, port: int | None = None) -> list[str]:
             _alert("tailscale", msg, every=7 * 24 * 3600)
 
     if fix:
+        # One bad check can just be HQ starting up or busy; it's restarted only when two checks in a row fail.
+        s = _state()
+        s["failed_checks"] = s.get("failed_checks", 0) + 1 if restart else 0
+        _save(s)
+        restart = restart and s["failed_checks"] >= 2
         if restart:
-            s = _state()
+            s["failed_checks"] = 0
             recent = [t for t in s.get("restarts", []) if time.time() - t < 3600] + [time.time()]
             s["restarts"] = recent
             _save(s)
@@ -151,32 +154,7 @@ def check(fix: bool = False, port: int | None = None) -> list[str]:
 
 
 def rollback() -> str:
-    """Go back to the last version that ran fine here, keeping your config/ files, and skip the one that didn't."""
-    from . import db, relay
-    from .update import BAD_PATH
-    try:
-        good = GOOD_PATH.read_text(encoding="utf-8").strip()
-    except OSError:
-        good = ""
-    head = _git("rev-parse", "HEAD")
-    if not good or good == head:
-        msg = "HQ won't start, and there's no earlier version that ran fine here to go back to."
-        db.log("HQ", msg)
-        relay.notify(f"🩺 {msg} Ask Claude to look at the server log.")
-        return msg
-    edited = [p for p in _git("diff", "--name-only", "HEAD").splitlines() if p.startswith("config/")]
-    keep = {p: (ROOT / p).read_bytes() for p in edited if (ROOT / p).is_file()}
-    reqs = (ROOT / "requirements.txt").read_bytes() if (ROOT / "requirements.txt").exists() else b""
-    _git("reset", "--hard", good)
-    for p, data in keep.items():
-        (ROOT / p).parent.mkdir(parents=True, exist_ok=True)
-        (ROOT / p).write_bytes(data)
-    BAD_PATH.write_text(head, encoding="utf-8")
-    if (ROOT / "requirements.txt").exists() and (ROOT / "requirements.txt").read_bytes() != reqs:
-        import sys
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"], cwd=ROOT, timeout=900)
-    msg = (f"A new HQ version ({head[:7]}) wouldn't start, so I went back to the last one that worked ({good[:7]}). "
-           f"HQ will take the next update once it's fixed. {datetime.now():%b %d %H:%M}")
-    db.log("HQ", msg)
-    relay.notify(f"🩺 {msg}")
-    return msg
+    """Run the rollback script (the cloud server's systemd does this by itself). Linux servers only."""
+    script = ROOT / "deploy" / "cloud" / "rollback.sh"
+    r = subprocess.run(["bash", str(script), str(ROOT)], capture_output=True, text=True, timeout=1200)
+    return (r.stdout + r.stderr).strip()

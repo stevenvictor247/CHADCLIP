@@ -15,6 +15,7 @@
 # checks it every 5 minutes and texts you if something's wrong; security updates install themselves; only your
 # Tailscale devices can reach the server; and Arial Black is installed so captions look exactly as they do on the PC.
 set -euo pipefail
+umask 022
 
 APP_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 ENV_FILE=/etc/agent-hq.env
@@ -62,6 +63,9 @@ else
 fi
 mkdir -p "$HQ_HOME" "$APP_DIR/data"
 chown -R hq:hq "$APP_DIR" "$HQ_HOME"
+# Your data and sign-ins are readable by HQ only.
+chmod 750 "$APP_DIR/data" "$HQ_HOME"
+[ -d "$APP_DIR/config/secrets" ] && chmod -R go-rwx "$APP_DIR/config/secrets"
 
 say "Installing HQ's Python packages (a few minutes)"
 [ -x "$VENV/bin/python" ] || runuser -u hq -- python3 -m venv "$VENV"
@@ -118,12 +122,19 @@ ExecStartPre=-$VENV/bin/python -m hq update
 ExecStart=$VENV/bin/python -m hq serve --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
+# Exit code 3 is HQ restarting itself on purpose (after an update or a move), not a crash.
+SuccessExitStatus=3
+RestartForceExitStatus=3
+UMask=0027
 # On a stop or reboot HQ first lets a clip that's being posted finish.
 TimeoutStopSec=900
 
 [Install]
 WantedBy=multi-user.target
 UNIT
+
+# The rollback runs from its own copy, so a broken update can't break the way back.
+install -D -m 755 "$APP_DIR/deploy/cloud/rollback.sh" /usr/local/lib/agent-hq/rollback.sh
 
 cat > "$UNITS/agent-hq-rollback.service" <<UNIT
 [Unit]
@@ -132,7 +143,7 @@ Description=Agent HQ: go back to the last version that ran fine
 [Service]
 Type=oneshot
 WorkingDirectory=$APP_DIR
-ExecStart=/bin/sh -c 'runuser -u hq -- $VENV/bin/python -m hq rollback; systemctl reset-failed agent-hq; systemctl start agent-hq'
+ExecStart=/bin/sh -c '/usr/local/lib/agent-hq/rollback.sh $APP_DIR && systemctl reset-failed agent-hq && systemctl start agent-hq'
 UNIT
 
 cat > "$UNITS/agent-hq-health.service" <<UNIT
@@ -142,7 +153,7 @@ Description=Agent HQ watchdog
 [Service]
 Type=oneshot
 WorkingDirectory=$APP_DIR
-ExecStart=/bin/sh -c 'runuser -u hq -- $VENV/bin/python -m hq health --fix; if [ \$? -eq 2 ]; then systemctl restart agent-hq; fi; exit 0'
+ExecStart=/bin/sh -c 'runuser -u hq -- $VENV/bin/python -m hq health --fix; if [ \$? -eq 2 ]; then systemctl reset-failed agent-hq; systemctl restart agent-hq; fi; exit 0'
 UNIT
 
 cat > "$UNITS/agent-hq-health.timer" <<UNIT
@@ -150,7 +161,7 @@ cat > "$UNITS/agent-hq-health.timer" <<UNIT
 Description=Check Agent HQ every 5 minutes
 
 [Timer]
-OnBootSec=5min
+OnBootSec=10min
 OnUnitActiveSec=5min
 
 [Install]
@@ -159,8 +170,8 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable agent-hq agent-hq-health.timer >/dev/null 2>&1
+systemctl stop agent-hq-health.timer 2>/dev/null || true
 systemctl restart agent-hq
-systemctl start agent-hq-health.timer
 
 # Only devices on your Tailscale network can reach the server. The public internet sees nothing at all.
 if ip link show tailscale0 >/dev/null 2>&1; then
@@ -179,6 +190,8 @@ for _ in $(seq 1 60); do
     sleep 2
 done
 if curl -fsS http://127.0.0.1:8000/healthz >/dev/null 2>&1; then
+    # The watchdog starts once HQ is up, so it never restarts HQ while it's still starting.
+    systemctl start agent-hq-health.timer
     IP=$(tailscale ip -4 2>/dev/null | head -1 || true)
     echo
     echo "Agent HQ is running. Open http://${IP:-$(hostname)}:8000 on your PC or Mac (with Tailscale on)."
