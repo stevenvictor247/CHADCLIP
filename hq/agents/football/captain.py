@@ -5,7 +5,7 @@ import json
 
 from ... import football, ledger, llm
 from ...config import model_for
-from ...football import notebook, rulebook, season
+from ...football import notebook, rulebook, season, tagsheet
 from ..base import Agent
 
 SYSTEM = """You are Captain, who runs Warrior Village: the football agents helping Steven, a graduate assistant on
@@ -82,6 +82,8 @@ def ask(text: str) -> str:
     if ledger.over_budget("football"):
         return "Today's football budget is spent, so I'm paused until tomorrow. Clock, Ref and Tells still work."
     system = SYSTEM + f"\n\n<rulebook>\n{rulebook.text()}\n</rulebook>"
+    if tagsheet.loaded():
+        system += f"\n\n<tag_sheet>\nSteven's own list of tags. Use these names exactly.\n{tagsheet.text()}\n</tag_sheet>"
     messages = [{"role": "user", "content": text}]
     for _ in range(10):
         response = llm.create(model_for("Captain"), system, messages, tools=TOOLS, effort="medium", max_tokens=6000,

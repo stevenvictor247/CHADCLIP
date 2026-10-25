@@ -10,6 +10,7 @@ Levels: "fix" breaks a written rule. "check" is worth a second look (an open que
 import difflib
 import re
 
+from . import tagsheet
 from .sheet import TAG_COLUMNS, label
 
 BACKFIELDS = ("GUN STRONG", "GUN WEAK", "GUN SPLIT", "EMPTY", "WILDCAT", "WILDCAT GS", "ACE", "I", "PISTOL")
@@ -109,7 +110,9 @@ def check_row(row: dict, has: set) -> list[dict]:
         else:
             moved = [w for w in parts["unknown"] if w in TAGS + ("STACKED",)]
             old = [w for w in parts["unknown"] if w in OLD_HUDL_WORDS]
-            other = [w for w in parts["unknown"] if w not in moved and w not in old]
+            on_sheet = tagsheet.words()   # a word from Steven's own tag sheet is a real tag, not a typo
+            other = [w for w in parts["unknown"] if w not in moved and w not in old and (w not in on_sheet or w == "SLOT")]
+            own = [w for w in parts["unknown"] if w in on_sheet and w != "SLOT"]
             if moved:
                 words = sorted({"STACK" if w == "STACKED" else w for w in moved})
                 _flag(flags, row, "fix", "form", f"{' and '.join(words)} is a formation tag: take it out of OFF FORM "
@@ -132,7 +135,7 @@ def check_row(row: dict, has: set) -> list[dict]:
                     _flag(flags, row, "check", "form", f"\"{w}\" isn't one of your formation words. If it's a new "
                           "official name, add it to the notebook.")
             named = parts["ub"] or "T-OVER" in parts["mods"] or (parts["empty"] and "BUNCH" in parts["mods"])  # EMPTY BUNCH is an install name
-            if not parts["base"] and not named and not (moved or old or other):
+            if not parts["base"] and not named and not (moved or old or other or own):
                 _flag(flags, row, "check", "form", "No base formation in the name (like TRIPS, TREY OFF or DOUBLES).")
 
     # FORMATION TAG: FSL, FIB, SIB, CONDENSED, STACK, comma-separated, blank when nothing qualifies

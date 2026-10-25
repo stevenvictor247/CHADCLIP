@@ -681,6 +681,38 @@ def football_print_now(request: Request):
     return {"task_id": db.create_task("Clock", "Print now", {"print": True}, created_by="Steven")}
 
 
+@app.post("/api/football/print/folders")
+def football_print_folders(request: Request):
+    _from_hq_page(request)
+    from .football import printing
+    made = printing.ensure_folders()
+    return {"message": ("Made folders for " + ", ".join(made) + ".") if made else "Every opponent already has a folder.",
+            "print": printing.state()}
+
+
+@app.post("/api/football/tagsheet")
+def football_tagsheet(request: Request, file: UploadFile = File(...)):
+    _from_hq_page(request)
+    from .football import tagsheet
+    data = file.file.read(5 * 1024 * 1024 + 1)
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(400, "That file is over 5 MB.")
+    try:
+        info = tagsheet.save(Path(file.filename or "tags.xlsx").name, data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    db.log("Steven", f"Loaded the football tag sheet ({info['name']})")
+    return {"message": f"Tag sheet loaded ({info['words']} words). Captain and Ref use it from now on.", "tagsheet": info}
+
+
+@app.post("/api/football/tagsheet/clear")
+def football_tagsheet_clear(request: Request):
+    _from_hq_page(request)
+    from .football import tagsheet
+    tagsheet.clear()
+    return {"message": "Tag sheet removed."}
+
+
 @app.post("/api/football/print/pause")
 def football_print_pause(body: PauseIn, request: Request):
     _from_hq_page(request)

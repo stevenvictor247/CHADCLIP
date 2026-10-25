@@ -94,8 +94,13 @@
       <section id="fboutbox"><h2>Outbox</h2><div id="fboutlist"></div></section>
       <section id="fbprint"><h2>🖨️ Thursday print <span class="count" id="fbprintcount" style="display:none"></span></h2>
         <div id="fbprintbody"></div>
-        <div class="row"><button id="fbprintnow">Print now</button><button class="ghost" id="fbprintpause">Pause</button></div>
+        <div class="row"><button id="fbprintnow">Print now</button><button class="ghost" id="fbprintpause">Pause</button><button class="ghost" id="fbprintfolders">Make opponent folders</button></div>
         <div class="msg" id="fbprintmsg"></div>
+      </section>
+      <section id="fbtags"><h2>🏷️ Tag sheet</h2><div id="fbtagbody"></div>
+        <div class="drop" id="fbtagdrop">Drop your sheet of all your tags here (Excel, CSV or text), or <label>pick a file<input type="file" id="fbtagpick"
+          accept=".xlsx,.xlsm,.csv,.md,.txt"></label>. Captain reads it, and Ref won't flag a word that's on it.</div>
+        <div class="msg" id="fbtagmsg"></div>
       </section>
       <section id="fbrules"><h2>Rulebook and folders</h2><div id="fbrulebody"></div>
         <div class="row"><button class="ghost" id="fbrulesedit">View or edit the rulebook</button></div>
@@ -265,9 +270,10 @@
       <div class="fbline" style="display:block">
         <div>${p.paused ? "⏸ Paused. Nothing prints on its own until you press Resume." : `⏰ Prints ${esc(p.when)}. Next: <b>${esc(nextText)}</b>`}</div>
         <div>📁 Folder: <span class="path">${esc(p.folder)}</span> ${p.folder_found ? "" : "(not found)"}</div>
+        <div>🏈 This week: <b>${esc(p.opponent || "no game")}</b>${p.opponent ? (p.week_folder ? ` (prints the documents in the "${esc(p.week_folder)}" folder)` : ` — no folder yet, press Make opponent folders`) : ""}</div>
         <div>🖨️ Printer: ${esc(p.printer)}</div></div>
       ${p.files.length ? p.files.map(f => `<div class="fbline">${f.problem ? "⚠" : "📄"} ${esc(f.name)}${f.problem ? ` <span class="muted">${esc(f.problem)}</span>` : ""}</div>`).join("") :
-        `<div class="muted">Nothing waiting. Put PDF, Word or Excel files in the folder and Clock prints them at the next print time, then moves them to a Printed folder.</div>`}
+        `<div class="muted">Nothing waiting. Put PDF, Word or Excel files in this week's opponent folder and Clock prints them at the next print time. Files stay in the folder. A file prints once, and again only if you change it.</div>`}
       ${ready && !p.paused ? `<div class="muted">${ready} ready to print.</div>` : ""}
       ${p.log.length ? `<div class="muted" style="margin-top:8px">Recent: ${p.log.slice(0, 4).map(l => esc(l.at.replace("T", " ") + " " + l.text)).join("<br>")}</div>` : ""}`;
   }
@@ -284,6 +290,32 @@
     shown.print = null;
     refresh();
   };
+  $("fbprintfolders").onclick = async () => {
+    const r = await post("/api/football/print/folders");
+    $("fbprintmsg").textContent = r.message || "";
+    shown.print = null;
+    refresh();
+  };
+
+  // ---- the tag sheet ----
+  function drawTags(fb) {
+    const t = fb.tagsheet;
+    if (!t || !changed("tagsheet", t)) return;
+    $("fbtagbody").innerHTML = t.loaded
+      ? `<div class="fbline">✅ ${esc(t.name)} loaded (${t.words} words), saved ${esc((t.saved || "").replace("T", " "))}. Captain and Ref use it.</div>`
+      : `<div class="fbline">⚠ No tag sheet yet. Upload yours so the agents use your tag names.</div>`;
+  }
+  async function sendTags(file) {
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    const r = await post("/api/football/tagsheet", form, true);
+    $("fbtagmsg").textContent = r.message || "";
+    if (r.ok) { shown.tagsheet = null; refresh(); }
+  }
+  $("fbtagpick").onchange = e => { sendTags(e.target.files[0]); e.target.value = ""; };
+  $("fbtagdrop").ondragover = e => e.preventDefault();
+  $("fbtagdrop").ondrop = e => { e.preventDefault(); sendTags(e.dataTransfer.files[0]); };
   $("fbrulesedit").onclick = async () => {
     const box = $("fbruleedit");
     if (box.innerHTML) { box.innerHTML = ""; return; }
@@ -310,6 +342,7 @@
       drawNotes(fb);
       drawRules(fb);
       drawPrint(fb);
+      drawTags(fb);
     },
   };
 })();

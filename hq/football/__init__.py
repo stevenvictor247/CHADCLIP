@@ -6,7 +6,7 @@ Birds and Rabbits) and Scribe (Coaching Notebook). Their code is in hq/agents/fo
 
 from .. import db, ledger
 from ..config import FOOTBALL_AGENTS, FOOTBALL_INBOX, FOOTBALL_OUTBOX
-from . import files, notebook, printing, rulebook, season
+from . import files, notebook, printing, rulebook, season, tagsheet
 
 
 def pending_approvals() -> list[dict]:
@@ -32,6 +32,7 @@ def state() -> dict:
         "budget_usd": spend["football_budget_usd"],
         "over_budget": spend["football_over_budget"],
         "print": printing.state(),
+        "tagsheet": tagsheet.info(),
     }
 
 

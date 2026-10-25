@@ -30,7 +30,7 @@ class Clock(Agent):
                         '(add "opponent" for another week); {"game": {"opponent": "Davenport", "date": "2026-10-24", '
                         '"kickoff": "1:00 PM", "site": "home"}}; {"due": {"item": "Teamworks itinerary", "weekday": '
                         '"Thursday"}} or {"due": {"item": "...", "days_before": 3, "add": true}} or {"due": {"item": "...", '
-                        '"remove": true}}; {"print": true} prints '
+                        '"remove": true}}; {"folders": true} makes the opponent folders; {"print": true} prints '
                         'the Thursday print folder now; {"pause": true} or {"resume": true} for the Thursday print',
             village="football",
             notify_when_done=True,
@@ -50,6 +50,9 @@ class Clock(Agent):
             d = p["due"]
             done.append(season.set_due(d["item"], d.get("days_before"), d.get("weekday"), bool(d.get("add")),
                                        bool(d.get("remove"))))
+        if p.get("folders"):
+            made = printing.ensure_folders()
+            return ("Made folders for " + ", ".join(made) + ".") if made else "Every opponent already has a folder."
         if p.get("print"):
             return printing.print_now("Print now")
         if p.get("pause") or p.get("resume"):
