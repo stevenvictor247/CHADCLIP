@@ -23,17 +23,17 @@ const look = name => window.hqLook ? window.hqLook(name) : {color: "#7cc4ff", pr
 
 // ---------- the map ----------
 const B = {
-  studio: {x: 70, y: 52, w: 170, h: 118, wall: "#f9dbe6", roof: "#e0457b", door: 155, label: "Clip Studio", icon: "🎬"},
-  hq:     {x: 395, y: 30, w: 190, h: 140, wall: "#fdeccd", roof: "#cf8a1e", door: 490, label: "Boss HQ", icon: "👑"},
-  post:   {x: 640, y: 66, w: 124, h: 104, wall: "#dbeafe", roof: "#3b82f6", door: 702, label: "Approvals", icon: "📬"},
+  studio: {x: 70, y: 52, w: 170, h: 118, wall: "#f9dbe6", roof: "#e0457b", door: 155, label: "Sound Stage", icon: "🎬"},
+  hq:     {x: 395, y: 30, w: 190, h: 140, wall: "#fdeccd", roof: "#cf8a1e", door: 490, label: "Studio Exec HQ", icon: "👑"},
+  post:   {x: 640, y: 66, w: 124, h: 104, wall: "#dbeafe", roof: "#3b82f6", door: 702, label: "Screening Room", icon: "📬"},
   tower:  {x: 842, y: 14, w: 72, h: 156, door: 878, label: "Broadcast Tower", icon: "📡"},
 };
 for (const b of Object.values(B)) b.front = {x: b.door, y: b.y + b.h + 20};
 // The south side of town, on Market Street: where Sweep, Pitch and Scout go to work, and the town notice board.
 const S = {
-  bank:  {x: 56, y: 500, w: 172, h: 130, wall: "#f4ecd6", roof: "#2f855a", door: 142, label: "Bank", icon: "🏦"},
-  pitch: {x: 278, y: 512, w: 136, h: 118, wall: "#efe6ff", roof: "#7c5cd6", door: 346, label: "Pitch Office", icon: "✉️"},
-  scout: {x: 778, y: 504, w: 154, h: 126, wall: "#dcf6f1", roof: "#14a38b", door: 855, label: "Campaign HQ", icon: "🎯"},
+  bank:  {x: 56, y: 500, w: 172, h: 130, wall: "#f4ecd6", roof: "#2f855a", door: 142, label: "Box Office", icon: "🏦"},
+  pitch: {x: 278, y: 512, w: 136, h: 118, wall: "#efe6ff", roof: "#7c5cd6", door: 346, label: "Talent Agency", icon: "✉️"},
+  scout: {x: 778, y: 504, w: 154, h: 126, wall: "#dcf6f1", roof: "#14a38b", door: 855, label: "Premiere Hall", icon: "🎯"},
 };
 for (const b of Object.values(S)) b.front = {x: b.door, y: b.y + b.h + 18};
 const NOTICE = {x: 590, y: 492, w: 160, h: 100, front: {x: 670, y: ROAD2_Y - 2}};
@@ -49,7 +49,7 @@ const TRASH = {x: 620, y: 178};
 const BEACON = {x: 878, y: 12};
 const TREES = [[30, 128], [292, 74], [345, 160], [612, 44], [806, 104], [298, 318], [338, 400], [612, 404], [952, 404],
                [104, 452], [262, 404], [946, 120], [372, 300], [250, 470], [764, 456], [940, 486], [22, 708], [190, 712], [330, 706],
-               [700, 712], [866, 708], [950, 714], [436, 470], [530, 712]].map(([x, y], i) => ({x, y, i, kind: i % 4 === 2 ? "blossom" : i % 3 === 1 ? "dark" : "green"}));
+               [700, 712], [866, 708], [950, 714], [436, 470], [530, 712]].map(([x, y], i) => ({x, y, i, kind: i % 5 === 0 ? "palm" : i % 4 === 2 ? "blossom" : i % 3 === 1 ? "dark" : "green"}));
 const LAMPS = [[40, 214], [330, 214], [598, 214], [930, 214], [394, 306], [566, 306], [250, 634], [512, 634], [736, 634], [940, 634]].map(([x, y]) => ({x, y}));
 const BENCHES = [{x: 430, y: 292}, {x: 530, y: 292}, {x: 410, y: 690}, {x: 610, y: 690}];
 const SPOTS = [{x: 150, y: 288}, {x: 274, y: 352}, {x: 60, y: 300}, {x: 430, y: 296, bench: true}, {x: 530, y: 296, bench: true},
@@ -122,21 +122,37 @@ function drawTerrain() {
     g.beginPath(); g.moveTo(x - 2, y); g.lineTo(x, y - 4); g.lineTo(x + 2, y); g.stroke();
   }
   // roads: the main street, little paths to each door, the plaza and the plots
-  const path = (x, y, w, h) => {
-    g.fillStyle = "#e4c792"; g.fillRect(x, y, w, h);
-    g.fillStyle = "rgba(160,120,60,.25)"; g.fillRect(x, y, w, 2); g.fillRect(x, y + h - 2, w, 2);
+  const path = (x, y, w, h, street) => {
+    if (street) {   // asphalt with sidewalk curbs and a dashed centre line
+      g.fillStyle = "#c9c4d0"; g.fillRect(x, y - 3, w, h + 6);
+      g.fillStyle = "#4b4858"; g.fillRect(x, y, w, h);
+      g.fillStyle = "rgba(255,255,255,.07)"; g.fillRect(x, y, w, 2);
+      g.fillStyle = "#f3d46b"; for (let dx = x + 6; dx < x + w - 14; dx += 34) g.fillRect(dx, y + h / 2 - 1, 16, 2);
+      return;
+    }
+    g.fillStyle = "#7d1220"; g.fillRect(x - 2, y, w + 4, h);   // red carpet
+    g.fillStyle = "#c81f3a"; g.fillRect(x, y, w, h);
+    g.fillStyle = "#ffd34d"; g.fillRect(x - 2, y, 2, h); g.fillRect(x + w, y, 2, h);
+    g.fillStyle = "rgba(255,255,255,.1)"; g.fillRect(x + 3, y, 3, h);
   };
-  path(0, ROAD_Y - 16, W, 32);
+  path(0, ROAD_Y - 16, W, 32, true);
   for (const b of Object.values(B)) path(b.door - 12, b.y + b.h - 2, 24, ROAD_Y - 16 - (b.y + b.h - 2));
   path(PLAZA.x - 12, ROAD_Y + 16, 24, 40);
-  path(0, ROAD2_Y - 16, W, 32);
+  path(0, ROAD2_Y - 16, W, 32, true);
   for (const l of LINKS) path(l - 12, ROAD_Y + 16, 24, ROAD2_Y - ROAD_Y - 32);
   for (const b of Object.values(S)) path(b.door - 12, b.y + b.h - 2, 24, ROAD2_Y - 16 - (b.y + b.h - 2));
   path(NOTICE.front.x - 10, NOTICE.y + NOTICE.h + 20, 20, ROAD2_Y - 16 - (NOTICE.y + NOTICE.h + 20));
   for (const p of PLOTS) path(p.front.x - 10, ROAD_Y + 16, 20, p.y - ROAD_Y - 16);
-  g.fillStyle = "rgba(120,90,50,.35)";
-  for (let i = 0; i < 140; i++) { g.beginPath(); g.arc(rr() * W, ROAD_Y - 13 + rr() * 26, rr() * 1.4 + .4, 0, 7); g.fill(); }
-  for (let i = 0; i < 140; i++) { g.beginPath(); g.arc(rr() * W, ROAD2_Y - 13 + rr() * 26, rr() * 1.4 + .4, 0, 7); g.fill(); }
+  const star = (x, y, R, fill, edge) => {
+    g.beginPath();
+    for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rad = k % 2 ? R * .45 : R; g.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad); }
+    g.closePath(); g.fillStyle = fill; g.fill(); g.strokeStyle = edge; g.lineWidth = 1; g.stroke();
+  };
+  // Walk of Fame: pink terrazzo stars with brass rims along the pavement of both streets
+  for (const ry of [ROAD_Y, ROAD2_Y]) for (let x = 14; x < W; x += 36) {
+    const y = ry + (Math.floor(x / 36) % 2 ? 11 : -11);
+    star(x, y, 6.5, "#e8789f", "#d4a72c");
+  }
   // pond
   g.fillStyle = "#d9c58f"; g.beginPath(); g.ellipse(POND.x, POND.y, POND.rx + 7, POND.ry + 6, 0, 0, 7); g.fill();
   g.fillStyle = "#3d8fd1"; g.beginPath(); g.ellipse(POND.x, POND.y, POND.rx, POND.ry, 0, 0, 7); g.fill();
@@ -150,7 +166,7 @@ function drawTerrain() {
     g.strokeStyle = "#2f7d3a"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + rr() * 3 - 1.5, y - 9); g.stroke();
   }
   // plaza and fountain basin
-  g.fillStyle = "#d8cfc0"; g.beginPath(); g.arc(PLAZA.x, PLAZA.y, PLAZA.r, 0, 7); g.fill();
+  g.fillStyle = "#e9dcc4"; g.beginPath(); g.arc(PLAZA.x, PLAZA.y, PLAZA.r, 0, 7); g.fill();
   g.strokeStyle = "rgba(120,105,90,.35)"; g.lineWidth = 1;
   for (let rad = 20; rad < PLAZA.r; rad += 16) { g.beginPath(); g.arc(PLAZA.x, PLAZA.y, rad, 0, 7); g.stroke(); }
   for (let a = 0; a < 16; a++) {
@@ -160,6 +176,7 @@ function drawTerrain() {
   g.fillStyle = "#9aaab9"; g.beginPath(); g.arc(PLAZA.x, PLAZA.y, 28, 0, 7); g.fill();
   g.fillStyle = "#4fa6e3"; g.beginPath(); g.arc(PLAZA.x, PLAZA.y, 23, 0, 7); g.fill();
   g.fillStyle = "#8b9bab"; g.beginPath(); g.arc(PLAZA.x, PLAZA.y, 6, 0, 7); g.fill();
+  for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + .39; star(PLAZA.x + Math.cos(a) * 48, PLAZA.y + Math.sin(a) * 48, 6, "#ffd34d", "#b8860b"); }
   // plots: tilled soil
   for (const p of PLOTS) {
     g.fillStyle = "#a8794b"; g.fillRect(p.x, p.y, p.w, p.h);
@@ -269,8 +286,8 @@ const WORK = {boss: () => ({x: B.hq.front.x - 26, y: B.hq.front.y}), chad: () =>
               pitch: () => S.pitch.front, scout: () => S.scout.front, tally: () => ({x: S.scout.front.x - 36, y: S.scout.front.y})};
 const workSpot = a => WORK[a.key]?.() || a.home.front;
 
-const CHATTER = ["Nice day for clips ☀️", "☕ coffee break", "Anything trending?", "🎵 la la la", "Stretching 🙆", "Vibes are good ✨", "Who moved my chair?"];
-const NIGHT_CHATTER = ["Night shift 🌙", "Still grinding 💪", "The stars are out ✨"];
+const CHATTER = ["Nice day for a shoot ☀️", "☕ coffee break", "Anything trending?", "🎵 la la la", "Stretching 🙆", "Vibes are good ✨", "Who moved my director's chair?", "Quiet on set! 🤫", "That's a wrap! 🎬"];
+const NIGHT_CHATTER = ["Night shift 🌙", "Still grinding 💪", "The stars are out ✨", "Late-night premiere 🍿"];
 const SWEEP_SAY = ["Squeaky clean ✨", "Who dropped this? 🧹", "Spotless!", "Mopping up 🪣", "Every cent counts 💰"];
 const BOSS_PRAISE = ["Looking good, {n}! 👏", "Keep it up, {n}! 🔥", "How's it going, {n}?", "Proud of you, {n} 👑"];
 
@@ -478,10 +495,24 @@ function house(b, t) {
   ctx.fillStyle = "#7a4a2a"; roundRect(ctx, b.door - 11, bottom - 30, 22, 30, 4); ctx.fill();
   ctx.fillStyle = "#5a361e"; ctx.fillRect(b.door - 1, bottom - 28, 2, 28);
   ctx.fillStyle = "#ffd34d"; ctx.beginPath(); ctx.arc(b.door + 6, bottom - 14, 1.6, 0, 7); ctx.fill();
+  marquee(`${b.icon} ${b.label}`, b.door, wallY + 12.5, SKY.dk > .15);
+}
+// A theatre marquee: dark board, gold lettering and a ring of chasing bulbs.
+let marqueeT = 0;
+function marquee(label, cx, cy, lit) {
   ctx.font = `800 9px ${FONT}`;
-  const label = `${b.icon} ${b.label}`, lw = ctx.measureText(label).width + 12;
-  ctx.fillStyle = "#3a2a1c"; roundRect(ctx, b.door - lw / 2, wallY + 5, lw, 14, 4); ctx.fill();
-  ctx.fillStyle = "#fff2d6"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label, b.door, wallY + 12.5);
+  const lw = ctx.measureText(label).width + 16, x0 = cx - lw / 2, y0 = cy - 9;
+  ctx.fillStyle = "#2a0d14"; roundRect(ctx, x0, y0, lw, 18, 4); ctx.fill();
+  ctx.strokeStyle = "#ffd34d"; ctx.lineWidth = 1; roundRect(ctx, x0 + 1.5, y0 + 1.5, lw - 3, 15, 3); ctx.stroke();
+  const n = Math.max(6, Math.round(lw / 8)), phase = calm ? 0 : Math.floor(marqueeT / 220);
+  for (let i = 0; i < n; i++) {
+    const u = i / n, onBulb = (i + phase) % 3 === 0, bx = x0 + 3 + u * (lw - 6);
+    for (const by of [y0 + 1.5, y0 + 16.5]) {
+      ctx.fillStyle = onBulb ? "#fff6b0" : "#b8860b"; ctx.beginPath(); ctx.arc(bx, by, 1.2, 0, 7); ctx.fill();
+    }
+  }
+  if (lit) lights.push({x: cx, y: cy, r: lw * .7, warm: .8});
+  ctx.fillStyle = "#ffe08a"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label, cx, cy + .5);
 }
 
 function drawBuildings(t, pending) {
@@ -609,8 +640,11 @@ function drawNotice(t) {
   ctx.fillStyle = "#6b4226"; ctx.fillRect(n.x + 20, n.y + n.h - 4, 7, 32); ctx.fillRect(n.x + n.w - 27, n.y + n.h - 4, 7, 32);
   ctx.fillStyle = "#8a5a32"; roundRect(ctx, n.x - 4, n.y - 4, n.w + 8, n.h + 8, 6); ctx.fill();
   ctx.fillStyle = "#f6ecd2"; roundRect(ctx, n.x, n.y + 16, n.w, n.h - 16, 3); ctx.fill();
-  ctx.fillStyle = "#5a361e"; ctx.fillRect(n.x + 14, n.y - 14, n.w - 28, 4);
-  ctx.font = `900 10px ${FONT}`; ctx.fillStyle = "#fff2d6"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("📜 TOWN NEWS", cx, n.y + 7);
+  ctx.save(); ctx.translate(n.x + 6, n.y - 17); ctx.rotate(-.05);   // clapper sticks
+  ctx.fillStyle = "#1d1426"; ctx.fillRect(0, 0, n.w - 20, 9);
+  ctx.fillStyle = "#fff"; for (let x = 4; x < n.w - 24; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 10, 0); ctx.lineTo(x + 5, 9); ctx.lineTo(x - 5, 9); ctx.fill(); }
+  ctx.restore();
+  ctx.font = `900 10px ${FONT}`; ctx.fillStyle = "#fff2d6"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("🎬 NOW SHOWING", cx, n.y + 7);
   ctx.textAlign = "left";
   const news = shown.news.length ? shown.news : [{who: "", text: "Nothing new yet"}];
   news.slice(0, 4).forEach((row, i) => {
@@ -625,7 +659,24 @@ function drawNotice(t) {
   if (SKY.dk > .15) lights.push({x: cx, y: n.y + n.h / 2, r: 80, warm: .7});
 }
 
+function drawPalm(tr, t) {   // a tall Hollywood palm
+  const sway = Math.sin(t / 1100 + tr.i) * 1.8, tx = tr.x + 4 + sway * .6, ty = tr.y - 56;
+  ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.beginPath(); ctx.ellipse(tr.x + 5, tr.y, 16, 5, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = "#8a6a44"; ctx.lineWidth = 5; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(tr.x, tr.y); ctx.quadraticCurveTo(tr.x - 2, tr.y - 30, tx, ty); ctx.stroke();
+  ctx.strokeStyle = "rgba(60,40,20,.35)"; ctx.lineWidth = 1;
+  for (let k = 1; k < 6; k++) { const u = k / 6, y = lerp(tr.y, ty, u); ctx.beginPath(); ctx.moveTo(lerp(tr.x, tx, u) - 3, y); ctx.lineTo(lerp(tr.x, tx, u) + 3, y); ctx.stroke(); }
+  for (let k = 0; k < 7; k++) {
+    const a = -Math.PI * .95 + k * Math.PI * .95 / 3 + sway * .02, len = 24 + (k % 2) * 4;
+    ctx.fillStyle = k % 2 ? "#2f8f45" : "#3fae55";
+    ctx.beginPath(); ctx.moveTo(tx, ty);
+    ctx.quadraticCurveTo(tx + Math.cos(a) * len * .6, ty + Math.sin(a) * len * .6 - 9, tx + Math.cos(a) * len, ty + Math.sin(a) * len + 8);
+    ctx.quadraticCurveTo(tx + Math.cos(a) * len * .55, ty + Math.sin(a) * len * .55 - 2, tx, ty); ctx.fill();
+  }
+  ctx.fillStyle = "#7a4f2c"; ctx.beginPath(); ctx.arc(tx - 2, ty + 3, 2.2, 0, 7); ctx.arc(tx + 2, ty + 4, 2.2, 0, 7); ctx.fill();
+}
 function drawTree(tr, t) {
+  if (tr.kind === "palm") return drawPalm(tr, t);
   const sway = Math.sin(t / 1100 + tr.i) * 1.4;
   ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.beginPath(); ctx.ellipse(tr.x + 5, tr.y, 18, 6, 0, 0, 7); ctx.fill();
   ctx.fillStyle = "#7a4f2c"; ctx.fillRect(tr.x - 3, tr.y - 16, 6, 16);
@@ -641,10 +692,15 @@ function drawLamp(l) {
   ctx.fillStyle = "#3b3346"; ctx.fillRect(l.x - 5.5, l.y - 35, 11, 2.5);
   if (on) lights.push({x: l.x, y: l.y - 28, r: 70, warm: 1});
 }
-function drawBench(b) {
+function drawBench(b) {   // director's chairs
   ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fillRect(b.x - 18, b.y + 1, 38, 3);
-  ctx.fillStyle = "#6b4b2e"; ctx.fillRect(b.x - 16, b.y - 4, 3, 6); ctx.fillRect(b.x + 13, b.y - 4, 3, 6);
-  ctx.fillStyle = "#a8713f"; ctx.fillRect(b.x - 18, b.y - 8, 36, 5); ctx.fillRect(b.x - 18, b.y - 15, 36, 4);
+  for (const dx of [-10, 10]) {
+    ctx.strokeStyle = "#3b2a1c"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(b.x + dx - 6, b.y + 2); ctx.lineTo(b.x + dx + 6, b.y - 8); ctx.moveTo(b.x + dx + 6, b.y + 2); ctx.lineTo(b.x + dx - 6, b.y - 8); ctx.stroke();
+    ctx.fillStyle = "#c81f3a"; ctx.fillRect(b.x + dx - 7, b.y - 9, 14, 4);
+    ctx.fillStyle = "#1d1426"; ctx.fillRect(b.x + dx - 7, b.y - 20, 14, 8);
+    ctx.fillStyle = "#ffd34d"; ctx.font = `900 5px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("DIRECTOR", b.x + dx, b.y - 16);
+  }
 }
 function drawPlot(p) {
   ctx.strokeStyle = "#8a5a32"; ctx.lineWidth = 2;
@@ -656,7 +712,7 @@ function drawPlot(p) {
   if (!p.agent) {
     ctx.fillStyle = "#6b4226"; ctx.fillRect(p.x + p.w / 2 - 1.5, p.y + 20, 3, 20);
     ctx.fillStyle = "#fff6e0"; roundRect(ctx, p.x + p.w / 2 - 32, p.y + 10, 64, 16, 3); ctx.fill();
-    ctx.font = `800 8px ${FONT}`; ctx.fillStyle = "#6b4226"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("+ HIRING SOON", p.x + p.w / 2, p.y + 18.5);
+    ctx.font = `800 8px ${FONT}`; ctx.fillStyle = "#6b4226"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("+ CASTING CALL", p.x + p.w / 2, p.y + 18.5);
     return;
   }
   const a = agents.get(p.agent.toLowerCase());
@@ -668,6 +724,9 @@ function drawPlot(p) {
   const lit = SKY.dk > .15;
   ctx.fillStyle = lit ? "#ffd56b" : "#a9dcff"; ctx.fillRect(hx + 4, hy + hh - 16, 10, 8); ctx.fillRect(hx + hw - 14, hy + hh - 16, 10, 8);
   if (lit) lights.push({x: p.x + p.w / 2, y: hy + hh - 12, r: 40, warm: .8});
+  ctx.fillStyle = "#ffd34d"; ctx.strokeStyle = "#b8860b"; ctx.lineWidth = 1; ctx.beginPath();
+  for (let k = 0; k < 10; k++) { const an = -Math.PI / 2 + k * Math.PI / 5, rad = k % 2 ? 2.8 : 6; ctx.lineTo(p.x + p.w / 2 + Math.cos(an) * rad, hy + 24 + Math.sin(an) * rad); }
+  ctx.closePath(); ctx.fill(); ctx.stroke();   // the star on the trailer door
   if (a?.key === "sweep") { emoji("🪣", p.x + 10, p.y + p.h - 6, 15); emoji("🧹", p.x + p.w - 8, p.y + p.h - 16, 17, .35); }   // the janitor's shed
 }
 
@@ -899,6 +958,36 @@ function drawLightsAndDark(t) {
   ctx.globalCompositeOperation = "source-over";
 }
 
+const SEARCH = [{x: 156, y: 56, ph: 0}, {x: 490, y: 34, ph: 2}, {x: 878, y: 16, ph: 4}, {x: 40, y: 560, ph: 1}];
+function drawSearchlights(t) {   // premiere-night beams sweeping from the studio roofs
+  const strength = .1 + SKY.dk * .4;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for (const L of SEARCH) {
+    const ang = -Math.PI / 2 + Math.sin(t / 2600 + L.ph) * .55, len = 230, half = .06;
+    const g = ctx.createLinearGradient(L.x, L.y, L.x + Math.cos(ang) * len, L.y + Math.sin(ang) * len);
+    g.addColorStop(0, `rgba(255,248,210,${strength})`); g.addColorStop(1, "rgba(255,248,210,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(L.x, L.y);
+    ctx.lineTo(L.x + Math.cos(ang - half) * len, L.y + Math.sin(ang - half) * len); ctx.lineTo(L.x + Math.cos(ang + half) * len, L.y + Math.sin(ang + half) * len);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+// Set dressing: film reels and a camera on a tripod by the Sound Stage, a "ON AIR" light, a bin of clapperboards by the plaza.
+function drawProps(t) {
+  const s = B.studio;
+  emoji("🎞️", s.x - 14, s.y + s.h - 6, 16); emoji("🎞️", s.x + s.w + 10, s.y + s.h - 4, 14, .3);
+  const cx = s.x + s.w + 30, cy = s.y + s.h + 8;
+  ctx.strokeStyle = "#2a2233"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx, cy - 14); ctx.lineTo(cx - 8, cy + 6); ctx.moveTo(cx, cy - 14); ctx.lineTo(cx + 8, cy + 6); ctx.moveTo(cx, cy - 14); ctx.lineTo(cx, cy + 6); ctx.stroke();
+  emoji("🎥", cx, cy - 20, 18, Math.sin(t / 1500) * .15);
+  const on = Math.sin(t / 500) > -.2 || calm;   // ON AIR sign above the Sound Stage door
+  ctx.fillStyle = on ? "#e11d48" : "#5a1020"; roundRect(ctx, s.door - 22, s.y + s.h * .52 - 22, 44, 12, 3); ctx.fill();
+  ctx.font = `900 8px ${FONT}`; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("ON AIR", s.door, s.y + s.h * .52 - 15.5);
+  if (on && SKY.dk > .15) lights.push({x: s.door, y: s.y + s.h * .52 - 16, r: 60, red: true});
+  const g = S.bank, sx = g.x + g.w / 2;   // Box Office: ticket-booth poster
+  emoji("🍿", sx + 56, g.y + g.h - 2, 16);
+}
+
 function drawSkyLife(t) {
   const day = 1 - clamp(SKY.dk * 2, 0, 1);
   if (day <= 0) return;
@@ -922,6 +1011,7 @@ function drawSkyLife(t) {
 
 function draw(t) {
   if (!canvas.width) return;
+  marqueeT = t;
   if (terrainAt !== cam.version) drawTerrain();
   SKY = sky();
   lights = [];
@@ -931,6 +1021,7 @@ function draw(t) {
   drawWater(t);
   const pending = Math.max(0, shown.pending - deliveriesOnTheWay);
   drawBuildings(t, pending);
+  drawProps(t);
   const things = [
     ...TREES.map(o => ({y: o.y, d: () => drawTree(o, t)})),
     ...LAMPS.map(o => ({y: o.y, d: () => drawLamp(o)})),
@@ -945,6 +1036,7 @@ function draw(t) {
   drawParticles();
   drawSkyLife(t);
   drawLightsAndDark(t);
+  drawSearchlights(t);
   drawNames();
   if (pending > 0) {   // a bouncing "!" over Approvals while clips wait for you
     const y = B.post.y - 14 + Math.sin(t / 220) * 4;
