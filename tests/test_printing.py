@@ -233,5 +233,6 @@ def test_api_state_print_and_pause(_setup):
 def test_worker_tick_calls_the_scheduled_print(monkeypatch):
     calls = []
     monkeypatch.setattr(printing, "run_if_due", lambda *a: calls.append(1))
+    monkeypatch.setattr(season, "remind_if_due", lambda *a: False)   # needs a real game date, and only runs after 8 am
     worker.football_tick()
     assert calls == [1]

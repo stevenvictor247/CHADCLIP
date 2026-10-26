@@ -32,7 +32,8 @@ QUEUE_LATE_HOURS = 2
 BOSS_CHAT_LONG_TOKENS = 40_000     # a chat this long is worth restarting; Sweep closes it by itself at 120k when idle
 REPEAT_MESSAGES = 3                # the same Boss prompt this many times in a day is a loop, not Steven
 REPEAT_TASKS = 4                   # the same job asked for this many times in a day (not by the schedule)
-ROUTINE_OK = ("No follow-ups due",)   # results of free checks that are fine to come back empty
+ROUTINE_OK = ("No follow-ups due", "No new posted clips need submitting", "Every waiting pitch already has an email",
+              "No posted clips to count yet")   # results of free checks that are fine to come back empty
 EMPTY_RUNS = 3                     # this many empty rounds in a row from one scheduled job
 REJECT_RATE = 0.4                  # share of Chad's decided clips that were rejected
 SET_ASIDE_NOTE = "Sweep: video file missing, set aside."

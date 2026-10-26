@@ -330,6 +330,8 @@ def report() -> str:
         text = review.summary(chad)
     with _chat_lock:  # show it in the Boss chat too, where it used to appear
         conv = current_conversation()
+        if chat_tokens(conv) >= AUTO_ROLL_TOKENS:   # the daily report adds to the chat even when nobody talks to it
+            conv = new_conversation()
         _save(conv, "user", [{"type": "text", "text": "Daily report, please."}])
         _save(conv, "assistant", [{"type": "text", "text": text}])
     return text

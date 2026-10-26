@@ -75,6 +75,19 @@ class Scout(Agent):
                       (6, "Look for new campaigns in the inbox and the feeds.", {"discover": True})],
         )
 
+    def nothing_to_do(self, instructions: str, params: dict) -> bool | None:
+        """Free looks in code before a scheduled round is queued: no posted clip waiting to be logged, or nothing in
+        the inbox and no feeds to read, means no task at all."""
+        if params == {"sync": True}:
+            return not campaigns.has_unsynced_posts()
+        if params == {"discover": True}:
+            if not llm.HAS_LLM:
+                return True
+            if discovery.inbox("queued"):
+                return False   # links waiting to be rated
+            return None if discovery.feed_urls() else True   # feeds may or may not have new links: back off if empty
+        return None
+
     def run(self, task: dict) -> str:
         params = json.loads(task.get("params") or "{}")
         if params.get("discover"):
