@@ -1,4 +1,4 @@
-// Splits the dashboard into tabs (Home, Approvals, Boss, Campaigns, Pitch, Clips, Warrior Village, Sweep, Activity) so nothing needs a long scroll.
+// Splits the dashboard into tabs (Home, Approvals, Boss, Campaigns, Pitch, Clips, Warrior Village, Sweep, Ideas, Activity) so nothing needs a long scroll.
 // The money strip and header stay above the tabs on every page. The last tab is remembered, and links like /#approvals open a tab.
 (function () {
   // Each tab lists the ids of things inside the sections it shows. A section is found from any element inside it.
@@ -14,6 +14,7 @@
     {id: "clips", icon: "🎞️", label: "Clips", has: ["allowedsection", "library"]},
     {id: "football", icon: "🏈", label: "Warrior Village", has: ["towns", "football"]},
     {id: "sweep", icon: "🧹", label: "Sweep", has: ["sweep"]},
+    {id: "ideas", icon: "💡", label: "Ideas", has: ["muse"]},
     {id: "activity", icon: "📜", label: "Activity", has: ["activity"]},
   ];
   const css = `
@@ -47,7 +48,8 @@
   nav.id = "hq-tabs";
   nav.setAttribute("role", "tablist");
   nav.setAttribute("aria-label", "HQ sections");
-  nav.innerHTML = TABS.map((t, i) => `<button role="tab" data-go="${t.id}" title="${t.label} (press ${i + 1})">` +
+  const key = i => i < 9 ? i + 1 : i === 9 ? 0 : null;   // number keys 1-9, then 0 for the tenth tab
+  nav.innerHTML = TABS.map((t, i) => `<button role="tab" data-go="${t.id}" title="${t.label}${key(i) === null ? "" : ` (press ${key(i)})`}">` +
     `<span>${t.icon}</span><span>${t.label}</span><span class="badge" id="tab-badge-${t.id}"></span></button>`).join("") +
     `<a href="/settings" title="API keys, accounts and options">⚙️ Settings</a>`;
   document.body.insertAdjacentElement("afterbegin", nav);   // first thing on the page, so it stays pinned while the rest scrolls
@@ -57,7 +59,7 @@
     let last = null;
     for (const id of t.has) {
       const el = document.getElementById(id);
-      const sec = el && (el.matches("section, #towns, #football, #sweep") ? el : el.closest("section"));
+      const sec = el && (el.matches("section, #towns, #football, #sweep, #muse") ? el : el.closest("section"));
       if (sec) { sec.dataset.tab = sec.dataset.tab && sec.dataset.tab !== t.id ? sec.dataset.tab + " " + t.id : t.id; last = sec; }
     }
     if (t.empty && last) {
@@ -111,10 +113,10 @@
   // The "Waiting for you" number in the header opens Approvals.
   const waiting = document.getElementById("s-pending");
   if (waiting) { waiting.style.cursor = "pointer"; waiting.title = "Open Approvals"; waiting.onclick = () => show("approvals"); }
-  // Number keys 1-9 switch tabs, unless you're typing.
+  // Number keys 1-9 and 0 switch tabs, unless you're typing.
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input, textarea, select, [contenteditable]")) return;
-    const t = TABS[+e.key - 1];
+    const t = /^[0-9]$/.test(e.key) ? TABS[e.key === "0" ? 9 : +e.key - 1] : null;
     if (t) show(t.id);
   });
 

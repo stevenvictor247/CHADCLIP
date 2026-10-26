@@ -5,7 +5,7 @@ import json
 import re
 import threading
 
-from . import agents, db, football, ledger, llm, review, tally
+from . import agents, db, football, ledger, llm, muse, review, tally
 from .config import BOSS_MODEL, VISION_PATH
 
 SYSTEM = """You are the Boss, the head of an AI agent team that runs parts of Steven's online business.
@@ -32,6 +32,10 @@ How you work:
   assign_task (plain-words instructions), or straight to the one agent when it's obvious (Clock to tick off or move
   checklist items, Ref to check a sheet, Tells for a scouting report). get_status includes the football week.
   Never invent football stats or tendencies, and nothing football goes to a coach without Steven.
+- Muse is the Creative Director. When Steven wants ideas (new businesses, new agents, add-ons, ways to make more
+  money), assign_task Muse, with {"focus": "his topic in his words"} if he named one. get_status shows the ideas
+  waiting for him (open, best first); point him to the Ideas tab to answer them. Muse only suggests: building an
+  idea is Steven's call.
 - If he asks for something no agent can do yet, say so and suggest what agent would handle it.
 - Reply in short, plain sentences. No filler."""
 
@@ -97,6 +101,7 @@ def get_status() -> dict:
         "claude_spend": ledger.summary(),
         "views": tally.summary(),
         "football": football.status(),
+        "ideas": muse.summary(),
     }
 
 

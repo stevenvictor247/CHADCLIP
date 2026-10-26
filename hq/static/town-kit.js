@@ -382,7 +382,7 @@ const when = iso => {
   return mins < 1 ? "just now" : mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`;
 };
 const usd = n => "$" + (+n || 0).toFixed(2);
-const PANELS = {chad: ["clips", "library"], scout: ["campaigns", "campsection"], tally: ["campaigns", "campsection"], pitch: ["pitch", "leadsection"], sweep: ["sweep", "sweep"],
+const PANELS = {chad: ["clips", "library"], scout: ["campaigns", "campsection"], tally: ["campaigns", "campsection"], pitch: ["pitch", "leadsection"], sweep: ["sweep", "sweep"], muse: ["ideas", "muse"],
                 boss: ["boss", "chatlog"], captain: ["football", "football"], clock: ["football", "fbweek"], ref: ["football", "fbfiles"],
                 tells: ["football", "fbfiles"], scribe: ["football", "fbnotes"]};
 

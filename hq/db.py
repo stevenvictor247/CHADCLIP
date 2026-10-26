@@ -231,6 +231,33 @@ CREATE TABLE IF NOT EXISTS football_notes (
     status TEXT NOT NULL DEFAULT 'active',       -- active, replaced
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ideas (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,                          -- business, agent, addon, hq
+    title TEXT NOT NULL,
+    name TEXT,                                   -- a new agent's suggested name
+    pitch TEXT NOT NULL,
+    why_now TEXT,
+    builds_on TEXT NOT NULL DEFAULT '[]',        -- agents or businesses it uses, JSON list
+    first_steps TEXT NOT NULL DEFAULT '[]',      -- JSON list
+    steven_does TEXT,
+    risks TEXT,
+    start_cost REAL NOT NULL DEFAULT 0,          -- US dollars, once
+    monthly_cost REAL NOT NULL DEFAULT 0,        -- US dollars a month
+    effort TEXT NOT NULL DEFAULT 'medium',       -- small, medium, large
+    effort_hours REAL NOT NULL DEFAULT 10,
+    profit_low REAL NOT NULL DEFAULT 0,          -- US dollars a month once running
+    profit_high REAL NOT NULL DEFAULT 0,
+    months_to_first REAL,
+    confidence REAL NOT NULL DEFAULT 0.3,        -- 0 to 1: how likely the profit range is
+    score REAL NOT NULL DEFAULT 0,               -- worked out in code: first-year profit per hour of work
+    status TEXT NOT NULL DEFAULT 'proposed',     -- proposed, approved, built, parked, rejected
+    reason TEXT,                                 -- why Steven said no or later, if he said
+    approval_id INTEGER,
+    focus TEXT,                                  -- what Steven asked Muse to think about, if anything
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,

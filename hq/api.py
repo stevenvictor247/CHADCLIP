@@ -11,11 +11,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
-from . import sweep_api
+from . import muse_api, sweep_api
 from .config import CLIPS_DIR, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
 app = FastAPI(title="Agent HQ")
 app.include_router(sweep_api.router)
+app.include_router(muse_api.router)
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
 STATIC = Path(__file__).parent / "static"
 SESSION_COOKIE = "hq_session"
@@ -105,6 +106,11 @@ def _library() -> list[dict]:
     for c in clips:
         c["posts"] = [p for p in posts if p["clip_id"] == c["id"]]
     return clips
+
+
+def _ideas_summary() -> dict:
+    from . import muse
+    return muse.summary()
 
 
 def _tally_summary() -> dict:
@@ -228,6 +234,7 @@ def state():
         "approvals": [{**a, "village": village_of(a["agent"])} for a in approvals.pending()],
         "football": football.state(),
         "tally": _tally_summary(),
+        "ideas": _ideas_summary(),
         "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at FROM leads "
                          "ORDER BY id DESC LIMIT 50"),
         "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None, "village": "business"}] +

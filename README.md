@@ -195,6 +195,22 @@ posts, emails, spends money or changes settings or keys without your approval.
 The Boss's chat also uses prompt caching now, so the unchanged start of each conversation is billed at a tenth of the
 price.
 
+## Muse (the Creative Director)
+
+Muse lives in the Writers' Room on Market Street in HQ Town and thinks up new ways for HQ to make money and run better:
+new businesses, new agents, add-ons to what HQ already does, and HQ upgrades. Its ideas are on the **Ideas** tab.
+
+- About once a week (`HQ_MUSE_EVERY_DAYS`, 7) Muse makes one Claude call (Sonnet, up to about $0.20) for
+  `HQ_MUSE_IDEAS` ideas (5). Before that, free checks in code skip the round when it's too soon, when last round's
+  ideas are still waiting for your answer, or when its monthly cap (`HQ_MUSE_MONTHLY_BUDGET`, $3) or the day's
+  `HQ_DAILY_BUDGET` would be passed. **Brainstorm now** (optionally with a topic) skips the wait but never the caps.
+- Code, not Claude, drops ideas that repeat anything already built, already shown to you on an ideas page, parked
+  (the cloud server) or turned down, and anything against HQ's rules, then ranks the rest by expected first-year
+  profit for each hour of work.
+- The best `HQ_MUSE_TO_APPROVALS` (3) go to **Waiting for your OK** and your phone. **Build it** gives you a build
+  brief to paste to Claude; **Not for me** asks why (one tap), and Muse learns from your answers. Muse never builds,
+  buys, posts or signs up for anything itself.
+
 ## Safe defaults
 
 - Nothing posts until you approve it (`HQ_REQUIRE_APPROVAL=true`).

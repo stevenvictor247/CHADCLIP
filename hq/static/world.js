@@ -29,11 +29,12 @@ const B = {
   tower:  {x: 842, y: 14, w: 72, h: 156, door: 878, label: "Broadcast Tower", icon: "📡"},
 };
 for (const b of Object.values(B)) b.front = {x: b.door, y: b.y + b.h + 20};
-// The south side of town, on Market Street: where Sweep, Pitch and Scout go to work, and the town notice board.
+// The south side of town, on Market Street: where Sweep, Pitch and Scout go to work, Muse's Writers' Room, and the town notice board.
 const S = {
   bank:  {x: 56, y: 500, w: 172, h: 130, wall: "#f4ecd6", roof: "#2f855a", door: 142, style: "temple", label: "Box Office", icon: "🏦"},
   pitch: {x: 278, y: 512, w: 136, h: 118, wall: "#efe6ff", roof: "#7c5cd6", door: 346, style: "glass", label: "Talent Agency", icon: "✉️"},
   scout: {x: 778, y: 504, w: 154, h: 126, wall: "#dcf6f1", roof: "#14a38b", door: 855, style: "pagoda", label: "Premiere Hall", icon: "🎯"},
+  ideas: {x: 434, y: 516, w: 100, h: 114, wall: "#fbeaff", roof: "#a21caf", door: 484, style: "writers", label: "Writers' Room", icon: "💡"},   // Muse lives and works here
 };
 for (const b of Object.values(S)) b.front = {x: b.door, y: b.y + b.h + 18};
 const NOTICE = {x: 590, y: 492, w: 160, h: 100, front: {x: 670, y: ROAD2_Y - 2}};
@@ -50,7 +51,7 @@ const BEACON = {x: 878, y: 12};
 const TREES = [[30, 128], [292, 74], [345, 160], [612, 44], [806, 104], [298, 318], [338, 400], [612, 404], [952, 404],
                [104, 452], [262, 404], [946, 120], [372, 300], [250, 470], [764, 456], [940, 486], [22, 708], [190, 712], [330, 706],
                [700, 712], [866, 708], [950, 714], [436, 470], [530, 712]].map(([x, y], i) => ({x, y, i, kind: i % 5 === 0 ? "palm" : i % 4 === 2 ? "blossom" : i % 3 === 1 ? "dark" : "green"}));
-const LAMPS = [[40, 214], [330, 214], [598, 214], [930, 214], [394, 306], [566, 306], [250, 634], [512, 634], [736, 634], [940, 634]].map(([x, y]) => ({x, y}));
+const LAMPS = [[40, 214], [330, 214], [598, 214], [930, 214], [394, 306], [566, 306], [250, 634], [576, 634], [736, 634], [940, 634]].map(([x, y]) => ({x, y}));
 const BENCHES = [{x: 430, y: 292}, {x: 530, y: 292}, {x: 410, y: 690}, {x: 610, y: 690}];
 const SPOTS = [{x: 150, y: 288}, {x: 274, y: 352}, {x: 60, y: 300}, {x: 430, y: 296, bench: true}, {x: 530, y: 296, bench: true},
                {x: 480, y: 404}, {x: 418, y: 372}, {x: 542, y: 372}, {x: 330, y: 250}, {x: 600, y: 252}, {x: 100, y: 252},
@@ -203,6 +204,7 @@ const ducks = [{a: 0, sp: .16, k: .62}, {a: 2.6, sp: .12, k: .45}];
 const butterflies = FLOWERS.slice(0, 6).map((f, i) => ({cx: f.x, cy: f.y - 10, ph: i * 1.7, c: ["#ffb347", "#ff6fa8", "#7cc4ff", "#fff59e"][i % 4]}));
 const fireflies = Array.from({length: 16}, (_, i) => ({x: rnd(0, W), y: rnd(270, H), vx: rnd(-8, 8), vy: rnd(-6, 6), ph: i}));
 for (let i = 0; i < 3; i++) clouds.push({x: rnd(0, W), y: rnd(40, H - 40), s: rnd(.8, 1.4)});
+let prevIdeas = null;
 let mode = "auto", prev = null, deliveriesOnTheWay = 0, mailboxBump = 0, towerGlow = 0, thinking = false;
 let shown = {pending: 0, approved: 0, asks: 0, made: 0, net: 0, leads: 0, followups: 0, live: 0, proposed: 0, news: []};
 let nextBirds = performance.now() + rnd(4000, 12000);
@@ -244,7 +246,7 @@ let SKY = sky();
 function makeAgent(info) {
   const key = info.name.toLowerCase();
   const l = look(info.name);
-  let home = key === "boss" ? B.hq : key === "chad" ? B.studio : null;
+  let home = key === "boss" ? B.hq : key === "chad" ? B.studio : key === "muse" ? S.ideas : null;
   if (!home) {
     const plot = PLOTS.find(p => !p.agent) || PLOTS[PLOTS.length - 1];
     plot.agent = plot.agent || info.name;
@@ -288,6 +290,7 @@ const workSpot = a => WORK[a.key]?.() || a.home.front;
 
 const CHATTER = ["Nice day for a shoot ☀️", "☕ coffee break", "Anything trending?", "🎵 la la la", "Stretching 🙆", "Vibes are good ✨", "Who moved my director's chair?", "Quiet on set! 🤫", "That's a wrap! 🎬"];
 const NIGHT_CHATTER = ["Night shift 🌙", "Still grinding 💪", "The stars are out ✨", "Late-night premiere 🍿"];
+const MUSE_SAY = ["What if… 💡", "Ooh, idea! ✨", "Thinking big 🚀", "Sketching a plan 📝", "Who's buying? 🤔", "That could sell 💰"];
 const SWEEP_SAY = ["Squeaky clean ✨", "Who dropped this? 🧹", "Spotless!", "Mopping up 🪣", "Every cent counts 💰"];
 const BOSS_PRAISE = ["Looking good, {n}! 👏", "Keep it up, {n}! 🔥", "How's it going, {n}?", "Proud of you, {n} 👑"];
 
@@ -336,6 +339,13 @@ function think(a, now) {
       burst(l.x, l.y - 6, 5, "spark", ["#fff8c4", "#9bd1ff"], {min: 15, max: 40, g: 20, life: .8});
       const i = LITTER.indexOf(l); if (i >= 0) LITTER.splice(i, 1);
       say(a, pick(SWEEP_SAY), 3);
+    }});
+    return;
+  }
+  if (a.key === "muse" && Math.random() < .3) {   // the Creative Director wanders over to the notice board for inspiration
+    a.actions.push({at: {x: NOTICE.front.x + rnd(-40, 40), y: NOTICE.front.y + rnd(-2, 4)}, wait: rnd(3, 6), do: () => {
+      a.facing = -1; say(a, pick(MUSE_SAY), 3);
+      addParticle({x: a.x, y: a.y - 40, vy: -18, life: 1.6, kind: "emoji", text: "💡", size: 14});
     }});
     return;
   }
@@ -442,6 +452,22 @@ function react(c) {
   }
 }
 
+// New ideas from Muse: Muse carries a lightbulb from the Writers' Room to the Approvals mailbox.
+function museDelivers(n) {
+  const a = agents.get("muse");
+  ticker(`Muse has ${n} new idea${n > 1 ? "s" : ""} for you 💡`);
+  if (!a) return;
+  hurry(a);
+  a.actions.push(
+    {urgent: true, at: S.ideas.front, do: () => { a.carry = "💡"; say(a, n > 1 ? `${n} new ideas!` : "New idea!", 2); }, wait: .6},
+    {urgent: true, at: {x: B.post.door - 20, y: B.post.front.y}, wait: 1.5, do: () => {
+      a.carry = null; a.facing = 1; mailboxBump = 1;
+      fly({x: a.x, y: a.y - 30}, {x: MAILBOX.x, y: MAILBOX.y - 28}, "💡", .6, 20);
+      burst(MAILBOX.x, MAILBOX.y - 30, 10, "spark", ["#f0abfc", "#fff59e"], {min: 20, max: 60, g: 20});
+      say(a, "Ideas for you, Steven 💡", 3.5);
+    }});
+}
+
 let lastActivity = null;
 function chatter(activity) {
   const newest = activity[0]?.id ?? 0;
@@ -537,6 +563,25 @@ const SHELLS = {
     ctx.fillStyle = `rgba(255,212,60,${.6 + gl * .4})`; ctx.beginPath(); for (let k = 0; k < 10; k++) { const an = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 6 : 14; ctx.lineTo(b.x + b.w / 2 + Math.cos(an) * r, b.y + 8 + Math.sin(an) * r); } ctx.closePath(); ctx.fill();
     ctx.fillStyle = "#3d2a8a"; ctx.fillRect(b.door - 20, bottom - 34, 40, 34);   // glass entrance
     ctx.fillStyle = lit ? "#ffe9a8" : "#aee0ff"; ctx.fillRect(b.door - 18, bottom - 32, 36, 32);
+  },
+  writers(b, t, wallY, bottom) {   // Writers' Room: a little Spanish-style bungalow with arched windows and a striped awning
+    const cx = b.x + b.w / 2, top = wallY - 8;
+    ctx.fillStyle = "#fbeaff"; ctx.fillRect(b.x, top, b.w, bottom - top);
+    ctx.fillStyle = "rgba(162,28,175,.12)"; ctx.fillRect(b.x, bottom - 6, b.w, 6);
+    ctx.fillStyle = "#a21caf"; ctx.beginPath();   // clay tile roof
+    ctx.moveTo(b.x - 8, top + 4); ctx.lineTo(cx, b.y + 4); ctx.lineTo(b.x + b.w + 8, top + 4); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.clip(); ctx.fillStyle = "rgba(0,0,0,.16)";
+    for (let y = b.y + 12; y < top + 4; y += 8) for (let x = b.x - 8 + (y / 8 % 2) * 5; x < b.x + b.w + 8; x += 10) { ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(b.x - 8, top + 4, b.w + 16, 3);
+    for (const wx of [b.x + 10, b.x + b.w - 30]) {   // arched windows
+      ctx.fillStyle = "#7a2d86"; ctx.beginPath(); ctx.moveTo(wx - 2, bottom - 14); ctx.lineTo(wx - 2, bottom - 32); ctx.arc(wx + 10, bottom - 32, 12, Math.PI, 0); ctx.lineTo(wx + 22, bottom - 14); ctx.fill();
+      ctx.save(); ctx.beginPath(); ctx.moveTo(wx, bottom - 16); ctx.lineTo(wx, bottom - 32); ctx.arc(wx + 10, bottom - 32, 10, Math.PI, 0); ctx.lineTo(wx + 20, bottom - 16); ctx.clip();
+      pane(wx, bottom - 42, 20, 26, "#c4b5fd"); ctx.restore();
+      ctx.fillStyle = "#7a2d86"; ctx.fillRect(wx + 9, bottom - 42, 2, 26);
+    }
+    for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? "#fff" : "#c026d3"; ctx.fillRect(b.door - 21 + i * 7, bottom - 40, 7, 7); }   // awning
+    ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fillRect(b.door - 21, bottom - 33, 42, 2);
   },
   pagoda(b, t, wallY, bottom) {   // Premiere Hall: Chinese-Theatre-style red hall with a two-tier teal pagoda roof
     const cx = b.x + b.w / 2;
@@ -727,6 +772,31 @@ function drawCampaignHQ(t) {
   plaque(shown.live ? `${shown.live} campaign${shown.live === 1 ? "" : "s"} live` : "No campaigns yet", b.door - 30, b.y - 10);
   if (shown.views7d) plaque(`👀 ${shown.views7d.toLocaleString()} views this week`, b.door - 30, b.y - 28, "rgba(10,60,55,.88)", "#ccfbf1");
 }
+function drawIdeaLab(t) {
+  const b = S.ideas, glow = shown.ideas > 0 || shown.museBusy;
+  house(b, t);
+  // the big lightbulb on the roof: lit while ideas wait for you or Muse is thinking
+  const bx = b.x + b.w / 2, by = b.y - 10, pulse = glow ? .75 + Math.sin(t / 300) * .25 : 0;
+  ctx.fillStyle = "#94a3b8"; roundRect(ctx, bx - 6, by + 8, 12, 9, 2); ctx.fill();
+  ctx.fillStyle = "#64748b"; ctx.fillRect(bx - 6, by + 11, 12, 1.5); ctx.fillRect(bx - 6, by + 14, 12, 1.5);
+  ctx.fillStyle = glow ? `rgba(255,236,140,${.85 + pulse * .15})` : "#e5e7eb";
+  ctx.beginPath(); ctx.arc(bx, by, 11, 0, 7); ctx.fill();
+  ctx.strokeStyle = glow ? "#f59e0b" : "#9ca3af"; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.strokeStyle = glow ? "#b45309" : "#9ca3af"; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(bx - 3, by + 6); ctx.lineTo(bx - 3, by); ctx.lineTo(bx, by - 3); ctx.lineTo(bx + 3, by); ctx.lineTo(bx + 3, by + 6); ctx.stroke();
+  if (glow) {
+    lights.push({x: bx, y: by, r: 40 + pulse * 10, warm: 1});
+    ctx.strokeStyle = `rgba(255,214,90,${.5 * pulse})`; ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+      const ang = -Math.PI / 2 + (i - 2.5) * .45, r1 = 15, r2 = 20 + pulse * 3;
+      ctx.beginPath(); ctx.moveTo(bx + Math.cos(ang) * r1, by + Math.sin(ang) * r1); ctx.lineTo(bx + Math.cos(ang) * r2, by + Math.sin(ang) * r2); ctx.stroke();
+    }
+  }
+  emoji("📝", b.x + 14, b.y + 30, 13, Math.sin(t / 900) * .1);
+  if (shown.ideas) badge(b.door + 26, b.y + b.h * .52 - 4, shown.ideas, t, "#c026d3");
+  plaque(shown.museBusy ? "✨ Muse is thinking…" : shown.ideas ? `💡 ${shown.ideas} new idea${shown.ideas === 1 ? "" : "s"}` : "Writers' Room",
+         b.door, b.y - 34, "rgba(60,16,70,.9)", "#f5d0fe");
+}
 function drawNotice(t) {
   const n = NOTICE, cx = n.x + n.w / 2;
   ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(cx + 6, n.y + n.h + 28, n.w / 2, 6, 0, 0, 7); ctx.fill();
@@ -864,6 +934,9 @@ function drawAgent(a, t) {
     ctx.fillStyle = "#2b5fb8"; ctx.beginPath(); ctx.ellipse(x, by - 9, 11, 6, 0, Math.PI, 0); ctx.fill();
     ctx.fillRect(f > 0 ? x + 4 : x - 14, by - 10, 10, 2.6);
     ctx.fillStyle = "#ffd34d"; ctx.fillRect(x - 3, by - 14, 6, 2.2);
+  } else if (a.hat === "beret") {   // the Creative Director's beret
+    ctx.fillStyle = "#3b1f5c"; ctx.beginPath(); ctx.ellipse(x - f * 2, by - 10, 11, 4.5, -f * .18, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(x - f * 1, by - 14.5, 1.6, 0, 7); ctx.fill();
   } else if (a.hat === "cap") {
     ctx.fillStyle = "#2a2233"; ctx.beginPath(); ctx.ellipse(x, by - 9, 11, 6, 0, Math.PI, 0); ctx.fill();
     ctx.fillRect(f > 0 ? x + 4 : x - 14, by - 10, 10, 2.6);
@@ -1122,6 +1195,7 @@ function draw(t) {
     ...PLOTS.map(o => ({y: o.y + 40, d: () => drawPlot(o)})),
     {y: S.bank.y + S.bank.h, d: () => drawBank(t)}, {y: S.pitch.y + S.pitch.h, d: () => drawPitchOffice(t)},
     {y: S.scout.y + S.scout.h, d: () => drawCampaignHQ(t)}, {y: NOTICE.y + NOTICE.h + 28, d: () => drawNotice(t)},
+    {y: S.ideas.y + S.ideas.h, d: () => drawIdeaLab(t)},
     ...LITTER.map(o => ({y: o.y, d: () => drawLitter(o)})),
     ...[...agents.values()].map(a => ({y: a.y, d: () => drawAgent(a, t)})),
   ].sort((p, q) => p.y - q.y);
@@ -1226,6 +1300,7 @@ Object.assign(TIPS, {
   pitch: () => `Pitch Office: ${shown.leads} lead${shown.leads === 1 ? "" : "s"}${shown.followups ? `, ${shown.followups} due a follow-up` : ""}. Click for leads.`,
   scout: () => `Campaign HQ: ${shown.live} live campaign${shown.live === 1 ? "" : "s"}${shown.proposed ? `, ${shown.proposed} for you to look at` : ""}. Click for campaigns.`,
   notice: "Town News: the latest from your agents. Click for more.",
+  ideas: () => `Writers' Room: Muse, your Creative Director, thinks up new ways to make money here.${shown.ideas ? ` ${shown.ideas} new idea${shown.ideas === 1 ? "" : "s"} for you.` : ""} Click for the best ones.`,
 });
 const waiting = () => shown.pending + shown.asks;
 const tip = document.getElementById("worldtip");
@@ -1330,6 +1405,24 @@ function campaignCard() {
       acts: {scout: () => kit.agentCard("Scout", live), open: () => kit.goTab("campaigns", "campsection")}};
   });
 }
+function ideasCard() {
+  kit.infoCard("ideas", () => {
+    const s = kit.state() || {}, top = s.ideas?.top || [], muse = (s.agents || []).find(a => a.name === "Muse");
+    const KIND = {business: "business", agent: "new agent", addon: "add-on", hq: "HQ upgrade"};
+    return {color: "#c026d3", icon: "💡", title: "Writers' Room", sub: muse?.doing ? "Muse is thinking up ideas right now" : "Muse, your Creative Director, works here",
+      html: top.length ? `<h4>Best new ideas</h4><ul class="feed">${top.map(i => `<li><span class="pill">${kit.esc(KIND[i.kind] || i.kind)}</span>
+          ${kit.esc(i.title)} <span>$${Math.round(i.profit_low)}–$${Math.round(i.profit_high)}/mo · score ${kit.esc(i.score)}</span></li>`).join("")}</ul>
+          <p class="muted">${s.ideas.open} waiting for your answer on the Ideas tab.</p>`
+        : `<p class="muted">No new ideas waiting. Muse thinks up new businesses, agents and add-ons about once a week, ranked by what they could earn for the work.</p>`,
+      buttons: [{act: "muse", label: "💡 Muse's card"}, {act: "open", label: "Open Ideas ↗", kind: "ghost"},
+                muse?.doing ? null : {act: "run", label: "✨ Brainstorm now", kind: "ghost"}].filter(Boolean),
+      acts: {muse: () => kit.agentCard("Muse", live), open: () => kit.goTab("ideas", "muse"),
+             run: async () => {
+               try { const r = await kit.post("/api/muse/run", {}); window.toast?.("💡 " + kit.esc(r.message)); }
+               catch (e) { window.toast?.("😬 " + kit.esc(e.message)); }
+             }}};
+  });
+}
 function noticeCard() {
   kit.infoCard("notice", () => {
     const rows = ((kit.state() || {}).activity || []).slice(0, 10);
@@ -1358,6 +1451,7 @@ canvas.addEventListener("click", e => {
   else if (h.building === "pitch") pitchCard();
   else if (h.building === "scout") campaignCard();
   else if (h.building === "notice") noticeCard();
+  else if (h.building === "ideas") ideasCard();
   else if (h.plot?.agent) kit.agentCard(h.plot.agent, live);
   else if (h.plot) { floatText(h.plot.x + h.plot.w / 2, h.plot.y, "Room for one more 🌱", "#e8ffd8", 12); plotCard(); }
 });
@@ -1391,7 +1485,10 @@ window.HQWorld = {
              followups: leads.filter(l => l.status === "pitched" && l.followup_at && l.followup_at <= now).length,
              views7d: s.tally?.views_7d || 0,
              live: camps.filter(x => x.status === "joined").length, proposed: camps.filter(x => x.status === "proposed").length,
+             ideas: s.ideas?.open || 0, museBusy: !!(s.agents || []).find(a => a.name === "Muse")?.doing,
              news: (s.activity || []).filter(r => business.has(String(r.agent).toLowerCase())).slice(0, 4).map(r => ({who: r.agent, text: r.message}))};
+    if (prevIdeas !== null && shown.ideas > prevIdeas) museDelivers(shown.ideas - prevIdeas);
+    prevIdeas = shown.ideas;
     prev = {...c};
     chips(c);
     if (calm) draw(performance.now());
