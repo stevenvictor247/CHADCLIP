@@ -167,6 +167,13 @@ def settings_page():
     return FileResponse(STATIC / "settings.html", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/offer")
+def offer_page():
+    from . import offer
+    from .agents.pitch.agent import settings as pitch_settings
+    return Response(offer.page(pitch_settings()), media_type="text/html", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/hq-bar.js")
 def hq_bar():
     return FileResponse(STATIC / "hq-bar.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
