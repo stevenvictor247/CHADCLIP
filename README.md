@@ -212,7 +212,7 @@ new businesses, new agents, add-ons to what HQ already does, and HQ upgrades. It
   profit for each hour of work.
 - The best `HQ_MUSE_TO_APPROVALS` (3) go to **Waiting for your OK** and your phone. **Build it** sends the idea's
   build brief to Claude, where a new thread in your Claude project builds it (once `HQ_BUILD_TOKEN` is set: on
-  claude.ai/code/routines open "HQ Build it button", Add another trigger, API, Generate token, paste it in Settings).
+  claude.ai/code/routines open "HQ Build it", Add another trigger, API, Generate token, paste it in Settings).
   Without the token you get the brief to paste to Claude yourself; **Not for me** asks why (one tap), and Muse learns from your answers. Muse never builds,
   buys, posts or signs up for anything itself.
 

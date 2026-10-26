@@ -399,7 +399,7 @@ def test_build_it_sends_the_brief_to_claude_once(monkeypatch, tmp_path):
     monkeypatch.setattr(hq.muse, "_fire", lambda text: sent.append(text) or {
         "type": "routine_fire", "claude_code_session_url": "https://claude.ai/code/session_1"})
     monkeypatch.setenv("HQ_BUILD_TOKEN", "sk-ant-oat01-test")
-    assert hq.muse.build_ready() and hq.muse.build_url().endswith("/routines/trig_01Vt3RbV228mW37j4qrNzGri/fire")
+    assert hq.muse.build_ready() and hq.muse.build_url().endswith("/routines/trig_01VtqaeKDHmdfWDv1C48fanf/fire")
     # the Approvals card (dashboard or phone) and the Ideas tab both send it
     card = hq.db.rows("SELECT id FROM approvals WHERE kind = 'muse_idea' AND payload LIKE ?", f'%"idea_id": {ids[1]}%')[0]
     assert "Sent to Claude to build it" in hq.approvals.decide(card["id"], "approve")
