@@ -64,11 +64,16 @@ def find_opponent(text: str) -> str | None:
     """The opponent a name or file name points to, using full names and nicknames (DU, SVSU, NMU...)."""
     up = " " + re.sub(r"[^A-Z0-9]+", " ", (text or "").upper()) + " "
     nick = _defaults().get("nicknames", {})
+    best = None
     for g in games():
         names = [g["opponent"].upper(), *[n.upper() for n in nick.get(g["opponent"], [])]]
-        if any(f" {re.sub(r'[^A-Z0-9]+', ' ', n).strip()} " in up for n in names):
-            return g["opponent"]
-    return None
+        for n in names:
+            clean = f" {re.sub(r'[^A-Z0-9]+', ' ', n).strip()} "
+            at = up.find(clean)
+            # the name that comes first in the text wins, so "SVSU at Northwood" is Saginaw Valley, not Northwood
+            if at >= 0 and (best is None or (at, -len(clean)) < best[0]):
+                best = ((at, -len(clean)), g["opponent"])
+    return best[1] if best else None
 
 
 def current_game(today: date | None = None) -> dict | None:
