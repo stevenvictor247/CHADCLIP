@@ -228,9 +228,14 @@ def tick():
         traceback.print_exc()
     football_tick()
     if not REQUIRE_APPROVAL:
-        db.execute("UPDATE clips SET status = 'approved' WHERE status = 'pending_approval'")
+        db.execute("UPDATE clips SET status = 'approved', approved_at = ? WHERE status = 'pending_approval'", db.now())
     while run_next_task("quick"):
         pass
+    try:
+        from . import stalecheck
+        stalecheck.check()   # holds stale, duplicate or invalid queued clips and asks once, before anything posts
+    except Exception:
+        traceback.print_exc()
     try:
         publish_approved()
     except Exception:
