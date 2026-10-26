@@ -23,17 +23,17 @@ const look = name => window.hqLook ? window.hqLook(name) : {color: "#7cc4ff", pr
 
 // ---------- the map ----------
 const B = {
-  studio: {x: 70, y: 52, w: 170, h: 118, wall: "#f9dbe6", roof: "#e0457b", door: 155, label: "Sound Stage", icon: "🎬"},
-  hq:     {x: 395, y: 30, w: 190, h: 140, wall: "#fdeccd", roof: "#cf8a1e", door: 490, label: "Studio Exec HQ", icon: "👑"},
-  post:   {x: 640, y: 66, w: 124, h: 104, wall: "#dbeafe", roof: "#3b82f6", door: 702, label: "Screening Room", icon: "📬"},
+  studio: {x: 70, y: 52, w: 170, h: 118, wall: "#f9dbe6", roof: "#e0457b", door: 155, style: "hangar", label: "Sound Stage", icon: "🎬"},
+  hq:     {x: 395, y: 30, w: 190, h: 140, wall: "#fdeccd", roof: "#cf8a1e", door: 490, style: "deco", label: "Studio Exec HQ", icon: "👑"},
+  post:   {x: 640, y: 66, w: 124, h: 104, wall: "#dbeafe", roof: "#3b82f6", door: 702, style: "cinema", label: "Screening Room", icon: "📬"},
   tower:  {x: 842, y: 14, w: 72, h: 156, door: 878, label: "Broadcast Tower", icon: "📡"},
 };
 for (const b of Object.values(B)) b.front = {x: b.door, y: b.y + b.h + 20};
 // The south side of town, on Market Street: where Sweep, Pitch and Scout go to work, and the town notice board.
 const S = {
-  bank:  {x: 56, y: 500, w: 172, h: 130, wall: "#f4ecd6", roof: "#2f855a", door: 142, label: "Box Office", icon: "🏦"},
-  pitch: {x: 278, y: 512, w: 136, h: 118, wall: "#efe6ff", roof: "#7c5cd6", door: 346, label: "Talent Agency", icon: "✉️"},
-  scout: {x: 778, y: 504, w: 154, h: 126, wall: "#dcf6f1", roof: "#14a38b", door: 855, label: "Premiere Hall", icon: "🎯"},
+  bank:  {x: 56, y: 500, w: 172, h: 130, wall: "#f4ecd6", roof: "#2f855a", door: 142, style: "temple", label: "Box Office", icon: "🏦"},
+  pitch: {x: 278, y: 512, w: 136, h: 118, wall: "#efe6ff", roof: "#7c5cd6", door: 346, style: "glass", label: "Talent Agency", icon: "✉️"},
+  scout: {x: 778, y: 504, w: 154, h: 126, wall: "#dcf6f1", roof: "#14a38b", door: 855, style: "pagoda", label: "Premiere Hall", icon: "🎯"},
 };
 for (const b of Object.values(S)) b.front = {x: b.door, y: b.y + b.h + 18};
 const NOTICE = {x: 590, y: 492, w: 160, h: 100, front: {x: 670, y: ROAD2_Y - 2}};
@@ -467,29 +467,122 @@ function emoji(text, x, y, size, rot = 0) {
 }
 
 let lights = [];
+// One distinct building per style, all inside the same footprint as the old cottages so paths, doors and hover outlines still line up.
+const WINDOW_LIT = () => SKY.dk > .15;
+function pane(x, y, w, h, tint) { const lit = WINDOW_LIT(); ctx.fillStyle = lit ? "#ffd56b" : tint || "#a9dcff"; ctx.fillRect(x, y, w, h); ctx.fillStyle = lit ? "rgba(255,160,40,.35)" : "rgba(255,255,255,.5)"; ctx.fillRect(x + 1, y + 1, w * .35, h * .3); if (lit) lights.push({x: x + w / 2, y: y + h / 2, r: 40, warm: .9}); }
+const SHELLS = {
+  hangar(b, t, wallY, bottom) {   // Sound Stage: corrugated steel hangar with a barrel roof and hazard-striped doors
+    const cx = b.x + b.w / 2, top = b.y + 40;
+    ctx.fillStyle = "#c3c9d3"; ctx.fillRect(b.x, top, b.w, bottom - top);
+    ctx.strokeStyle = "rgba(60,70,90,.22)"; ctx.lineWidth = 1;
+    for (let x = b.x + 5; x < b.x + b.w; x += 6) { ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); }
+    ctx.fillStyle = "rgba(0,0,0,.1)"; ctx.fillRect(b.x, bottom - 6, b.w, 6);
+    ctx.fillStyle = "#e0457b"; ctx.beginPath(); ctx.moveTo(b.x - 6, top + 4); ctx.quadraticCurveTo(cx, b.y - 22, b.x + b.w + 6, top + 4); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.clip(); ctx.strokeStyle = "rgba(0,0,0,.16)"; ctx.lineWidth = 2;
+    for (let x = b.x - 6; x < b.x + b.w + 8; x += 14) { ctx.beginPath(); ctx.moveTo(x, b.y - 20); ctx.lineTo(x, top + 6); ctx.stroke(); }
+    ctx.fillStyle = "rgba(255,255,255,.2)"; ctx.fillRect(b.x, b.y - 8, b.w, 8); ctx.restore();
+    ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(b.x - 6, top + 4, b.w + 12, 3);
+    ctx.fillStyle = "#2a2f3a"; ctx.fillRect(b.door - 28, bottom - 40, 56, 40);   // the big sliding stage door
+    for (let i = 0; i < 7; i++) { ctx.fillStyle = i % 2 ? "#1d1426" : "#ffc421"; ctx.fillRect(b.door - 28 + i * 8, bottom - 44, 8, 4); }
+    for (const dx of [-36, 36]) { ctx.fillStyle = WINDOW_LIT() ? "#ff4d4d" : "#8a2a2a"; ctx.beginPath(); ctx.arc(b.door + dx, bottom - 30, 3.5, 0, 7); ctx.fill(); if (WINDOW_LIT()) lights.push({x: b.door + dx, y: bottom - 30, r: 24, red: true}); }
+  },
+  deco(b, t, wallY, bottom) {   // Studio Exec HQ: art-deco tower with gold trim and a pillared entrance
+    const cx = b.x + b.w / 2;
+    ctx.fillStyle = "#f3e2b8"; ctx.fillRect(b.x, b.y + 22, b.w, bottom - b.y - 22);               // wings
+    ctx.fillStyle = "#e8d29a"; ctx.fillRect(cx - 44, b.y - 6, 88, bottom - b.y + 6);               // central tower
+    ctx.fillStyle = "#d9bd78"; ctx.fillRect(cx - 30, b.y - 18, 60, 14);                            // stepped crown
+    ctx.fillStyle = "#c79a2a"; ctx.fillRect(cx - 46, b.y - 8, 92, 3); ctx.fillRect(b.x - 4, b.y + 20, b.w + 8, 4); ctx.fillRect(cx - 32, b.y - 20, 64, 3);
+    ctx.fillStyle = "#ffd34d"; ctx.beginPath(); for (let k = 0; k < 10; k++) { const an = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 3.5 : 8; ctx.lineTo(cx + Math.cos(an) * r, b.y - 11 + Math.sin(an) * r); } ctx.closePath(); ctx.fill();
+    for (const wx of [cx - 32, cx - 18, cx + 8, cx + 22]) for (let wy = b.y + 6; wy < wallY - 4; wy += 16) pane(wx, wy, 10, 11, "#8fc8f0");
+    for (const wx of [b.x + 14, b.x + 40, b.x + b.w - 54, b.x + b.w - 28]) pane(wx, b.y + 34, 14, 18, "#8fc8f0");
+    ctx.fillStyle = "#c79a2a"; for (const dx of [-20, 20]) ctx.fillRect(b.door + dx - 3, wallY + 22, 6, bottom - wallY - 22);   // entrance pillars
+    ctx.fillStyle = "#c79a2a"; ctx.beginPath(); ctx.moveTo(b.door - 30, wallY + 24); ctx.lineTo(b.door, wallY + 12); ctx.lineTo(b.door + 30, wallY + 24); ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,.08)"; ctx.fillRect(b.x, bottom - 6, b.w, 6);
+  },
+  cinema(b, t, wallY, bottom) {   // Screening Room: movie theatre with a striped canopy, posters and a blade sign
+    ctx.fillStyle = "#26324f"; ctx.fillRect(b.x, b.y + 22, b.w, bottom - b.y - 22);
+    ctx.fillStyle = "#e8ecf7"; ctx.beginPath(); ctx.moveTo(b.x - 4, b.y + 26); ctx.arc(b.x + b.w / 2, b.y + 26, b.w / 2 + 4, Math.PI, 0); ctx.closePath(); ctx.fill();   // rounded parapet
+    ctx.strokeStyle = "#ffd34d"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(b.x + b.w / 2, b.y + 26, b.w / 2 - 6, Math.PI, 0); ctx.stroke();
+    ctx.fillStyle = "#c81f3a"; ctx.font = `900 11px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("CINEMA", b.x + b.w / 2, b.y + 16);
+    for (const [px, c1] of [[b.x + 10, "#f97316"], [b.x + b.w - 30, "#22d3ee"]]) {   // posters
+      ctx.fillStyle = "#ffd34d"; ctx.fillRect(px - 2, b.y + 36, 24, 32); ctx.fillStyle = c1; ctx.fillRect(px, b.y + 38, 20, 28);
+      ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.fillRect(px + 4, b.y + 44, 12, 3); ctx.fillRect(px + 6, b.y + 52, 8, 8);
+    }
+    for (let i = 0; i < 8; i++) { ctx.fillStyle = i % 2 ? "#fff" : "#c81f3a"; ctx.fillRect(b.door - 34 + i * 8.5, wallY + 24, 8.5, 10); }   // canopy
+    ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(b.door - 34, wallY + 34, 68, 3);
+    ctx.fillStyle = "rgba(0,0,0,.1)"; ctx.fillRect(b.x, bottom - 6, b.w, 6);
+  },
+  temple(b, t, wallY, bottom) {   // Box Office: bank-style temple front with a gold pediment and ticket windows
+    const cx = b.x + b.w / 2;
+    ctx.fillStyle = "#f4ecd6"; ctx.fillRect(b.x, wallY, b.w, bottom - wallY);
+    ctx.fillStyle = "#2f855a"; ctx.beginPath(); ctx.moveTo(b.x - 8, wallY - 4); ctx.lineTo(cx, b.y - 2); ctx.lineTo(b.x + b.w + 8, wallY - 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#e8d29a"; ctx.beginPath(); ctx.moveTo(b.x + 6, wallY - 8); ctx.lineTo(cx, b.y + 10); ctx.lineTo(b.x + b.w - 6, wallY - 8); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#ffd34d"; ctx.beginPath(); for (let k = 0; k < 10; k++) { const an = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 3 : 7; ctx.lineTo(cx + Math.cos(an) * r, wallY - 22 + Math.sin(an) * r); } ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#d9c9a0"; ctx.fillRect(b.x - 6, wallY - 4, b.w + 12, 6);
+    for (const wx of [b.x + 14, b.x + b.w - 38]) { ctx.fillStyle = "#b8860b"; roundRect(ctx, wx - 2, bottom - 40, 28, 28, 6); ctx.fill(); pane(wx, bottom - 38, 24, 24, "#bfe3ff"); ctx.fillStyle = "#b8860b"; for (let k = 4; k < 24; k += 6) ctx.fillRect(wx + k, bottom - 38, 1.5, 24); }
+    ctx.fillStyle = "#cfc6ab"; ctx.fillRect(cx - 40, bottom - 6, 80, 6); ctx.fillRect(cx - 34, bottom - 12, 68, 6);   // steps
+  },
+  glass(b, t, wallY, bottom) {   // Talent Agency: sleek glass office with a flat roof and a neon star
+    ctx.fillStyle = "#7c5cd6"; ctx.fillRect(b.x - 4, b.y + 22, b.w + 8, 8);
+    ctx.fillStyle = "#cdd7ff"; ctx.fillRect(b.x, b.y + 30, b.w, bottom - b.y - 30);
+    const lit = WINDOW_LIT();
+    for (let gx = b.x + 4; gx < b.x + b.w - 8; gx += 16) for (let gy = b.y + 34; gy < bottom - 36; gy += 14) {
+      ctx.fillStyle = lit && ((gx + gy) / 5 | 0) % 3 ? "#ffe9a8" : "#6aa6e6"; ctx.fillRect(gx, gy, 14, 12);
+      ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.fillRect(gx, gy, 14, 3);
+    }
+    if (lit) lights.push({x: b.x + b.w / 2, y: b.y + 56, r: 70, warm: .8});
+    ctx.fillStyle = "#5a3fb8"; ctx.fillRect(b.x, bottom - 6, b.w, 6);
+    ctx.fillStyle = "#6b7280"; ctx.fillRect(b.x + 16, b.y + 4, 2, 20); ctx.fillRect(b.x + b.w - 20, b.y + 10, 2, 14);   // roof antenna
+    const gl = .6 + .4 * Math.sin(t / 400);
+    ctx.fillStyle = `rgba(255,212,60,${.6 + gl * .4})`; ctx.beginPath(); for (let k = 0; k < 10; k++) { const an = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 6 : 14; ctx.lineTo(b.x + b.w / 2 + Math.cos(an) * r, b.y + 8 + Math.sin(an) * r); } ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#3d2a8a"; ctx.fillRect(b.door - 20, bottom - 34, 40, 34);   // glass entrance
+    ctx.fillStyle = lit ? "#ffe9a8" : "#aee0ff"; ctx.fillRect(b.door - 18, bottom - 32, 36, 32);
+  },
+  pagoda(b, t, wallY, bottom) {   // Premiere Hall: Chinese-Theatre-style red hall with a two-tier teal pagoda roof
+    const cx = b.x + b.w / 2;
+    ctx.fillStyle = "#a82a2a"; ctx.fillRect(b.x + 6, wallY - 4, b.w - 12, bottom - wallY + 4);
+    ctx.fillStyle = "#ffd34d"; ctx.fillRect(b.x + 6, wallY - 4, b.w - 12, 3); ctx.fillRect(b.x + 6, bottom - 8, b.w - 12, 3);
+    for (let px = b.x + 14; px < b.x + b.w - 10; px += 22) { ctx.fillStyle = "#7d1d1d"; ctx.fillRect(px, wallY, 5, bottom - wallY - 8); }
+    const tier = (y, hw, hgt, col) => {   // a roof with upturned corners
+      ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(cx - hw - 10, y - 6); ctx.quadraticCurveTo(cx - hw + 6, y + 2, cx - hw + 12, y); ctx.lineTo(cx - hw * .55, y - hgt); ctx.lineTo(cx + hw * .55, y - hgt);
+      ctx.lineTo(cx + hw - 12, y); ctx.quadraticCurveTo(cx + hw - 6, y + 2, cx + hw + 10, y - 6); ctx.quadraticCurveTo(cx + hw, y + 8, cx, y + 8); ctx.quadraticCurveTo(cx - hw, y + 8, cx - hw - 10, y - 6); ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,.2)"; ctx.lineWidth = 1; for (let k = -3; k <= 3; k++) { ctx.beginPath(); ctx.moveTo(cx + k * hw * .26, y - hgt + 2); ctx.lineTo(cx + k * hw * .3, y + 4); ctx.stroke(); }
+    };
+    tier(wallY - 4, b.w / 2 + 2, 20, "#14a38b");
+    ctx.fillStyle = "#a82a2a"; ctx.fillRect(cx - 34, b.y + 10, 68, wallY - b.y - 26);
+    ctx.fillStyle = "#ffd34d"; ctx.fillRect(cx - 34, b.y + 10, 68, 3);
+    tier(b.y + 14, 50, 14, "#0f8a76");
+    ctx.fillStyle = "#ffd34d"; ctx.beginPath(); ctx.arc(cx, b.y - 8, 3, 0, 7); ctx.fill(); ctx.fillRect(cx - 1, b.y - 6, 2, 8);
+    for (const dx of [-60, 60]) { ctx.fillStyle = "#ff5a3c"; ctx.beginPath(); ctx.arc(cx + dx, wallY + 10 + Math.sin(t / 700 + dx) * 1, 5, 0, 7); ctx.fill(); ctx.fillStyle = "#ffd34d"; ctx.fillRect(cx + dx - 1, wallY + 2, 2, 3); }
+    pane(b.x + 14, bottom - 36, 20, 14, "#ffe9a8"); pane(b.x + b.w - 34, bottom - 36, 20, 14, "#ffe9a8");
+  },
+};
 function house(b, t) {
   const wallY = b.y + b.h * .52, bottom = b.y + b.h;
   ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(b.x + b.w / 2 + 6, bottom + 2, b.w / 2 + 8, 8, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = b.wall; ctx.fillRect(b.x, wallY, b.w, bottom - wallY);
-  ctx.fillStyle = "rgba(0,0,0,.08)"; ctx.fillRect(b.x, bottom - 6, b.w, 6);
-  // roof
-  ctx.fillStyle = b.roof; ctx.beginPath();
-  ctx.moveTo(b.x - 8, wallY + 2); ctx.lineTo(b.x + b.w + 8, wallY + 2); ctx.lineTo(b.x + b.w - 8, b.y); ctx.lineTo(b.x + 8, b.y); ctx.closePath(); ctx.fill();
-  ctx.save(); ctx.clip();
-  ctx.strokeStyle = "rgba(0,0,0,.14)"; ctx.lineWidth = 2;
-  for (let y = b.y + 9; y < wallY; y += 9) { ctx.beginPath(); ctx.moveTo(b.x - 10, y); ctx.lineTo(b.x + b.w + 10, y); ctx.stroke(); }
-  ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fillRect(b.x, b.y, b.w, 4);
-  ctx.restore();
-  ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fillRect(b.x - 8, wallY, b.w + 16, 3);
-  // windows
-  const lit = SKY.dk > .15;
-  for (const wx of b.small ? [] : [b.x + 16, b.x + b.w - 40]) {
-    const wy = bottom - 34;
-    ctx.fillStyle = "#6b4b2e"; ctx.fillRect(wx - 2, wy - 2, 28, 20);
-    ctx.fillStyle = lit ? "#ffd56b" : "#a9dcff"; ctx.fillRect(wx, wy, 24, 16);
-    ctx.fillStyle = lit ? "rgba(255,160,40,.35)" : "rgba(255,255,255,.6)"; ctx.fillRect(wx + 2, wy + 2, 6, 5);
-    ctx.fillStyle = "#6b4b2e"; ctx.fillRect(wx + 11, wy, 2, 16); ctx.fillRect(wx, wy + 7, 24, 2);
-    if (lit) lights.push({x: wx + 12, y: wy + 10, r: 46, warm: .9});
+  if (SHELLS[b.style]) SHELLS[b.style](b, t, wallY, bottom);
+  else {
+    ctx.fillStyle = b.wall; ctx.fillRect(b.x, wallY, b.w, bottom - wallY);
+    ctx.fillStyle = "rgba(0,0,0,.08)"; ctx.fillRect(b.x, bottom - 6, b.w, 6);
+    // roof
+    ctx.fillStyle = b.roof; ctx.beginPath();
+    ctx.moveTo(b.x - 8, wallY + 2); ctx.lineTo(b.x + b.w + 8, wallY + 2); ctx.lineTo(b.x + b.w - 8, b.y); ctx.lineTo(b.x + 8, b.y); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.clip();
+    ctx.strokeStyle = "rgba(0,0,0,.14)"; ctx.lineWidth = 2;
+    for (let y = b.y + 9; y < wallY; y += 9) { ctx.beginPath(); ctx.moveTo(b.x - 10, y); ctx.lineTo(b.x + b.w + 10, y); ctx.stroke(); }
+    ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fillRect(b.x, b.y, b.w, 4);
+    ctx.restore();
+    ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fillRect(b.x - 8, wallY, b.w + 16, 3);
+    // windows
+    const lit = SKY.dk > .15;
+    for (const wx of b.small ? [] : [b.x + 16, b.x + b.w - 40]) {
+      const wy = bottom - 34;
+      ctx.fillStyle = "#6b4b2e"; ctx.fillRect(wx - 2, wy - 2, 28, 20);
+      ctx.fillStyle = lit ? "#ffd56b" : "#a9dcff"; ctx.fillRect(wx, wy, 24, 16);
+      ctx.fillStyle = lit ? "rgba(255,160,40,.35)" : "rgba(255,255,255,.6)"; ctx.fillRect(wx + 2, wy + 2, 6, 5);
+      ctx.fillStyle = "#6b4b2e"; ctx.fillRect(wx + 11, wy, 2, 16); ctx.fillRect(wx, wy + 7, 24, 2);
+      if (lit) lights.push({x: wx + 12, y: wy + 10, r: 46, warm: .9});
+    }
   }
   // door and sign
   ctx.fillStyle = "#7a4a2a"; roundRect(ctx, b.door - 11, bottom - 30, 22, 30, 4); ctx.fill();
