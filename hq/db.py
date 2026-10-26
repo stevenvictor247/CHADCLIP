@@ -177,6 +177,17 @@ CREATE TABLE IF NOT EXISTS followup_sent (
     sent_at TEXT NOT NULL,
     PRIMARY KEY (lead_id, n)
 );
+CREATE TABLE IF NOT EXISTS samples (
+    lead_id INTEGER PRIMARY KEY,                 -- one private sample clip per lead
+    token TEXT NOT NULL UNIQUE,                  -- the secret in the private link
+    path TEXT NOT NULL,
+    source_url TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending (waiting for your OK), approved, rejected, deleted
+    created_at TEXT NOT NULL,
+    approved_at TEXT,
+    expires_at TEXT NOT NULL,
+    replied INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS relay_sent (
     kind TEXT NOT NULL,
     ref_id INTEGER NOT NULL,

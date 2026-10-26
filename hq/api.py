@@ -59,7 +59,8 @@ async def guard(request: Request, call_next):
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     """With HQ_PASSWORD set, every page except the login page needs the session cookie."""
-    if not PASSWORD or request.url.path in ("/login", "/logout"):
+    # /sample/<secret> is the private link in a pitch email: the unguessable token is the key, so streamers need no login.
+    if not PASSWORD or request.url.path in ("/login", "/logout") or request.url.path.startswith("/sample/"):
         return await call_next(request)
     if hmac.compare_digest(request.cookies.get(SESSION_COOKIE, ""), _session_token()):
         return await call_next(request)
@@ -122,6 +123,16 @@ def _tally_summary() -> dict:
 def _startup():
     db.init()
     update.check_in_background()
+
+
+@app.get("/sample/{token}")
+def private_sample(token: str):
+    from .agents.pitch import sample
+    s = sample.find(token)
+    if not s:
+        raise HTTPException(404, "This link has expired")
+    return FileResponse(s["path"], media_type="video/mp4", headers={"Cache-Control": "private, no-store",
+                                                                    "X-Robots-Tag": "noindex"})
 
 
 @app.get("/login")
