@@ -46,6 +46,49 @@ def _sections() -> list[dict]:
     return sections
 
 
+# The Settings page groups every setting under the agent it belongs to, one collapsible bar each.
+# (id, icon, title, blurb, exact keys, key prefixes). A key matching no group lands in General.
+GROUPS = [
+    ("general", "⚙️", "General and budget", "Your Claude key, the daily spending limit, Pause All, password and backups.",
+     ("ANTHROPIC_API_KEY", "HQ_DAILY_BUDGET", "HQ_PAUSED", "HQ_PASSWORD", "HQ_BACKUP_COPY_DIR", "HQ_MODEL_REPORT"), ()),
+    ("boss", "🎩", "Boss", "The Boss's brain, daily report, phone chat (Telegram) and the Build it button.",
+     ("HQ_MODEL_BOSS", "HQ_BOSS_MODEL", "HQ_REPORT_HOUR", "HQ_BUILD_TOKEN", "HQ_BUILD_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_ID"), ()),
+    ("chad", "🎬", "Chad (clips and posting)", "How many posts a day, approval, practice mode, and your TikTok, Instagram, YouTube and Twitch accounts.",
+     ("HQ_MODEL_CHAD", "HQ_MAX_POSTS_PER_DAY", "HQ_POST_GAP_MINUTES", "HQ_REQUIRE_APPROVAL", "HQ_PRACTICE_POSTING", "HQ_WHISPER_MODEL",
+      "HQ_PUBLIC_BASE_URL"), ("IG_", "TIKTOK_", "TWITCH_")),
+    ("pitch", "✉️", "Pitch (finding clients)", "Your Gmail for sending, and the pitch wording and limits.",
+     ("HQ_MODEL_PITCH",), ("PITCH_",)),
+    ("scout", "🔭", "Scout (finding campaigns)", "Where Scout looks and how picky it is.", ("HQ_MODEL_SCOUT",), ("SCOUT_",)),
+    ("tally", "💰", "Tally (money)", "Which Claude model Tally uses.", ("HQ_MODEL_TALLY",), ()),
+    ("sweep", "🧹", "Sweep (janitor and quality control)", "Daily report time, clean-up and warning limits.", ("HQ_MODEL_SWEEP",), ("HQ_SWEEP_",)),
+    ("muse", "💡", "Muse (Creative Director)", "How often Muse brainstorms, what it may spend, and how bold it is.", (), ("HQ_MUSE", "HQ_MODEL_MUSE")),
+    ("football", "🏈", "Warrior Village (football)", "Football folders, budget, reminders and the Thursday print.",
+     ("HQ_MODEL_CAPTAIN", "HQ_DEPTH_HOUR", "HQ_SCOUTING_HOUR"), ("HQ_FOOTBALL_", "HQ_PRINT")),
+]
+
+# Plain-English names for the settings people look for most. Anything not listed shows its setting name.
+LABELS = {
+    "HQ_MAX_POSTS_PER_DAY": "Posts per day (each account)",
+    "HQ_POST_GAP_MINUTES": "Minutes between posts",
+    "HQ_DAILY_BUDGET": "Daily Claude spending limit ($)",
+    "HQ_REQUIRE_APPROVAL": "Wait for my approval before posting",
+    "HQ_PAUSED": "Pause All",
+    "HQ_REPORT_HOUR": "Daily report hour",
+    "HQ_BACKUP_COPY_DIR": "Second backup folder",
+    "HQ_PRINT_DIR": "Thursday print folder",
+    "HQ_PRINTER": "Printer",
+    "HQ_BUILD_URL": "Build it address",
+    "HQ_BUILD_TOKEN": "Build it token",
+}
+
+
+def group_of(key: str) -> str:
+    for gid, _, _, _, keys, prefixes in GROUPS:
+        if key in keys or key.startswith(prefixes):
+            return gid
+    return "general"
+
+
 def accounts() -> list[dict]:
     path = CONFIG_DIR / "accounts.yaml"
     if not path.exists():
@@ -133,7 +176,12 @@ def describe() -> dict:
     sections = _sections()
     listed = {f["key"] for s in sections for f in s["fields"]}
     for s in sections:
-        s["fields"] = [{**f, **_value(f["key"]), "test": connections.KEY_TESTS.get(f["key"])} for f in s["fields"]]
+        s["fields"] = [{**f, **_value(f["key"]), "test": connections.KEY_TESTS.get(f["key"]), "label": LABELS.get(f["key"], ""),
+                        "group": group_of(f["key"])} for f in s["fields"]]
+    order = list(LABELS)  # settings with a plain-English name come first, in that order
+    groups = [{"id": gid, "icon": icon, "title": title, "blurb": blurb, "fields": sorted(
+        (f for sec in sections for f in sec["fields"] if f["group"] == gid),
+        key=lambda f: order.index(f["key"]) if f["key"] in order else len(order))} for gid, icon, title, blurb, _, _ in GROUPS]
     accts = []
     for a in accounts():
         keys = [v for k, v in a.items() if k.endswith("_env") and isinstance(v, str)]
@@ -144,7 +192,7 @@ def describe() -> dict:
     from . import tiktok_auth
     from . import youtube_auth
     from . import instagram_auth
-    return {"instagram": instagram_auth.status(), "tiktok": tiktok_auth.status(), "youtube": youtube_auth.status(), "sections": sections, "accounts": accts, "tests": last, "pitch": pitch_describe()}
+    return {"instagram": instagram_auth.status(), "tiktok": tiktok_auth.status(), "youtube": youtube_auth.status(), "sections": sections, "groups": groups, "accounts": accts, "tests": last, "pitch": pitch_describe()}
 
 
 def save(values: dict) -> list[str]:

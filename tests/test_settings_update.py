@@ -186,3 +186,42 @@ def test_pitch_settings_save_keeps_comments_and_values(monkeypatch, tmp_path):
         hq.settings.save_pitch({"daily_leads": "lots"})
     with pytest.raises(ValueError):
         hq.settings.save_pitch({"evil": "x"})
+
+
+def test_settings_are_grouped_by_agent(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    d = hq.settings.describe()
+    groups = {g["id"]: [f["key"] for f in g["fields"]] for g in d["groups"]}
+    assert list(groups) == ["general", "boss", "chad", "pitch", "scout", "tally", "sweep", "muse", "football"]
+    # every setting on the page lives in exactly one group
+    everything = [f["key"] for s in d["sections"] for f in s["fields"]]
+    assert sorted(k for ks in groups.values() for k in ks) == sorted(everything)
+    # posts per day is easy to find, first under Chad, with a plain-English name
+    assert groups["chad"][0] == "HQ_MAX_POSTS_PER_DAY"
+    posts = next(f for g in d["groups"] for f in g["fields"] if f["key"] == "HQ_MAX_POSTS_PER_DAY")
+    assert posts["label"] == "Posts per day (each account)" and "Chad" in posts["help"]
+    assert {"HQ_BUILD_URL", "HQ_BUILD_TOKEN", "TELEGRAM_BOT_TOKEN"} <= set(groups["boss"])
+    assert {"HQ_PRINT_DIR", "HQ_PRINTER", "HQ_FOOTBALL_DIR"} <= set(groups["football"])
+    assert {"HQ_SWEEP_KEEP_DAYS", "HQ_SWEEP_STUCK_HOURS", "HQ_SWEEP_LOOP_CALLS"} <= set(groups["sweep"])
+    assert "HQ_BACKUP_COPY_DIR" in groups["general"] and "HQ_MODEL_SCOUT" in groups["scout"]
+
+
+def test_every_env_setting_the_code_reads_is_editable():
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    listed = set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]*)=", (root / ".env.example").read_text(encoding="utf-8"), re.M))
+    used = set()
+    for py in (root / "hq").rglob("*.py"):
+        used |= set(re.findall(r"""getenv\(\s*["']([A-Z][A-Z0-9_]*)["']""", py.read_text(encoding="utf-8")))
+    internal = {"HQ_DATA_DIR", "HQ_ALLOWED_HOSTS", "HQ_GRAPH_API", "HQ_IG_UPLOAD_API", "HQ_SUPERVISED", "HQ_PRINT_FILE",
+                "HQ_PRINT_PRINTER", "HQ_AGENT_MODEL", "HQ_BOSS_MODEL"}
+    assert not [k for k in used if k.startswith(("HQ_", "SCOUT_", "PITCH_")) and k not in listed | internal]
+
+
+def test_secrets_stay_masked_inside_groups(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    monkeypatch.setenv("HQ_BUILD_TOKEN", "supersecrettoken-9999")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:telegramsecret-1234")
+    d = hq.settings.describe()
+    assert "supersecrettoken" not in json.dumps(d) and "telegramsecret" not in json.dumps(d)

@@ -49,6 +49,18 @@
   .result.ok { color:var(--good); } .result.bad { color:var(--bad); }
   .field.flash, .acct.flash { animation:flash 2.4s ease-out; border-radius:10px; }
   @keyframes flash { 0% { background:rgba(255,179,71,.25); } 100% { background:transparent; } }
+  details.group { background:var(--panel); border:1px solid var(--line); border-radius:16px; margin-bottom:12px; }
+  details.group > summary { list-style:none; cursor:pointer; padding:14px 18px; display:flex; align-items:center; gap:10px; }
+  details.group > summary::-webkit-details-marker { display:none; }
+  details.group > summary::after { content:"▸"; margin-left:auto; color:var(--muted); transition:transform .15s; }
+  details.group[open] > summary::after { transform:rotate(90deg); }
+  details.group > summary .gt { font-weight:800; font-size:16px; }
+  details.group > summary .gb { color:var(--muted); font-size:13px; flex:1; }
+  details.group > .body { padding:0 18px 14px; }
+  details.group section { background:none; border:0; border-top:1px solid rgba(59,47,74,.6); border-radius:0; padding:14px 0 4px; margin:0; }
+  .tools { display:flex; gap:10px; margin:0 0 12px; justify-content:flex-end; }
+  .keyname { font-weight:400; color:var(--muted); font-size:11px; display:block; }
+  .badge { font-size:12px; border-radius:999px; padding:2px 9px; background:rgba(255,179,71,.18); color:var(--accent); }
   button.plain { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:10px 14px; font:inherit; cursor:pointer; }
 </style>
 </head>
@@ -91,7 +103,7 @@ function field(f) {
   } else {
     input = `<input id="${id}" data-key="${f.key}" data-orig="${esc(f.value)}" value="${esc(f.value)}" placeholder="${esc(f.example)}">`;
   }
-  return `<div class="field" id="k-${f.key}"><label for="${id}">${esc(f.key)}</label>${input}${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}${testRow(f.test)}</div>`;
+  return `<div class="field" id="k-${f.key}"><label for="${id}">${f.label ? esc(f.label) + `<span class="keyname">${esc(f.key)}</span>` : esc(f.key)}</label>${input}${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}${testRow(f.test)}</div>`;
 }
 
 function tiktokSection(t) {
@@ -207,20 +219,28 @@ function wireYouTube() {
   });
 }
 
+function openGroups() {
+  try { return JSON.parse(localStorage.getItem("hq-settings-open") || "[]"); } catch (e) { return []; }
+}
+function saveOpen() {
+  try { localStorage.setItem("hq-settings-open", JSON.stringify([...document.querySelectorAll("details.group[open]")].map(e => e.dataset.group))); } catch (e) {}
+}
+
 function render(d) {
   lastTests = d.tests || {};
-  let html = d.sections.map(s => `<section><h2>${esc(s.title)}</h2>${s.fields.map(field).join("")}</section>`).join("");
-  if (d.tiktok) html += tiktokSection(d.tiktok);
-  html += instagramSection(d.instagram);
-  html += youtubeSection(d.youtube);
+  let chadExtra = "";
+  if (d.tiktok) chadExtra += tiktokSection(d.tiktok);
+  chadExtra += instagramSection(d.instagram);
+  chadExtra += youtubeSection(d.youtube);
   if (d.accounts.length) {
-    html += `<section id="accounts"><h2>Posting accounts</h2><p class="help" style="margin:0 0 6px">Turn an account on once its keys are saved above. Chad only posts to accounts that are on.</p>` +
+    chadExtra += `<section id="accounts"><h2>Posting accounts</h2><p class="help" style="margin:0 0 6px">Turn an account on once its keys are saved above. Chad only posts to accounts that are on.</p>` +
       d.accounts.map(a => `<label class="switch"><input type="checkbox" data-account="${esc(a.name)}" ${a.enabled ? "checked" : ""}>
         ${esc(a.name)} <span class="help" style="grid-column:auto">(${esc(a.platform)})</span></label>${a.fields.map(field).join("")}
         <div class="field acct" id="a-${esc(a.name)}" style="border-top:0;padding-top:0">${testRow(a.test)}</div>`).join("") + `</section>`;
   }
+  let pitchHtml = "";
   if (d.pitch && d.pitch.length) {
-    html += `<section id="pitch"><h2>Pitch (finding clients)</h2><p class="help" style="margin:0 0 6px">Pitch only writes drafts. You approve and send every message yourself.</p>` +
+    pitchHtml = `<section id="pitch"><h2>Pitch wording and limits</h2><p class="help" style="margin:0 0 6px">Pitch only writes drafts. You approve and send every message yourself.</p>` +
       d.pitch.map(f => {
         const id = "p-" + f.key;
         const input = f.kind === "yesno"
@@ -229,7 +249,17 @@ function render(d) {
         return `<div class="field" id="k-${f.key}"><label for="${id}">${esc(f.label)}</label>${input}<div class="help">${esc(f.help)}</div></div>`;
       }).join("") + `</section>`;
   }
-  $("sections").innerHTML = html;
+  const extras = {chad: chadExtra, pitch: pitchHtml};
+  const open = openGroups();
+  const bar = `<div class="tools"><button class="link" type="button" id="open-all">Open all</button><button class="link" type="button" id="close-all">Close all</button></div>`;
+  $("sections").innerHTML = bar + d.groups.map(g => {
+    return `<details class="group" id="g-${g.id}" data-group="${g.id}" ${open.includes(g.id) ? "open" : ""}>
+      <summary><span class="gt">${g.icon} ${esc(g.title)}</span><span class="gb">${esc(g.blurb)}</span></summary>
+      <div class="body">${g.fields.length ? `<section>${g.fields.map(field).join("")}</section>` : ""}${extras[g.id] || ""}</div></details>`;
+  }).join("");
+  document.querySelectorAll("details.group").forEach(el => el.addEventListener("toggle", saveOpen));
+  $("open-all").onclick = () => { document.querySelectorAll("details.group").forEach(e => e.open = true); saveOpen(); };
+  $("close-all").onclick = () => { document.querySelectorAll("details.group").forEach(e => e.open = false); saveOpen(); };
   wireTikTok();
   wireInstagram();
   wireYouTube();
@@ -254,7 +284,7 @@ function render(d) {
   document.querySelectorAll("[data-test]").forEach(b => b.onclick = () => runTest(b));
   if (location.hash) {
     const target = document.getElementById(location.hash.slice(1));
-    if (target) { target.scrollIntoView({block: "center"}); target.classList.add("flash"); target.querySelector("input")?.focus(); }
+    if (target) { target.closest("details.group")?.setAttribute("open", ""); target.scrollIntoView({block: "center"}); target.classList.add("flash"); target.querySelector("input")?.focus(); }
   }
 }
 
