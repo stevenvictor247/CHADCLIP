@@ -306,10 +306,10 @@
   // ---- the Monday personnel sheet ----
   function drawDepth(fb) {
     const d = fb.depth;
-    if (!d || !changed("depth", [d, fb.week && fb.week.opponent])) return;
-    const sel = $("fbdepthopp"), cur = sel.value || (fb.week && fb.week.opponent) || "";
+    if (!d || !changed("depth", [d, fb.week && fb.week.game && fb.week.game.opponent])) return;
+    const sel = $("fbdepthopp"), cur = sel.value || (fb.week && fb.week.game && fb.week.game.opponent) || "";
     sel.innerHTML = d.map(x => `<option ${x.opponent === cur ? "selected" : ""}>${esc(x.opponent)}</option>`).join("");
-    const week = fb.week && fb.week.opponent;
+    const week = fb.week && fb.week.game && fb.week.game.opponent;
     $("fbdepthbody").innerHTML = d.filter(x => x.opponent === week || x.uploaded).map(x =>
       `<div class="fbline">${x.uploaded ? "✅" : "⚠"} ${esc(x.opponent)}${x.opponent === week ? " (this week)" : ""} — ${x.uploaded ? "uploaded " + esc(x.when.replace("T", " ")) : "needs the depth chart and stats"}</div>`).join("") ||
       `<div class="muted">No game this week.</div>`;
