@@ -210,8 +210,10 @@ new businesses, new agents, add-ons to what HQ already does, and HQ upgrades. It
 - Code, not Claude, drops ideas that repeat anything already built, already shown to you on an ideas page, parked
   (the cloud server) or turned down, and anything against HQ's rules, then ranks the rest by expected first-year
   profit for each hour of work.
-- The best `HQ_MUSE_TO_APPROVALS` (3) go to **Waiting for your OK** and your phone. **Build it** gives you a build
-  brief to paste to Claude; **Not for me** asks why (one tap), and Muse learns from your answers. Muse never builds,
+- The best `HQ_MUSE_TO_APPROVALS` (3) go to **Waiting for your OK** and your phone. **Build it** sends the idea's
+  build brief to Claude, where a new thread in your Claude project builds it (once `HQ_BUILD_TOKEN` is set: on
+  claude.ai/code/routines open "HQ Build it button", Add another trigger, API, Generate token, paste it in Settings).
+  Without the token you get the brief to paste to Claude yourself; **Not for me** asks why (one tap), and Muse learns from your answers. Muse never builds,
   buys, posts or signs up for anything itself.
 
 ## Safe defaults

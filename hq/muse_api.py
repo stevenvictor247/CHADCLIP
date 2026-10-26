@@ -50,6 +50,16 @@ def muse_run(body: RunIn, request: Request):
     return {"task_id": task_id, "message": "Muse is thinking. New ideas show here in a minute or two."}
 
 
+@router.post("/api/muse/ideas/{idea_id}/send")
+def muse_send_build(idea_id: int, request: Request):
+    """Send an approved idea to Claude to build (again, if the last try failed)."""
+    _from_hq_page(request)
+    try:
+        return {"message": muse.start_build(idea_id)}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
 @router.post("/api/muse/ideas/{idea_id}/{decision}")
 def muse_decide(idea_id: int, decision: str, body: DecideIn, request: Request):
     _from_hq_page(request)
