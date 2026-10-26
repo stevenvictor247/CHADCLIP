@@ -194,6 +194,9 @@
     *, *::before, *::after { animation:none !important; transition:none !important; }
     #sky { display:none; }
   }
+.hooks { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.hook { text-align: left; white-space: normal; }
+.hook.picked { outline: 2px solid currentColor; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -489,6 +492,7 @@ async function refresh() {
         <video src="/clips/${esc(fileName(c.path))}" controls preload="metadata"></video>
         <div class="muted">#${c.id} · ${esc(c.creator)} · <span class="score">★ ${c.score ?? "?"}</span></div>
         <input class="title" value="${esc(c.title)}">
+        ${hookPicker(c)}
         <textarea class="caption">${esc(c.caption)}</textarea>
         <div class="muted">${esc(c.reason)}</div>
         ${c.boss_note ? `<div class="bossnote">🧐 Boss: ${esc(c.boss_note)}</div>` : ""}
@@ -497,6 +501,22 @@ async function refresh() {
       </div>`).join("") : '<div class="empty"><span class="big">🌤️</span>All caught up. Nothing waiting.</div>';
   }
   firstLoad = false;
+}
+
+function hookPicker(c) {   // Hook Lab: three opening lines, tap one
+  let opts = [];
+  try { opts = JSON.parse(c.hooks || "[]"); } catch (e) {}
+  if (!opts.length) return "";
+  return `<div class="hooks muted">Opening line (tap one):${opts.map(o => `
+    <button class="hook${o.label === c.hook_label ? " picked" : ""}" onclick="pickHook(${c.id}, '${o.label}', this)">${esc(o.label)}: ${esc(o.text)}</button>`).join("")}</div>`;
+}
+async function pickHook(id, label, btn) {
+  const card = btn.closest(".clip");
+  const res = await fetch(`/api/clips/${id}/hook`, {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"}, body: JSON.stringify({label})});
+  const r = await res.json();
+  if (!res.ok) return toast(esc(r.detail || "Couldn't save that"));
+  card.querySelector(".caption").value = r.caption;
+  card.querySelectorAll(".hook").forEach(b => b.classList.toggle("picked", b === btn));
 }
 
 function renderLibrary(clips) {

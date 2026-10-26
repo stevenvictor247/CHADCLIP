@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS clips (
     reason TEXT,
     captioned INTEGER,                           -- 1 if words were burned in, 0 if the clip has no captions
     boss_note TEXT,                              -- the Boss's review note, shown on the approval card
+    hooks TEXT,                                  -- Hook Lab: JSON list of 3 opening lines [{label, style, text}]
+    hook_label TEXT,                             -- A, B or C: the one Steven chose
+    hook_style TEXT,                             -- the chosen line's style, saved next to the clip's views by Tally
+    hook_text TEXT,                              -- the chosen line (so a later pick can replace it in the caption)
     status TEXT NOT NULL DEFAULT 'pending_approval', -- pending_approval, approved, rejected, posted, failed
     created_at TEXT NOT NULL
 );
@@ -316,7 +320,8 @@ def init():
         c.executescript(SCHEMA)
         # Databases made before these columns existed get them added in place.
         have = {r["name"] for r in c.execute("PRAGMA table_info(clips)")}
-        for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER")):
+        for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER"),
+                          ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT")):
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
         have = {r["name"] for r in c.execute("PRAGMA table_info(posts)")}
