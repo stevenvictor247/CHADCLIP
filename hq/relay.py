@@ -167,22 +167,42 @@ def push_pending_clips() -> int:
 
 # ---- the loop --------------------------------------------------------------------------------------
 
+polling = threading.Event()   # set while this copy listens to Telegram; a move waits for it to clear
+
+
+def poll_once(offset: int | None, timeout: int = 20) -> int | None:
+    """One round of listening to Telegram. Returns the offset for the next round."""
+    from .standby import blocked
+    if blocked():   # only one copy of HQ may listen to the bot: the standby copy stays quiet
+        polling.clear()
+        if offset:   # tell Telegram what was handled here, so the other copy doesn't answer it again
+            api("getUpdates", offset=offset, limit=1, timeout=0)
+        time.sleep(5 if timeout else 0)
+        return None
+    polling.set()
+    params = {"timeout": timeout, "allowed_updates": '["message", "callback_query"]'}
+    if offset:
+        params["offset"] = offset
+    for u in api("getUpdates", **params):
+        if blocked():
+            break   # not handled here, so not marked done: the copy that runs HQ gets it
+        offset = u["update_id"] + 1
+        try:
+            handle_update(u)
+        except Exception:
+            traceback.print_exc()
+    if not blocked():
+        push_pending_clips()
+    return offset
+
+
 def loop() -> None:
     db.init()
     offset = None
     print("[relay] connected to Telegram.")
     while True:
         try:
-            params = {"timeout": 25, "allowed_updates": '["message", "callback_query"]'}
-            if offset:
-                params["offset"] = offset
-            for u in api("getUpdates", **params):
-                offset = u["update_id"] + 1
-                try:
-                    handle_update(u)
-                except Exception:
-                    traceback.print_exc()
-            push_pending_clips()
+            offset = poll_once(offset)
         except Exception:
             traceback.print_exc()
             time.sleep(10)

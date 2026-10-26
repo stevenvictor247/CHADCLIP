@@ -68,9 +68,20 @@ def wait_reason(account: dict) -> str | None:
 
 
 def publish_approved() -> list[str]:
-    """Post every approved clip that hasn't gone out yet, within the seatbelts. Returns a line per attempt."""
-    if paused():
-        return ["HQ is paused: nothing posts until you press Resume."]
+    """Post every approved clip that hasn't gone out yet, within the seatbelts. Returns a line per attempt.
+    Only the copy of HQ that runs the agents posts (see standby.py), and a move or restart waits for this to finish."""
+    from ....standby import blocked, posting_lock
+    with posting_lock:
+        why = blocked()
+        if why:
+            return [f"Nothing posted: {why}"]
+        if paused():
+            return ["HQ is paused: nothing posts until you press Resume."]
+        return _publish_approved()
+
+
+def _publish_approved() -> list[str]:
+    from ....standby import is_standby, stopping
     report = []
     for clip in db.rows("SELECT * FROM clips WHERE status = 'approved' ORDER BY id"):
         accounts = accounts_for(clip["creator"])
@@ -88,6 +99,8 @@ def publish_approved() -> list[str]:
             key = (account["platform"], account["name"])
             if key in tried:
                 continue
+            if is_standby() or stopping.is_set():   # put on standby or shutting down: the rest goes out later
+                return report
             why = wait_reason(account)
             if why:
                 waiting += 1

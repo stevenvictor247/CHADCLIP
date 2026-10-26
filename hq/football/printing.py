@@ -19,10 +19,15 @@ from pathlib import Path
 
 from .. import db
 from . import season
-from ..config import FOOTBALL_DATA, FOOTBALL_PRINT_DIR, FOOTBALL_PRINT_HOUR, FOOTBALL_PRINT_WEEKDAY, FOOTBALL_PRINTER
+from ..config import (FOOTBALL_DATA, FOOTBALL_PRINT_DIR, FOOTBALL_PRINT_HOUR, FOOTBALL_PRINT_WEEKDAY, FOOTBALL_PRINTER,
+                      FOOTBALL_PRINTER_EMAIL)
 
 STATE_PATH = FOOTBALL_DATA / "print.json"
 PRINTABLE = (".pdf", ".docx", ".doc", ".xlsx", ".xls", ".xlsm", ".csv", ".txt", ".png", ".jpg", ".jpeg", ".pptx", ".ppt")
+# What HP ePrint prints from an email attachment (a .csv goes as text). Most it takes in one email is 10 MB.
+EMAILABLE = (".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".bmp",
+             ".tif", ".tiff", ".pptx", ".ppt")
+EMAIL_MAX_BYTES = 10 * 1024 * 1024
 SETTLE_SECONDS = 60          # a file that changed this recently may still be syncing from Drive
 LATE_HOURS = 4               # if HQ wasn't running at print time, still print up to this long after; later, just say so
 PRINT_TIMEOUT = 180          # seconds to wait for one file's app to finish sending it to the printer
@@ -141,10 +146,35 @@ def deliver(src: Path, opponent: str | None) -> Path | None:
     return dest
 
 
+def _digest(path: Path) -> str | None:
+    """A fingerprint of the file's contents, so a printed file is recognised after a move or a Drive sync (which can
+    change its modified time) and isn't printed again."""
+    import hashlib
+    try:
+        if path.stat().st_size > 50 * 1024 * 1024:
+            return None
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def remember_hashes() -> None:
+    """Fingerprint every printed file that's still here (done before HQ moves to another computer)."""
+    s = _state()
+    hashes = s.setdefault("hashes", {})
+    for key in s.get("printed", {}):
+        if key not in hashes:
+            d = _digest(FOOTBALL_PRINT_DIR / key)
+            if d:
+                hashes[key] = d
+    _save(s)
+
+
 def waiting(now: float | None = None) -> list[dict]:
     """Files that would print now. Each has a reason when it can't: still syncing, or a type that can't print."""
     now = now or time.time()
-    s, out = _state().get("printed", {}), []
+    full = _state()
+    s, hashes, out = full.get("printed", {}), full.get("hashes", {}), []
     opp = week_opponent()
     folder = folder_for(opp) if opp else None
     if folder is None:
@@ -163,8 +193,11 @@ def waiting(now: float | None = None) -> list[dict]:
         key = f"{folder.name}/{p.name}"
         if s.get(key) == mtime:
             continue   # printed already: never print the same version twice
+        if key in hashes and hashes[key] == _digest(p):
+            _mark_printed(key, mtime)   # same contents, new modified time (a move or a Drive sync): still printed
+            continue
         item = {"name": p.name, "path": p, "key": key, "mtime": mtime, "problem": None}
-        if p.suffix.lower() not in PRINTABLE:
+        if p.suffix.lower() not in (EMAILABLE if FOOTBALL_PRINTER_EMAIL else PRINTABLE):
             item["problem"] = ("A Google Doc/Sheet shortcut can't print: download it as a PDF into the folder."
                                if p.suffix.lower() in (".gdoc", ".gsheet", ".gslides") else
                                f"{p.suffix or 'This'} files can't be printed. Use PDF, Word, Excel or an image.")
@@ -174,9 +207,39 @@ def waiting(now: float | None = None) -> list[dict]:
     return out
 
 
+def _email(path: Path, to: str) -> None:
+    """Print by email: one file per email, nothing in the body (the printer would print that as an extra page)."""
+    from email.message import EmailMessage
+    from ..agents.pitch import mailer
+    if not mailer.configured():
+        raise RuntimeError("printing by email needs your Gmail address and app password (the Pitch email "
+                           "settings) in Settings")
+    if path.stat().st_size > EMAIL_MAX_BYTES:
+        raise RuntimeError("it's over 10 MB, the most a printer takes by email")
+    suffix = path.suffix.lower()
+    kinds = {".pdf": "application/pdf", ".txt": "text/plain", ".csv": "text/plain", ".png": "image/png",
+             ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".bmp": "image/bmp",
+             ".tif": "image/tiff", ".tiff": "image/tiff", ".doc": "application/msword",
+             ".xls": "application/vnd.ms-excel", ".ppt": "application/vnd.ms-powerpoint",
+             ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+             ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+             ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation"}
+    maintype, subtype = kinds.get(suffix, "application/octet-stream").split("/")
+    msg = EmailMessage()
+    msg["From"], msg["To"], msg["Subject"] = mailer.credentials()[0], to, path.stem[:150]
+    name = path.stem + ".txt" if suffix == ".csv" else path.name
+    msg.add_attachment(path.read_bytes(), maintype=maintype, subtype=subtype, filename=name)
+    try:
+        mailer.send(msg)
+    except mailer.SendError as e:
+        raise RuntimeError(str(e))
+
+
 def _send(path: Path) -> None:
     """Send one file to the printer, raising with a plain reason if that didn't work."""
     printer = FOOTBALL_PRINTER
+    if FOOTBALL_PRINTER_EMAIL:
+        return _email(path, FOOTBALL_PRINTER_EMAIL)
     if sys.platform.startswith("win"):
         env = {**os.environ, "HQ_PRINT_FILE": str(path), "HQ_PRINT_PRINTER": printer}
         cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS]
@@ -188,14 +251,27 @@ def _send(path: Path) -> None:
     except subprocess.TimeoutExpired:
         raise RuntimeError("the printing app didn't finish in time")
     except FileNotFoundError:
-        raise RuntimeError("this computer has no print command")
+        raise RuntimeError("this computer can't reach a printer directly. On the cloud server, put your printer's "
+                           "email address (HP ePrint) in Settings as HQ_PRINTER_EMAIL")
     if r.returncode != 0:
         msg = (r.stderr or r.stdout or "").strip().splitlines()
         raise RuntimeError(msg[0][:200] if msg else "Windows couldn't print it")
 
 
+def _mark_printed(key: str, mtime: float, digest: str | None = None) -> None:
+    s = _state()
+    s.setdefault("printed", {})[key] = mtime
+    if digest:
+        s.setdefault("hashes", {})[key] = digest
+    _save(s)
+
+
 def print_now(reason: str = "Print now") -> str:
     """Print everything waiting. Returns the one-line summary (also logged and sent to your phone by the caller)."""
+    from ..standby import blocked
+    why = blocked()
+    if why:   # only the copy of HQ that runs the agents prints, so nothing prints twice
+        return f"Nothing printed. {why}"
     files = waiting()
     ready = [f for f in files if not f["problem"]]
     opp = week_opponent()
@@ -216,9 +292,7 @@ def print_now(reason: str = "Print now") -> str:
             failed.append(f"{f['name']} ({e})")
             continue
         printed.append(f["name"])
-        s = _state()
-        s.setdefault("printed", {})[f["key"]] = f["mtime"]
-        _save(s)
+        _mark_printed(f["key"], f["mtime"], _digest(f["path"]))
     lines = []
     if printed:
         lines.append(f"Printed {len(printed)} file{'s' if len(printed) > 1 else ''} from the {opp} folder: " + ", ".join(printed) + ".")
@@ -275,7 +349,8 @@ def state() -> dict:
     return {
         "folder": str(FOOTBALL_PRINT_DIR), "folder_found": FOOTBALL_PRINT_DIR.is_dir(),
         "opponent": week_opponent(), "week_folder": (folder_for(week_opponent() or "") or Path("")).name or None,
-        "printer": FOOTBALL_PRINTER or "Windows default printer",
+        "printer": (f"by email to {FOOTBALL_PRINTER_EMAIL}" if FOOTBALL_PRINTER_EMAIL else
+                    FOOTBALL_PRINTER or "Windows default printer"),
         "when": f"{DAYS[FOOTBALL_PRINT_WEEKDAY]}s at {_hour_text(FOOTBALL_PRINT_HOUR)}",
         "next": next_slot().isoformat(timespec="minutes"), "paused": bool(s.get("paused")),
         "files": [{"name": f["name"], "problem": f["problem"]} for f in files],

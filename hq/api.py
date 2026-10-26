@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import os
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -11,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
-from . import sweep_api
+from . import drive_sync, move, standby, sweep_api
 from .config import CLIPS_DIR, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
 app = FastAPI(title="Agent HQ")
@@ -19,6 +20,7 @@ app.include_router(sweep_api.router)
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
 STATIC = Path(__file__).parent / "static"
 SESSION_COOKIE = "hq_session"
+STARTED = time.time()
 
 
 def _session_token() -> str:
@@ -31,6 +33,8 @@ def _session_token() -> str:
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"} | {
     h.strip().lower() for h in os.getenv("HQ_ALLOWED_HOSTS", "").split(",") if h.strip()}
 CHANGES = ("POST", "PUT", "PATCH", "DELETE")
+# A standby copy is read-only (see standby.py). These still work there: updating HQ, restarting it, and moving.
+STANDBY_ALLOWED = ("/api/update", "/api/restart", "/api/move/")
 
 
 def _host(request: Request) -> str:
@@ -52,13 +56,16 @@ async def guard(request: Request, call_next):
     if (request.method in CHANGES and request.url.path.startswith("/api/")
             and request.headers.get("x-hq") != "1"):
         return JSONResponse({"detail": "Use the HQ dashboard for this"}, status_code=403)
+    if (request.method in CHANGES and request.url.path.startswith("/api/")
+            and not request.url.path.startswith(STANDBY_ALLOWED) and standby.is_standby()):
+        return JSONResponse({"detail": standby.blocked(), "standby": standby.info()}, status_code=409)
     return await call_next(request)
 
 
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     """With HQ_PASSWORD set, every page except the login page needs the session cookie."""
-    if not PASSWORD or request.url.path in ("/login", "/logout"):
+    if not PASSWORD or request.url.path in ("/login", "/logout", "/healthz"):
         return await call_next(request)
     if hmac.compare_digest(request.cookies.get(SESSION_COOKIE, ""), _session_token()):
         return await call_next(request)
@@ -114,8 +121,29 @@ def _tally_summary() -> dict:
 
 @app.on_event("startup")
 def _startup():
+    standby.stopping.clear()
     db.init()
     update.check_in_background()
+
+
+@app.on_event("shutdown")
+def _shutdown():
+    """HQ is stopping (a restart, an update or the server rebooting): let a clip that's being posted finish first, so
+    it's recorded as posted and never goes out a second time."""
+    standby.stopping.set()
+    if standby.posting_lock.acquire(timeout=10 * 60):
+        standby.posting_lock.release()
+
+
+@app.get("/healthz")
+def healthz():
+    """Is this HQ alive, and does it run the agents? Open without logging in: the other copy of HQ asks this before
+    it posts (so the PC and the cloud never both post), and so can an uptime checker. It shows nothing private."""
+    from .worker import seconds_since_last_round
+    ago = seconds_since_last_round()
+    return {**standby.role(), "moved_in": move.last().get("moved_in", ""),
+            "worker_seconds_ago": None if ago is None else round(ago), "uptime": round(time.time() - STARTED),
+            "version": update._status.get("version", "")}
 
 
 @app.get("/login")
@@ -143,6 +171,11 @@ def logout():
 def index():
     # no-cache: the browser checks for a newer page each time, so updates show up without Ctrl+F5
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/move")
+def move_page():
+    return FileResponse(STATIC / "move.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/settings")
@@ -200,7 +233,8 @@ def pause_status():
     from .agents.chad.publish import paused
     from .worker import seconds_since_last_round
     ago = seconds_since_last_round()
-    return {"paused": paused(), "worker_seconds_ago": None if ago is None else round(ago)}
+    return {"paused": paused(), "standby": standby.info(), "clash": None if standby.is_standby() else standby.clash(),
+            "worker_seconds_ago": None if ago is None else round(ago)}
 
 
 @app.post("/api/pause")
@@ -784,3 +818,182 @@ def restart(request: Request):
     _from_hq_page(request)
     update.restart()
     return {"restarting": True}
+
+
+# ---- moving HQ to another computer (see move.py) ------------------------------------------------------------------
+
+_move_job: dict = {"running": False, "steps": [], "error": None, "result": None}
+
+
+class MoveIn(BaseModel):
+    url: str = ""
+    password: str = ""
+
+
+class CloudScriptIn(BaseModel):
+    tailscale_key: str
+
+
+def _passwords(typed: str) -> list[str]:
+    """What to log in to the other HQ with: what you typed, else a new server's one-time code, else your password."""
+    if typed.strip():
+        return [typed.strip()]
+    code = [move.move_code()] if move.MOVE_CODE.exists() else []
+    return code + ([PASSWORD] if PASSWORD else [])
+
+
+@app.get("/api/move/ready")
+def move_ready():
+    """The other HQ asks this (logged in) before it sends itself here."""
+    return {"ready": standby.is_standby(), "standby": standby.info()}
+
+
+@app.get("/api/move/status")
+def move_status():
+    return {"standby": standby.info(), "role": standby.role(), "last": move.last(), "job": _move_job,
+            "password_set": bool(PASSWORD), "peer": standby.peer_url(), "clash": standby.clash(),
+            "family": move.family(), "has_move_code": move.MOVE_CODE.exists()}
+
+
+@app.get("/api/move/find")
+def move_find():
+    """HQ servers on your Tailscale network, and whether each is ready to take your HQ."""
+    import requests
+    found = []
+    for s in move.find_servers():
+        try:
+            h = requests.get(f"{s['url']}/healthz", timeout=4).json()
+        except Exception:
+            h = {}
+        found.append({**s, "answering": bool(h.get("ok")), "role": h.get("role"), "waiting": bool(h.get("waiting"))})
+    return {"servers": found}
+
+
+@app.post("/api/move/check")
+def move_check(body: MoveIn):
+    last_error = "Set a dashboard password in Settings first (HQ_PASSWORD): the cloud HQ needs one."
+    for pw in _passwords(body.password):
+        try:
+            return {"ok": True, **move.check_target(body.url, pw)}
+        except move.MoveError as e:
+            last_error = str(e)
+            if "password" not in last_error:
+                break
+    raise HTTPException(400, last_error)
+
+
+@app.post("/api/move/start")
+def move_start(body: MoveIn):
+    if _move_job["running"]:
+        raise HTTPException(409, "A move is already going.")
+    if not PASSWORD:
+        raise HTTPException(400, "Set a dashboard password in Settings first (HQ_PASSWORD). The cloud HQ uses it.")
+    import threading
+
+    def go():
+        _move_job.update(running=True, steps=[], error=None, result=None)
+        try:
+            for pw in _passwords(body.password):
+                try:
+                    _move_job["result"] = move.send_to(body.url, pw, progress=_move_job["steps"].append)
+                    break
+                except move.MoveError as e:
+                    if "didn't accept the password" not in str(e):
+                        raise
+                    _move_job["error"] = str(e)
+            else:
+                raise move.MoveError(_move_job["error"] or "No password to log in with.")
+            _move_job["error"] = None
+        except Exception as e:
+            _move_job["error"] = str(e)
+        finally:
+            _move_job["running"] = False
+    threading.Thread(target=go, daemon=True, name="move").start()
+    return {"started": True}
+
+
+@app.post("/api/move/in")
+async def move_in(request: Request, bundle: UploadFile = File(...), port: str = Form("8000")):
+    """The other HQ sends itself here. Only a standby HQ takes it; it then runs the agents and restarts."""
+    if not standby.is_standby():
+        raise HTTPException(409, "This HQ is running the agents, so it won't take another copy over it.")
+    dest = move.DATA_DIR / "move-in.zip"
+    total = 0
+    with open(dest, "wb") as out:
+        while chunk := await bundle.read(4 * 1024 * 1024):
+            total += len(chunk)
+            if total > move.UPLOAD_LIMIT:
+                raise HTTPException(413, "That's too big to move in one go.")
+            out.write(chunk)
+    host = request.client.host if request.client else ""
+    from_url = (f"http://[{host}]:{int(port)}" if ":" in host else f"http://{host}:{int(port)}") if host else ""
+    try:
+        manifest = move.take_in(dest, from_url)
+    except move.MoveError as e:
+        raise HTTPException(400, str(e))
+    finally:
+        dest.unlink(missing_ok=True)
+    update.restart(delay=2)
+    return {"ok": True, "bundle_id": manifest.get("bundle_id", "")}
+
+
+@app.post("/api/move/cloud-script")
+def move_cloud_script(body: CloudScriptIn):
+    if not PASSWORD:
+        raise HTTPException(400, "Set a dashboard password in Settings first (HQ_PASSWORD). The cloud HQ uses it.")
+    try:
+        return {"script": move.cloud_script(body.tailscale_key)}
+    except move.MoveError as e:
+        raise HTTPException(400, str(e))
+
+
+# ---- Google Drive folders on the cloud server (see drive_sync.py) --------------------------------------------------
+
+class DriveIn(BaseModel):
+    text: str = ""
+
+
+@app.get("/api/drive")
+def drive_status():
+    return drive_sync.status()
+
+
+@app.post("/api/drive/client")
+def drive_client(body: DriveIn):
+    try:
+        return {"message": drive_sync.save_client(body.text)}
+    except drive_sync.DriveError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/drive/sign-in")
+def drive_sign_in():
+    try:
+        return {"url": drive_sync.start_sign_in()}
+    except drive_sync.DriveError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/drive/connect")
+def drive_connect(body: DriveIn):
+    try:
+        message = drive_sync.finish_sign_in(body.text)
+    except drive_sync.DriveError as e:
+        raise HTTPException(400, str(e))
+    db.log("Steven", "Connected Google Drive")
+    import threading
+    threading.Thread(target=drive_sync.run_once, daemon=True).start()
+    return {"message": message}
+
+
+@app.post("/api/drive/disconnect")
+def drive_disconnect():
+    drive_sync.disconnect()
+    db.log("Steven", "Disconnected Google Drive")
+    return drive_sync.status()
+
+
+@app.post("/api/drive/sync")
+def drive_sync_now():
+    drive_sync.run_once()
+    return drive_sync.status()

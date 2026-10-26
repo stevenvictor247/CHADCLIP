@@ -35,6 +35,14 @@ def saved_settings() -> dict:
 
 os.environ.update({k: str(v) for k, v in saved_settings().items()})
 
+# Your time zone (HQ_TZ, like America/Detroit), so the daily report, reminders and the Thursday print keep your local
+# times on a cloud server, whose own clock runs on UTC. Moving HQ brings it from the PC. Windows uses its own setting.
+_TZ = os.getenv("HQ_TZ", "").strip()
+if _TZ and hasattr(__import__("time"), "tzset") and (Path("/usr/share/zoneinfo") / _TZ).is_file():
+    import time as _time
+    os.environ["TZ"] = _TZ
+    _time.tzset()
+
 # Models. Each agent gets the cheapest model that does its job well. Override any of them in .env with
 # HQ_MODEL_<NAME>=..., for example HQ_MODEL_CHAD=claude-opus-5-5. HQ_BOSS_MODEL still works for the Boss.
 # Per million tokens (input / output): Opus 5.5 $4 / $20, Sonnet 5.5 $2 / $10, Haiku 5.5 $0.10 / $0.50.
@@ -87,6 +95,8 @@ FOOTBALL_REMINDER_HOUR = int(os.getenv("HQ_FOOTBALL_REMINDER_HOUR", "8") or 8)
 FOOTBALL_PRINT_DIR = Path(os.getenv("HQ_PRINT_DIR", "").strip() or FOOTBALL_DIR / "2026 WSU FOOTBALL")
 # Printer name exactly as Windows lists it. Blank = the Windows default printer.
 FOOTBALL_PRINTER = os.getenv("HQ_PRINTER", "").strip()
+# Print by email (HP ePrint and similar): how the cloud server prints on your home printer with no PC on.
+FOOTBALL_PRINTER_EMAIL = os.getenv("HQ_PRINTER_EMAIL", "").strip()
 FOOTBALL_PRINT_WEEKDAY = int(os.getenv("HQ_PRINT_WEEKDAY", "").strip() or "3") % 7   # 0 = Monday ... 3 = Thursday
 FOOTBALL_PRINT_HOUR = int(os.getenv("HQ_PRINT_HOUR", "").strip() or "20") % 24       # local time, 24-hour clock
 

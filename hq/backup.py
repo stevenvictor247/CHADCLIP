@@ -24,7 +24,23 @@ def make_backup(with_clips: bool = False, keep: int = 14) -> Path:
     copy_dir = os.getenv("HQ_BACKUP_COPY_DIR", "").strip()
     if copy_dir:
         _copy_elsewhere(Path(copy_dir), out.name, keep)
+    _copy_to_drive(out.name, keep)
     return out
+
+
+def _copy_to_drive(name: str, keep: int):
+    """On the cloud server with Google Drive connected, a copy (without keys, like the one above) goes to
+    My Drive/Agent HQ backups, so even losing the whole server loses nothing."""
+    from . import db, drive_sync
+    if not drive_sync.connected():
+        return
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            staged = Path(tmp) / name
+            _write(staged, with_clips=False, secrets=False)
+            drive_sync.upload_backup(staged, keep)
+    except Exception as e:   # no internet or Drive full: say so, but keep the local backup
+        db.log("HQ", f"Couldn't put the backup copy in Google Drive: {str(e)[:200]}")
 
 
 def _write(out: Path, with_clips: bool, secrets: bool):
@@ -41,10 +57,24 @@ def _write(out: Path, with_clips: bool, secrets: bool):
             files.append(ROOT / ".env")
         if secrets and SETTINGS_PATH.exists():
             files.append(SETTINGS_PATH)
+        files += _state_files(secrets)
         if with_clips:
             files += [p for p in CLIPS_DIR.rglob("*") if p.is_file()]
         for p in files:
             z.write(p, p.relative_to(ROOT) if p.is_relative_to(ROOT) else f"data/{p.relative_to(DATA_DIR)}")
+
+
+# Files in data/ that HQ needs to carry on where it left off: what was already clipped (so nothing posts twice), when the
+# daily jobs last ran, and the football and tally folders. TikTok's sign-in lives here too, so it's kept to the full backup.
+_STATE_FILES = ("worker_state.json", "chad_seen.json")
+_STATE_DIRS = ("football", "tally")
+
+
+def _state_files(secrets: bool) -> list[Path]:
+    found = [DATA_DIR / n for n in _STATE_FILES] + ([DATA_DIR / "tiktok_tokens.json"] if secrets else [])
+    for d in _STATE_DIRS:
+        found += (DATA_DIR / d).rglob("*") if (DATA_DIR / d).is_dir() else []
+    return [p for p in found if p.is_file()]
 
 
 def _keep_newest(folder: Path, keep: int):

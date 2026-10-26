@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Move Agent HQ</title>
+<style>
+  :root { --bg:#120f1a; --panel:rgba(34,27,44,.85); --line:#3b2f4a; --text:#f4eefb; --muted:#a99cbb;
+          --accent:#ffb347; --accent2:#ff6fa8; --good:#4ade80; --bad:#f87171; --sky:#7cc4ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; color:var(--text); font:15px/1.5 "Nunito", system-ui, sans-serif; padding:0 16px 80px;
+         background:radial-gradient(1200px 700px at 10% -10%, #3a2357 0%, transparent 60%),
+                    radial-gradient(900px 600px at 110% 10%, #2b2f5c 0%, transparent 55%), var(--bg); background-attachment:fixed; }
+  .wrap { max-width:760px; margin:0 auto; }
+  header { display:flex; align-items:center; gap:12px; padding:18px 0; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:22px; flex:1; }
+  a { color:var(--sky); }
+  a.back { color:var(--muted); text-decoration:none; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px 18px; margin-bottom:16px; }
+  h2 { font-size:14px; margin:0 0 10px; color:var(--accent); text-transform:uppercase; letter-spacing:.08em; }
+  ol { margin:6px 0 0 20px; padding:0; } li { margin:6px 0; }
+  .muted { color:var(--muted); font-size:14px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  input, textarea { width:100%; background:#120f0d; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:9px 11px; font:inherit; }
+  textarea { font:12px/1.4 ui-monospace, Consolas, monospace; }
+  .row input { flex:1; min-width:200px; width:auto; }
+  button { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:9px 14px; font:inherit; font-weight:700; cursor:pointer; }
+  button.go { background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#1a1209; border:0; font-weight:800; }
+  button:disabled { opacity:.5; cursor:default; }
+  .ok { color:var(--good); } .bad { color:var(--bad); }
+  .big { font-size:17px; }
+  .steps div { padding:2px 0; }
+  .server { padding:8px 10px; border:1px solid var(--line); border-radius:10px; margin-top:6px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .server span { flex:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><a class="back" href="/">← Back to HQ</a><h1>🚚 Move HQ</h1><a class="back" href="/settings">⚙️ Settings</a></header>
+  <section id="now"><h2>Where HQ runs</h2><div id="now-text" class="big">Checking…</div></section>
+  <div id="body"></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+async function call(path, body) {
+  const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"}, body: JSON.stringify(body || {})});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HQ said " + r.status));
+  return d;
+}
+let st = null, polling = null;
+
+const SERVER_STEPS = `
+<section id="make"><h2>Step 1 · Make your cloud server (one time, about 20 minutes)</h2>
+  <ol>
+    <li>Open <a href="https://login.tailscale.com/admin/settings/keys" target="_blank">your Tailscale keys page</a>, press
+      <b>Generate auth key…</b>, leave every switch as it is, press <b>Generate key</b>, and copy it.</li>
+    <li>Paste it here and press the button:
+      <div class="row"><input id="tskey" placeholder="tskey-auth-…"><button id="make-script">Make my server setup text</button></div>
+      <div id="script-box" style="display:none;margin-top:8px"><textarea id="script" rows="9" readonly></textarea>
+        <div class="row"><button class="go" id="copy-script">Copy the setup text</button><span id="copied" class="muted"></span></div>
+        <div class="muted">It holds a one-time password for the new server, so don't share it. Your own HQ password replaces it when HQ moves in.</div></div>
+      <div id="script-msg" class="muted"></div></li>
+    <li>Make the server on <b>Oracle Cloud's Always Free</b> plan ($0 a month, for good):
+      <ul style="margin:4px 0 0 18px;padding:0">
+        <li>Sign up at <a href="https://signup.cloud.oracle.com/" target="_blank">oracle.com</a>. It asks for a card only to check
+          you're a real person. For <b>Home Region</b> pick <b>US Midwest (Chicago)</b> (you can't change it later).</li>
+        <li>Recommended: in the menu ☰ open <b>Billing &amp; Cost Management → Upgrade and Manage Payment</b> and choose
+          <b>Pay As You Go</b>. It stays $0 while you only use Always Free servers, and Oracle then never takes the server back
+          for being quiet.</li>
+        <li>☰ → <b>Compute → Instances → Create instance</b>. Name: <b>agent-hq</b>.</li>
+        <li>Image: <b>Change image → Canonical Ubuntu 24.04</b>. Shape: <b>Change shape → Ampere → VM.Standard.A1.Flex</b>,
+          set <b>4</b> OCPUs and <b>24</b> GB memory (it says "Always Free-eligible").</li>
+        <li>SSH keys: <b>Generate a key pair for me</b>, press <b>Save private key</b> and keep the file. You'll likely never need it.</li>
+        <li>Boot volume: tick <b>Specify a custom boot volume size</b> and type <b>100</b> (free up to 200).</li>
+        <li><b>Show advanced options → Management → Paste cloud-init script</b>, and paste the setup text. Then press <b>Create</b>.</li>
+        <li>If it says <b>Out of capacity</b>, Oracle's free servers are all taken right now: try again in an hour, or pick
+          another <b>Availability domain</b> at the top of the form.</li>
+      </ul>
+      <details style="margin-top:6px"><summary>Or pay for a server at Vultr instead (about $24 a month, never out of capacity)</summary>
+      <ul style="margin:4px 0 0 18px;padding:0">
+        <li>Go to <a href="https://my.vultr.com/deploy/" target="_blank">vultr.com</a>, make an account and press <b>Deploy</b>.</li>
+        <li>Type: <b>Cloud Compute, Shared CPU</b>. Location: <b>Chicago</b>. Operating system: <b>Ubuntu 24.04 LTS</b>.</li>
+        <li>Plan: <b>4 GB memory</b> (about $20 a month). Turn on <b>Automatic Backups</b> (about $4 a month).</li>
+        <li>Find <b>Cloud-Init User-Data</b> (under Additional Features), tick it, and paste the setup text in its box.</li>
+        <li>Server hostname: <b>agent-hq</b>. Then press <b>Deploy</b>.</li>
+      </ul></details></li>
+    <li>Wait about 10 minutes while it installs HQ by itself. You never need to log in to it.</li>
+  </ol>
+</section>`;
+
+function moveSection(title, intro, prefill) {
+  return `<section id="go"><h2>${title}</h2><p class="muted" style="margin:0">${intro}</p>
+    <div class="row"><button id="find">Find my server</button><span id="find-msg" class="muted"></span></div>
+    <div id="found"></div>
+    <div class="row"><input id="url" placeholder="or type its address, like 100.101.102.103" value="${esc(prefill || "")}"><button id="check">Check</button></div>
+    <div id="check-msg" class="muted"></div>
+    <div class="row"><button class="go big" id="start" disabled>Move HQ now</button></div>
+    <div id="steps" class="steps muted" style="margin-top:8px"></div>
+  </section>`;
+}
+
+function render() {
+  const sb = st.standby, job = st.job;
+  let now, body = "";
+  if (!sb) now = `✅ <b>This copy runs the agents.</b>` + (st.peer ? ` <span class="muted">The other copy is at ${esc(st.peer)}.</span>` : "");
+  else if (sb.reason === "moved") now = `☁️ <b>HQ runs at <a href="${esc(sb.moved_to)}">${esc(sb.moved_to)}</a>.</b> This copy is on standby: nothing runs or posts here.`;
+  else if (sb.reason === "waiting") now = `⏳ <b>This new HQ is waiting for your HQ to move in.</b> On the computer HQ runs on now, open ⚙️ Settings → 🚚 Move HQ.`;
+  else if (sb.reason === "moving") now = `🚚 <b>Moving right now…</b>`;
+  else now = `💤 <b>This copy is on standby.</b>`;
+  if (st.clash) now += `<div class="bad" style="margin-top:8px">⚠️ ${esc(st.clash)}</div>`;
+  $("now-text").innerHTML = now;
+
+  if (!sb || sb.reason === "moving" || job.running) {
+    if (!st.password_set) body += `<section><h2>First</h2><p>Set a dashboard password: ⚙️ Settings → <b>HQ_PASSWORD</b>. You'll log in to the cloud HQ with it.</p></section>`;
+    if (st.family !== "linux") {
+      body += SERVER_STEPS;
+      body += moveSection("Step 2 · Move HQ to it",
+        "When the server is ready, press Find my server, then Move HQ now. This copy stops first, everything goes over (data, Settings, keys, sign-ins, clips waiting for you), and the cloud HQ takes over. It takes a few minutes. If anything goes wrong, this copy carries on as before.", st.peer);
+      body += `<section><h2>Step 3 · After the move</h2><ol>
+        <li>Open the new address on your Mac too (and bookmark it). The Agent HQ icon on this PC opens it by itself.</li>
+        <li>In <a href="https://login.tailscale.com/admin/machines" target="_blank">Tailscale Machines</a>, click the <b>⋯</b> next to <b>agent-hq</b> and choose <b>Disable key expiry</b>, so the server never gets signed out.</li>
+        <li>On the cloud HQ: ⚙️ Settings → <b>Google Drive</b> to connect your football folders, and <b>HQ_PRINTER_EMAIL</b> for the Thursday print.</li></ol></section>`;
+    } else {
+      body += moveSection("Move HQ to another computer (like back to your PC)",
+        "The other computer needs HQ open (it is, if start-hq runs there) and on standby. This copy stops first, everything goes over, and the other HQ takes over.", st.peer);
+    }
+  } else if (sb.reason === "moved") {
+    body += `<section><h2>Moving back</h2><p class="muted" style="margin:0">To run HQ on this computer again, open HQ at
+      <a href="${esc(sb.moved_to)}">${esc(sb.moved_to)}</a>, go to ⚙️ Settings → 🚚 Move HQ, and move it to this computer. Keep HQ open here while you do.</p></section>`;
+  }
+  $("body").innerHTML = body;
+  wire();
+  showJob();
+}
+
+function showJob() {
+  const job = st.job;
+  if (!$("steps")) return;
+  $("steps").innerHTML = (job.steps || []).map(s => `<div>• ${esc(s)}</div>`).join("") +
+    (job.running ? `<div>⏳ Working… keep this page open.</div>` : "") +
+    (job.error ? `<div class="bad">⚠️ ${esc(job.error)}</div>` : "") +
+    (job.result ? `<div class="ok big">✅ Done! HQ runs at <a href="${esc(job.result.url)}">${esc(job.result.url)}</a> now. Open it and log in with your usual password.</div>` +
+                  (job.result.clips_left_out ? `<div class="muted">${job.result.clips_left_out} older posted clip video(s) stayed on this computer to keep the move quick. Everything that still needs posting went over.</div>` : "") : "");
+  if ($("start")) $("start").disabled = job.running || !$("url").value.trim();
+}
+
+function wire() {
+  if ($("make-script")) $("make-script").onclick = async () => {
+    $("script-msg").textContent = "";
+    try {
+      const r = await call("/api/move/cloud-script", {tailscale_key: $("tskey").value});
+      $("script").value = r.script; $("script-box").style.display = "block";
+    } catch (e) { $("script-msg").innerHTML = `<span class="bad">⚠️ ${esc(e.message)}</span>`; }
+  };
+  if ($("copy-script")) $("copy-script").onclick = async () => {
+    $("script").select();
+    try { await navigator.clipboard.writeText($("script").value); } catch (e) { document.execCommand("copy"); }
+    $("copied").textContent = "Copied. Paste it into the cloud-init box when you make the server.";
+  };
+  if (!$("find")) return;
+  $("url").oninput = () => { $("start").disabled = !$("url").value.trim(); };
+  $("find").onclick = async () => {
+    $("find-msg").textContent = "Looking on your Tailscale network…"; $("found").innerHTML = "";
+    try {
+      const r = await (await fetch("/api/move/find")).json();
+      if (!r.servers.length) { $("find-msg").textContent = "No server called agent-hq yet. If you just made it, wait a few minutes and try again (and check Tailscale is on here)."; return; }
+      $("find-msg").textContent = "";
+      $("found").innerHTML = r.servers.map(s => `<div class="server"><span><b>${esc(s.name)}</b> · ${esc(s.url)} · ${
+        !s.online ? "offline" : !s.answering ? "still installing HQ…" : s.role === "active" ? "already runs HQ" : s.waiting ? "✅ ready for your HQ" : "on standby, ready"}</span>
+        <button data-use="${esc(s.url)}" ${s.answering && s.role !== "active" ? "" : "disabled"}>Use this one</button></div>`).join("");
+      document.querySelectorAll("[data-use]").forEach(b => b.onclick = () => { $("url").value = b.dataset.use; $("check").click(); });
+    } catch (e) { $("find-msg").textContent = "Couldn't look. Type the address instead."; }
+  };
+  $("check").onclick = async () => {
+    $("check-msg").textContent = "Checking…";
+    try {
+      const r = await call("/api/move/check", {url: $("url").value});
+      $("check-msg").innerHTML = `<span class="ok">✅ Found it: ${r.waiting ? "a new HQ waiting for yours" : "an HQ on standby"}. Ready to move.</span>`;
+      $("start").disabled = false;
+    } catch (e) { $("check-msg").innerHTML = `<span class="bad">⚠️ ${esc(e.message)}</span>`; }
+  };
+  $("start").onclick = async () => {
+    if (!confirm("Move HQ now? This copy stops running the agents and the other one takes over, with everything.")) return;
+    try { await call("/api/move/start", {url: $("url").value}); poll(); }
+    catch (e) { $("steps").innerHTML = `<div class="bad">⚠️ ${esc(e.message)}</div>`; }
+  };
+}
+
+async function load() {
+  st = await (await fetch("/api/move/status")).json();
+  render();
+  if (st.job.running) poll();
+}
+function poll() {
+  clearInterval(polling);
+  polling = setInterval(async () => {
+    try { st = await (await fetch("/api/move/status")).json(); } catch (e) { return; }
+    if (!st.job.running) { clearInterval(polling); render(); } else showJob();
+  }, 1500);
+}
+load().catch(() => { $("now-text").textContent = "Couldn't load. Is HQ running?"; });
+</script>
+</body>
+</html>

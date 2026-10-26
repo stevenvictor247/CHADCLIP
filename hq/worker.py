@@ -202,12 +202,32 @@ def seconds_since_last_round() -> float | None:
         return None
 
 
+_clash = {"reason": None}
+
+
+def _held() -> bool:
+    """True when this copy must sit still: it's on standby, or the other copy runs the agents too (the peer check).
+    A clash is logged and sent to your phone once when it starts, and again when it clears."""
+    from .standby import blocked, is_standby
+    reason = blocked()
+    clash = None if is_standby() else reason
+    if clash != _clash["reason"]:
+        from . import relay
+        msg = f"⚠️ {clash}" if clash else "✅ Only one copy of HQ runs the agents again, so this one carries on."
+        db.log("HQ", msg)
+        relay.notify(msg)
+        _clash["reason"] = clash
+    return reason is not None
+
+
 def tick():
     from .agents.chad.publish import paused
-    try:
+    try:   # the loop is alive even while it holds, so the watchdog doesn't restart a copy that's holding on purpose
         ALIVE_PATH.write_text(datetime.now().isoformat(timespec="seconds"))
     except OSError:
         pass
+    if _held():  # another copy of HQ runs the agents: nothing starts, nothing posts, nothing is backed up here
+        return
     state = _state()
     if paused():  # Pause All: nothing starts and nothing posts; the Boss still chats and the backup still runs
         daily_backup(state)
@@ -223,7 +243,7 @@ def tick():
     football_tick()
     if not REQUIRE_APPROVAL:
         db.execute("UPDATE clips SET status = 'approved' WHERE status = 'pending_approval'")
-    while run_next_task("quick"):
+    while not _held() and run_next_task("quick"):
         pass
     try:
         publish_approved()
@@ -236,9 +256,10 @@ def tick():
 
 def slow_loop(interval: float = 15):
     """The video lane: Chad's clipping jobs, one at a time, beside the main loop."""
+    from .standby import blocked
     while True:
         try:
-            if run_next_task("slow"):
+            if not blocked() and run_next_task("slow"):
                 continue
         except Exception:
             traceback.print_exc()
@@ -247,6 +268,9 @@ def slow_loop(interval: float = 15):
 
 def loop(interval: float = 15):
     db.init()
+    from . import standby
+    if standby.finish_takeover():
+        db.log("HQ", "HQ restarted after moving in. This copy runs the agents now.")
     recover_interrupted()
     threading.Thread(target=slow_loop, args=(interval,), daemon=True, name="video-lane").start()
     print("[worker] running. Ctrl+C to stop.")
@@ -262,3 +286,5 @@ def start_in_background():
     threading.Thread(target=loop, daemon=True).start()
     from . import relay
     relay.start_in_background()  # does nothing until TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_ID are set
+    from . import drive_sync
+    drive_sync.start_in_background()  # does nothing unless Google Drive folders are set up (on the cloud server)
