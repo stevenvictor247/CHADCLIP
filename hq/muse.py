@@ -815,16 +815,15 @@ def decide(idea_id: int, decision: str, reason: str | None = None, from_card: bo
 
 
 # ---- Build it -> Claude ----------------------------------------------------------------------------------
-# "Build it" fires a Claude Code routine over HTTP (its API trigger). The routine hands the brief to Steven's Claude
-# project, which starts a new thread that builds it in CHADCLIP. The token is made once on claude.ai/code/routines
-# (open "HQ Build it", Add another trigger, API, Generate token) and pasted into Settings; it only lets HQ start
-# that one routine, and never leaves this PC except to Anthropic.
-BUILD_URL = "https://api.anthropic.com/v1/claude_code/routines/trig_01VtqaeKDHmdfWDv1C48fanf/fire"
+# "Build it" fires a Claude Code routine over HTTP (its API trigger). Steven makes the routine once on claude.ai
+# (Scheduled, New task, Code, repo CHADCLIP, Add trigger, API, Generate token) and pastes its token and its /fire
+# address into Settings. Each press starts a Claude Code session that builds the idea and opens a PR. The token only
+# lets HQ start that one routine, and never leaves this PC except to Anthropic.
 BUILD_URL_RE = re.compile(r"^https://api\.anthropic\.com/v1/claude_code/routines/trig_[A-Za-z0-9]+/fire$")
 
 
 def build_url() -> str:
-    return (os.getenv("HQ_BUILD_URL") or "").strip() or BUILD_URL
+    return (os.getenv("HQ_BUILD_URL") or "").strip()
 
 
 def build_ready() -> bool:
@@ -859,9 +858,9 @@ def start_build(idea_id: int) -> str:
     if i["status"] != "approved":
         return "Only an idea you said Build it to can be sent to Claude."
     if i.get("build_status") == "started":
-        return "Claude already has this one. Look for its thread in your Claude project."
+        return "Claude already has this one. Look for its session under Code on claude.ai."
     if not build_ready():
-        return "Build it isn't connected to Claude yet: add HQ_BUILD_TOKEN in Settings, or copy the build brief."
+        return "Build it isn't connected to Claude yet: add HQ_BUILD_TOKEN and HQ_BUILD_URL in Settings, or copy the build brief."
     text = (f"Idea #{i['id']}: {i['title']}\nSteven pressed Build it in Agent HQ on {datetime.now():%A %d %B %Y %H:%M}."
             f"\n\nBUILD BRIEF (written by Muse)\n{brief(i)}")[:60000]
     try:
@@ -877,7 +876,7 @@ def start_build(idea_id: int) -> str:
     db.execute("UPDATE ideas SET build_status = 'started', build_url = ?, build_note = NULL, build_at = ? WHERE id = ?",
                url, db.now(), idea_id)
     db.log("Muse", f"Sent \"{i['title']}\" to Claude to build")
-    return "Sent to Claude to build it: a new thread for it shows up in your Claude project shortly."
+    return "Sent to Claude to build it: its session shows up under Code on claude.ai shortly."
 
 
 def _decide_card(payload: dict, decision: str) -> str:

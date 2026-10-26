@@ -100,9 +100,9 @@
              <button class="ghost" data-ask="${i.id}" ${busy ? "disabled" : ""}>👎 Not for me</button></div>`;
     } else if (i.status === "approved") {
       const sent = i.build_status === "started", failed = i.build_status === "failed";
-      const state = sent ? `<div class="mu-build ok">🔨 Sent to Claude ${esc(ago(i.build_at))}. Its build shows up as a new thread in your Claude project.</div>`
+      const state = sent ? `<div class="mu-build ok">🔨 Sent to Claude ${esc(ago(i.build_at))}. Its build session shows up under Code on claude.ai.</div>`
         : failed ? `<div class="mu-build bad">Couldn't send it to Claude: ${esc(i.build_note || "")}</div>`
-        : data.build_ready ? "" : `<div class="mu-build">To have Build it start the build in Claude by itself, add HQ_BUILD_TOKEN in Settings. Until then, copy the brief and paste it to Claude.</div>`;
+        : data.build_ready ? "" : `<div class="mu-build">To have Build it start the build in Claude by itself, add HQ_BUILD_TOKEN and HQ_BUILD_URL in Settings. Until then, copy the brief and paste it to Claude.</div>`;
       acts = `${state}<div class="mu-acts">${data.build_ready && !sent ? `<button data-send="${i.id}" ${busy ? "disabled" : ""}>🔨 ${failed ? "Try again" : "Send to Claude to build"}</button>` : ""}
                 <button ${data.build_ready && !sent ? 'class="ghost"' : ""} data-copy="${i.id}">📋 Copy build brief</button>
                 <button class="ghost" data-brief="${i.id}">${openBrief.has(i.id) ? "Hide brief" : "Show brief"}</button>
