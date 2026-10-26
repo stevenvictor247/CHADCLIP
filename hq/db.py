@@ -256,7 +256,11 @@ CREATE TABLE IF NOT EXISTS ideas (
     approval_id INTEGER,
     focus TEXT,                                  -- what Steven asked Muse to think about, if anything
     created_at TEXT NOT NULL,
-    decided_at TEXT
+    decided_at TEXT,
+    build_status TEXT,                           -- Build it sent to Claude: started or failed
+    build_url TEXT,                              -- the Claude session that took the build
+    build_note TEXT,                             -- why sending it failed, in plain words
+    build_at TEXT
 );
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
@@ -299,6 +303,10 @@ def init():
                 c.execute(f"ALTER TABLE posts ADD COLUMN {col} {kind}")
         if "source" not in {r["name"] for r in c.execute("PRAGMA table_info(campaigns)")}:
             c.execute("ALTER TABLE campaigns ADD COLUMN source TEXT")  # inbox, feed or manual
+        have = {r["name"] for r in c.execute("PRAGMA table_info(ideas)")}
+        for col in ("build_status", "build_url", "build_note", "build_at"):
+            if col not in have:
+                c.execute(f"ALTER TABLE ideas ADD COLUMN {col} TEXT")
 
 
 def rows(sql: str, *args) -> list[dict]:

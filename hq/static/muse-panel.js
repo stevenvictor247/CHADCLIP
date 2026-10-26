@@ -47,6 +47,9 @@
     #muse .mu-group { margin-top:6px; }
     #muse .mu-group > summary { font-size:14px; padding:8px 0; }
     #muse .mu-note { font-size:13px; color:var(--muted); margin-top:4px; }
+    #muse .mu-build { font-size:13px; margin-top:8px; padding:6px 10px; border-radius:8px; background:rgba(148,163,184,.12); }
+    #muse .mu-build.ok { background:rgba(34,197,94,.14); }
+    #muse .mu-build.bad { background:rgba(239,68,68,.14); }
     #muse .mu-empty { padding:18px; text-align:center; color:var(--muted); border:1px dashed var(--line); border-radius:14px; }
     #muse .mu-empty .big { display:block; font-size:34px; margin-bottom:4px; }
     #muse .mu-dropped { font-size:12px; color:var(--muted); margin-top:4px; }
@@ -96,7 +99,12 @@
              <button class="ghost" data-act="later" data-id="${i.id}" ${busy ? "disabled" : ""}>⏸ Later</button>
              <button class="ghost" data-ask="${i.id}" ${busy ? "disabled" : ""}>👎 Not for me</button></div>`;
     } else if (i.status === "approved") {
-      acts = `<div class="mu-acts"><button data-copy="${i.id}">📋 Copy build brief</button>
+      const sent = i.build_status === "started", failed = i.build_status === "failed";
+      const state = sent ? `<div class="mu-build ok">🔨 Sent to Claude ${esc(ago(i.build_at))}. Its build shows up as a new thread in your Claude project.</div>`
+        : failed ? `<div class="mu-build bad">Couldn't send it to Claude: ${esc(i.build_note || "")}</div>`
+        : data.build_ready ? "" : `<div class="mu-build">To have Build it start the build in Claude by itself, add HQ_BUILD_TOKEN in Settings. Until then, copy the brief and paste it to Claude.</div>`;
+      acts = `${state}<div class="mu-acts">${data.build_ready && !sent ? `<button data-send="${i.id}" ${busy ? "disabled" : ""}>🔨 ${failed ? "Try again" : "Send to Claude to build"}</button>` : ""}
+                <button ${data.build_ready && !sent ? 'class="ghost"' : ""} data-copy="${i.id}">📋 Copy build brief</button>
                 <button class="ghost" data-brief="${i.id}">${openBrief.has(i.id) ? "Hide brief" : "Show brief"}</button>
                 <button class="ghost" data-act="built" data-id="${i.id}">✅ Mark built</button>
                 <button class="ghost" data-act="reopen" data-id="${i.id}">Undo</button></div>
@@ -199,6 +207,7 @@
     };
     root.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => decide(+b.dataset.id, b.dataset.act)));
     root.querySelectorAll("[data-ask]").forEach(b => b.addEventListener("click", () => { askingWhy = +b.dataset.ask; render(); }));
+    root.querySelectorAll("[data-send]").forEach(b => b.addEventListener("click", () => decide(+b.dataset.send, "send")));
     root.querySelectorAll("[data-pass]").forEach(b => b.addEventListener("click", () => decide(+b.dataset.pass, "pass", b.dataset.reason)));
     root.querySelectorAll("[data-brief]").forEach(b => b.addEventListener("click", () => {
       const id = +b.dataset.brief; openBrief.has(id) ? openBrief.delete(id) : openBrief.add(id); render();

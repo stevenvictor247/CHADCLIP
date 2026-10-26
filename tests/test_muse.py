@@ -12,7 +12,7 @@ def _fresh(monkeypatch, tmp_path, **env):
     monkeypatch.setenv("HQ_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("HQ_PASSWORD", "")
     for k in ("HQ_MUSE", "HQ_MUSE_EVERY_DAYS", "HQ_MUSE_MONTHLY_BUDGET", "HQ_MUSE_IDEAS", "HQ_MUSE_TO_APPROVALS",
-              "HQ_MODEL_MUSE", "HQ_AGENT_MODEL", "HQ_MUSE_BATCH", "HQ_MUSE_EFFORT"):
+              "HQ_MODEL_MUSE", "HQ_AGENT_MODEL", "HQ_MUSE_BATCH", "HQ_MUSE_EFFORT", "HQ_BUILD_TOKEN", "HQ_BUILD_URL"):
         monkeypatch.delenv(k, raising=False)
     for k, v in env.items():
         monkeypatch.setenv(k, v)
@@ -384,3 +384,59 @@ def test_a_cut_off_answer_is_reported_not_crashed(monkeypatch, tmp_path):
         content=[SimpleNamespace(type="text", text='{"ideas": [{"kind": "bus')], stop_reason="max_tokens"))
     assert hq.muse.run(manual=True).startswith("Claude's answer was cut off")
     assert hq.db.rows("SELECT COUNT(*) n FROM ideas")[0]["n"] == 0
+
+
+def test_build_it_sends_the_brief_to_claude_once(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    _fake_llm(monkeypatch, hq, GOOD)
+    hq.muse.run(manual=True)
+    ids = [r["id"] for r in hq.db.rows("SELECT id FROM ideas ORDER BY id")]
+    # not connected yet: Build it still approves and offers the brief, and nothing is sent
+    monkeypatch.setattr(hq.muse, "_fire", lambda text: (_ for _ in ()).throw(AssertionError("not connected")))
+    assert "paste it to Claude" in hq.muse.decide(ids[0], "build")
+    assert hq.muse.latest()["build_ready"] is False
+    sent = []
+    monkeypatch.setattr(hq.muse, "_fire", lambda text: sent.append(text) or {
+        "type": "routine_fire", "claude_code_session_url": "https://claude.ai/code/session_1"})
+    monkeypatch.setenv("HQ_BUILD_TOKEN", "sk-ant-oat01-test")
+    assert hq.muse.build_ready() and hq.muse.build_url().endswith("/routines/trig_01Vt3RbV228mW37j4qrNzGri/fire")
+    # the Approvals card (dashboard or phone) and the Ideas tab both send it
+    card = hq.db.rows("SELECT id FROM approvals WHERE kind = 'muse_idea' AND payload LIKE ?", f'%"idea_id": {ids[1]}%')[0]
+    assert "Sent to Claude to build it" in hq.approvals.decide(card["id"], "approve")
+    text = sent[0]
+    assert text.startswith(f"Idea #{ids[1]}: ") and "Steven pressed Build it in Agent HQ" in text
+    assert "BUILD BRIEF (written by Muse)" in text and "github.com/stevenvictor247/CHADCLIP" in text
+    assert "sk-ant" not in text                                              # the token never goes in the message
+    row = hq.db.rows("SELECT build_status, build_url FROM ideas WHERE id = ?", ids[1])[0]
+    assert row == {"build_status": "started", "build_url": "https://claude.ai/code/session_1"}
+    assert "already has this one" in hq.muse.start_build(ids[1]) and len(sent) == 1   # never sent twice
+    assert "Only an idea you said Build it to" in hq.muse.start_build(ids[2])
+    # the first idea, approved before the token was added, can be sent from the tab
+    assert "Sent to Claude" in hq.muse.start_build(ids[0]) and len(sent) == 2
+
+
+def test_a_failed_send_is_explained_and_can_be_retried(monkeypatch, tmp_path):
+    import io
+    import urllib.error
+    hq = _fresh(monkeypatch, tmp_path, HQ_BUILD_TOKEN="sk-ant-oat01-secret-token")
+    _fake_llm(monkeypatch, hq, GOOD[:1])
+    hq.muse.run(manual=True)
+    idea = hq.db.rows("SELECT id FROM ideas")[0]["id"]
+    def refuse(text):
+        raise urllib.error.HTTPError("u", 401, "no", {}, io.BytesIO(b'{"error": {"message": "bad token"}}'))
+    monkeypatch.setattr(hq.muse, "_fire", refuse)
+    out = hq.muse.decide(idea, "build")
+    assert "couldn't be sent" in out and "token in Settings doesn't match" in out and "secret" not in out
+    row = hq.db.rows("SELECT build_status, build_note FROM ideas WHERE id = ?", idea)[0]
+    assert row["build_status"] == "failed" and "doesn't match" in row["build_note"]
+    monkeypatch.setattr(hq.muse, "_fire", lambda text: {"claude_code_session_url": "javascript:alert(1)"})
+    client = TestClient(hq.api.app)
+    assert client.post(f"/api/muse/ideas/{idea}/send").status_code == 403          # only from the HQ page
+    r = client.post(f"/api/muse/ideas/{idea}/send", headers={"X-HQ": "1"})
+    assert r.status_code == 200 and "Sent to Claude" in r.json()["message"]
+    assert hq.db.rows("SELECT build_status, build_url FROM ideas WHERE id = ?", idea)[0] == {
+        "build_status": "started", "build_url": None}                         # only claude.ai links are kept
+    assert client.post("/api/muse/ideas/999/send", headers={"X-HQ": "1"}).status_code == 404
+    # a changed address must still be an Anthropic routine address
+    monkeypatch.setenv("HQ_BUILD_URL", "https://evil.example.com/fire")
+    assert hq.muse.build_ready() is False

@@ -9,7 +9,8 @@ Code, not Claude, then:
 - drops ideas that repeat anything already built, already shown to you, parked or turned down (KNOWN below, plus
   every idea Muse ever had), and anything that breaks HQ's rules (OFF_LIMITS below);
 - ranks the rest by one honest number: expected first-year profit for each hour of work (see score());
-- puts the top few in Approvals (dashboard and Telegram). "Build it" writes a build brief to paste to Claude.
+- puts the top few in Approvals (dashboard and Telegram). "Build it" writes a build brief and, once HQ_BUILD_TOKEN is
+  set, sends it straight to Claude in Steven's project, where a new thread builds it (see start_build()).
 
 Money: before a weekly round, free checks in code decide whether there is anything to do (no room for new ideas
 because you haven't answered the last ones, too soon since the last round, the month's cap reached), so an idle week
@@ -21,6 +22,8 @@ Every round, weekly or not, stays under HQ_DAILY_BUDGET and Muse's own monthly c
 import json
 import os
 import re
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from . import approvals, db, ledger, llm
@@ -797,6 +800,8 @@ def decide(idea_id: int, decision: str, reason: str | None = None, from_card: bo
                    "approved" if decision in ("build", "built") else "rejected", db.now(), i["approval_id"])
     if decision == "build":
         db.log("Muse", f"Steven wants to build \"{i['title']}\". The build brief is on the Ideas tab.")
+        if build_ready():
+            return f"👍 \"{i['title']}\" is approved. " + start_build(idea_id)
         return f"👍 \"{i['title']}\" is approved. Its build brief is on the Ideas tab: paste it to Claude to build it."
     if decision == "pass":
         db.log("Muse", f"Steven passed on \"{i['title']}\"" + (f": {reason}" if reason else ""))
@@ -807,6 +812,72 @@ def decide(idea_id: int, decision: str, reason: str | None = None, from_card: bo
         db.log("Muse", f"\"{i['title']}\" is built")
         return f"🎉 \"{i['title']}\" is marked built."
     return f"\"{i['title']}\" is back with the new ideas."
+
+
+# ---- Build it -> Claude ----------------------------------------------------------------------------------
+# "Build it" fires a Claude Code routine over HTTP (its API trigger). The routine hands the brief to Steven's Claude
+# project, which starts a new thread that builds it in CHADCLIP. The token is made once on claude.ai/code/routines
+# (open "HQ Build it button", Add another trigger, API, Generate token) and pasted into Settings; it only lets HQ start
+# that one routine, and never leaves this PC except to Anthropic.
+BUILD_URL = "https://api.anthropic.com/v1/claude_code/routines/trig_01Vt3RbV228mW37j4qrNzGri/fire"
+BUILD_URL_RE = re.compile(r"^https://api\.anthropic\.com/v1/claude_code/routines/trig_[A-Za-z0-9]+/fire$")
+
+
+def build_url() -> str:
+    return (os.getenv("HQ_BUILD_URL") or "").strip() or BUILD_URL
+
+
+def build_ready() -> bool:
+    return bool((os.getenv("HQ_BUILD_TOKEN") or "").strip()) and bool(BUILD_URL_RE.match(build_url()))
+
+
+def _fire(text: str) -> dict:
+    req = urllib.request.Request(build_url(), method="POST", data=json.dumps({"text": text}).encode(), headers={
+        "Authorization": "Bearer " + os.getenv("HQ_BUILD_TOKEN", "").strip(), "anthropic-version": "2026-10-21",
+        "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read().decode() or "{}")
+
+
+def _fire_error(e: Exception) -> str:
+    if isinstance(e, urllib.error.HTTPError):
+        try:
+            msg = json.loads(e.read().decode()).get("error", {}).get("message", "")
+        except Exception:
+            msg = ""
+        why = {401: "the build token in Settings doesn't match (make a new one and paste it again)",
+               400: "Claude turned the request down (is the routine paused?)",
+               404: "the routine wasn't found (check HQ_BUILD_URL)",
+               429: "too many builds this hour, try again later"}.get(e.code, f"Claude answered {e.code}")
+        return why + (f": {msg[:150]}" if msg and e.code not in (401, 429) else "")
+    return f"couldn't reach Claude ({type(e).__name__})"
+
+
+def start_build(idea_id: int) -> str:
+    """Send an approved idea's build brief to Claude. Each idea is sent once; a failed send can be tried again."""
+    i = _row(idea_id)
+    if i["status"] != "approved":
+        return "Only an idea you said Build it to can be sent to Claude."
+    if i.get("build_status") == "started":
+        return "Claude already has this one. Look for its thread in your Claude project."
+    if not build_ready():
+        return "Build it isn't connected to Claude yet: add HQ_BUILD_TOKEN in Settings, or copy the build brief."
+    text = (f"Idea #{i['id']}: {i['title']}\nSteven pressed Build it in Agent HQ on {datetime.now():%A %d %B %Y %H:%M}."
+            f"\n\nBUILD BRIEF (written by Muse)\n{brief(i)}")[:60000]
+    try:
+        out = _fire(text)
+    except Exception as e:
+        note = _fire_error(e)
+        db.execute("UPDATE ideas SET build_status = 'failed', build_note = ?, build_at = ? WHERE id = ?",
+                   note, db.now(), idea_id)
+        db.log("Muse", f"Couldn't send \"{i['title']}\" to Claude to build: {note}")
+        return f"It couldn't be sent to Claude to build: {note}. Try again from the Ideas tab, or copy the brief."
+    url = out.get("claude_code_session_url")
+    url = url if isinstance(url, str) and url.startswith("https://claude.ai/") else None
+    db.execute("UPDATE ideas SET build_status = 'started', build_url = ?, build_note = NULL, build_at = ? WHERE id = ?",
+               url, db.now(), idea_id)
+    db.log("Muse", f"Sent \"{i['title']}\" to Claude to build")
+    return "Sent to Claude to build it: a new thread for it shows up in your Claude project shortly."
 
 
 def _decide_card(payload: dict, decision: str) -> str:
@@ -876,6 +947,7 @@ def latest() -> dict:
         "has_llm": llm.HAS_LLM,
         "reasons": list(REASONS),
         "kinds": KINDS,
+        "build_ready": build_ready(),
         "how": "Muse ranks every idea by expected first-year profit for each hour of work: the middle of its money "
                "range times how sure Muse is, minus running costs, times 12, minus start-up costs, divided by your "
                "hours plus Claude's build time.",
