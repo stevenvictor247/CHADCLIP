@@ -97,7 +97,8 @@ def test_upload_matches_opponent_by_name_or_choice(tmp_path):
     assert any(x["opponent"] == "Ferris State" and x["uploaded"] for x in depth.listing())
 
 
-def test_monday_asks_when_nothing_is_uploaded_and_only_once(_setup):
+def test_monday_asks_when_nothing_is_uploaded_and_only_once(_setup, monkeypatch):
+    monkeypatch.setattr(season, "site_for", lambda opp: None)
     assert depth.run_if_due(MONDAY) == "asked" and "Northern Michigan" in _setup[0]
     assert depth.run_if_due(MONDAY) is None
     assert depth.run_if_due(datetime(2026, 10, 27, 9, 0)) is None
@@ -162,3 +163,72 @@ def test_monday_5pm_queues_tells_for_the_newest_export_or_asks(_setup):
     assert "NMU new.xlsx" in t["params"] and "Northern Michigan" in t["params"]
     for n in ("NMU old.xlsx", "NMU new.xlsx", "Ferris.xlsx"):
         (FOOTBALL_INBOX / n).unlink()
+
+
+# ---- fetching from the team's website ----
+
+ROSTER_TABLE = """<h2>Roster</h2><table><thead><tr><th>No.</th><th>Name</th><th>Pos.</th><th>Cl.</th></tr></thead><tbody>
+<tr><td>15</td><td>Connor Test</td><td>QB</td><td>Sr.</td></tr><tr><td>5</td><td>Devin Back</td><td>RB</td><td>Jr.</td></tr>
+<tr><td>7</td><td>JT Wide</td><td>WR</td><td>So.</td></tr><tr><td>73</td><td>Kaiden Tackle</td><td>OL</td><td>Sr.</td></tr>
+<tr><td>50</td><td>Dee Fender</td><td>LB</td><td>Sr.</td></tr></tbody></table>"""
+ROSTER_CARDS = """<ul><li class="sidearm-roster-player"><span class="sidearm-roster-player-jersey-number">9</span>
+<div class="sidearm-roster-player-name"><a href="/x">Jayden Cards</a></div><span class="sidearm-roster-player-position">QB</span></li></ul>"""
+STATS = """<h3>Rushing</h3><table><tr><th>Player</th><th>GP-GS</th><th>Att</th><th>Gain</th></tr>
+<tr><td>Back, Devin</td><td>6-6</td><td>90</td><td>400</td></tr><tr><td>Total</td><td>6</td><td>200</td><td>0</td></tr></table>
+<h3>Passing</h3><table><tr><th>Player</th><th>GP-GS</th><th>Att-Cmp-Int</th></tr><tr><td>Connor Test</td><td>6-6</td><td>150-90-4</td></tr></table>
+<h3>Receiving</h3><table><tr><th>Player</th><th>GP-GS</th><th>Rec</th></tr><tr><td>J. Wide</td><td>6-5</td><td>30</td></tr></table>"""
+
+
+def test_parses_roster_tables_cards_and_stats():
+    from hq.football import fetch
+    roster = fetch.roster_players(fetch.parse(ROSTER_TABLE))
+    assert [(p["no"], p["name"], p["pos"]) for p in roster][:2] == [("15", "Connor Test", "QB"), ("5", "Devin Back", "RB")]
+    cards = fetch.roster_players(fetch.parse(ROSTER_CARDS))
+    assert cards == [{"name": "Jayden Cards", "pos": "QB", "no": "9"}]
+    stats = fetch.stat_lines(fetch.parse(STATS))
+    assert stats["devin back"] == {"gs": 6, "reps": 90, "no": ""} and stats["connor test"]["reps"] == 150
+    rows = fetch.combine(roster, stats)
+    by = {r[2]: r for r in rows}
+    assert by["Devin Back"][3:5] == [6, 90] and by["JT Wide"][3:5] == [5, 30]   # "J. Wide" matched by initial + last name
+    assert "Dee Fender" not in by                                             # defense is left out
+
+
+def test_fetch_writes_the_sheet_and_the_agent_uses_it(monkeypatch):
+    from hq.football import fetch
+    pages = {"/sports/football/roster/2026": ROSTER_TABLE, "/sports/football/stats/2026": STATS}
+    monkeypatch.setattr(fetch, "_get", lambda url: pages[url.split(".com")[1]] if url.split(".com")[1] in pages
+                        else (_ for _ in ()).throw(fetch.FetchError(f"{url} answered 404")))
+    got = fetch.fetch("Northern Michigan", "https://example.com", 2026)
+    assert got["players"] == 4 and got["with_stats"] == 3 and any("line starts" in n for n in got["notes"])
+    assert depth.read(depth.input_for("Northern Michigan"))["players"][0]["name"]
+    msg = Depth().run({"params": '{"fetch": true}'})
+    assert "ready for your OK" in msg or "website" in msg or "couldn't" in msg.lower()
+
+
+def test_fetch_failures_say_which_page_failed(monkeypatch):
+    from hq.football import fetch
+    monkeypatch.setattr(fetch, "_get", lambda url: (_ for _ in ()).throw(fetch.FetchError(f"{url} answered 404")))
+    with pytest.raises(fetch.FetchError, match="roster: .*404"):
+        fetch.fetch("Northern Michigan", "https://example.com", 2026)
+    monkeypatch.setattr(fetch, "_get", lambda url: "<html><body>nothing here</body></html>")
+    with pytest.raises(fetch.FetchError, match="no roster table"):
+        fetch.fetch("Northern Michigan", "https://example.com", 2026)
+    monkeypatch.setattr(season, "site_for", lambda opp: None)
+    with pytest.raises(fetch.FetchError, match="don't have a website"):
+        fetch.fetch("Northern Michigan")
+
+
+def test_agent_falls_back_to_the_upload_when_the_site_fails(tmp_path, monkeypatch):
+    from hq.football import fetch
+    monkeypatch.setattr(fetch, "fetch", lambda opp: (_ for _ in ()).throw(fetch.FetchError("site down")))
+    assert "couldn't fetch" in Depth().run({"params": '{"fetch": true}'}).lower()           # nothing uploaded: says so
+    depth.save_upload("x.xlsx", make_xlsx(tmp_path / "x.xlsx").read_bytes(), "Northern Michigan")
+    assert "ready for your OK" in Depth().run({"params": '{"fetch": true}'})
+    preview = db.rows("SELECT preview FROM approvals WHERE status = 'pending'")
+    assert preview and "site down" in preview[0]["preview"]
+
+
+def test_monday_fetches_when_the_upload_is_missing_or_old(tmp_path, monkeypatch):
+    monkeypatch.setattr(season, "site_for", lambda opp: "https://example.com")
+    assert depth.run_if_due(MONDAY) == "queued"
+    assert '"fetch": "auto"' in db.rows("SELECT params FROM tasks")[0]["params"]

@@ -729,10 +729,11 @@ def football_depth_upload(request: Request, file: UploadFile = File(...), oppone
 
 
 @app.post("/api/football/depth/build")
-def football_depth_build(request: Request, opponent: str | None = None):
+def football_depth_build(request: Request, opponent: str | None = None, fetch: bool = False):
     _from_hq_page(request)
     return {"task_id": db.create_task("Depth", "Personnel sheet" + (f": {opponent}" if opponent else ""),
-                                      {"opponent": opponent} if opponent else {}, created_by="Steven")}
+                                      {**({"opponent": opponent} if opponent else {}), **({"fetch": True} if fetch else {})},
+                                      created_by="Steven")}
 
 
 @app.post("/api/football/print/pause")

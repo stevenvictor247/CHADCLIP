@@ -254,6 +254,23 @@ def build_pdf(opponent: str, data: dict, path: Path, today: date | None = None) 
     return path
 
 
+def write_sheet(opponent: str, rows: list[list]) -> Path:
+    """Save rows (POS, NO, NAME, GS, REPS, DEPTH) as the opponent's sheet, the same file an upload makes."""
+    import openpyxl
+    DIR.mkdir(parents=True, exist_ok=True)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Fetched from the team's website " + date.today().isoformat()])
+    ws.append(["POS", "NO", "NAME", "GS", "REPS", "DEPTH"])
+    for r in rows:
+        ws.append(r)
+    for old in DIR.glob(f"{safe_name(opponent)}.*"):
+        old.unlink(missing_ok=True)
+    dest = DIR / f"{safe_name(opponent)}.xlsx"
+    wb.save(dest)
+    return dest
+
+
 def input_for(opponent: str) -> Path | None:
     """The newest uploaded sheet for an opponent."""
     try:
@@ -306,8 +323,9 @@ def run_if_due(now: datetime | None = None) -> str | None:
     state["week"] = monday
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps(state), encoding="utf-8")
-    if input_for(g["opponent"]):
-        db.create_task("Depth", f"Personnel sheet: {g['opponent']}", {"opponent": g["opponent"]}, created_by="Schedule")
+    if input_for(g["opponent"]) or season.site_for(g["opponent"]):
+        db.create_task("Depth", f"Personnel sheet: {g['opponent']}", {"opponent": g["opponent"], "fetch": "auto"},
+                       created_by="Schedule")
         return "queued"
     relay.notify(f"📋 Depth\nI need the {g['opponent']} depth chart and stats to make this week's personnel sheet. "
                  "Upload them in the Warrior Village tab.")

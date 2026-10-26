@@ -99,7 +99,7 @@
       </section>
       <section id="fbdepth"><h2>📋 Monday personnel sheet</h2><div id="fbdepthbody"></div>
         <div class="row"><select id="fbdepthopp"></select><label class="ghost" style="cursor:pointer">Upload depth chart + stats<input type="file" id="fbdepthpick" accept=".xlsx,.xlsm,.csv" style="display:none"></label>
-          <button class="ghost" id="fbdepthbuild">Build now</button></div>
+          <button class="ghost" id="fbdepthbuild">Build now</button><button class="ghost" id="fbdepthfetch">Fetch from their site &amp; build</button></div>
         <div class="muted" style="margin-top:6px">One Excel or CSV per opponent with POS, NO, NAME and GS (starts) plus carries, attempts or catches. Every Monday Depth builds that week's sheet and asks for your OK.</div>
         <div class="msg" id="fbdepthmsg"></div>
       </section>
@@ -327,6 +327,12 @@
   $("fbdepthbuild").onclick = async () => {
     const r = await post("/api/football/depth/build?opponent=" + encodeURIComponent($("fbdepthopp").value));
     $("fbdepthmsg").textContent = r.ok ? "Depth is building it. It will show up in Approvals." : r.message;
+    if (r.ok) refresh();
+  };
+
+  $("fbdepthfetch").onclick = async () => {
+    const r = await post("/api/football/depth/build?fetch=true&opponent=" + encodeURIComponent($("fbdepthopp").value));
+    $("fbdepthmsg").textContent = r.ok ? "Depth is fetching their roster and stats. You'll get a text when it's done (or why it couldn't)." : r.message;
     if (r.ok) refresh();
   };
 
