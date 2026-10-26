@@ -288,6 +288,19 @@ CREATE TABLE IF NOT EXISTS recaps (
     created_at TEXT NOT NULL,
     decided_at TEXT
 );
+CREATE TABLE IF NOT EXISTS clip_packs (
+    id INTEGER PRIMARY KEY,
+    client TEXT NOT NULL,
+    owner_note TEXT NOT NULL,                    -- how the podcaster gave permission and the episode
+    source TEXT,
+    fingerprint TEXT NOT NULL UNIQUE,            -- same episode never costs Claude or Chad twice
+    folder TEXT NOT NULL,
+    pack TEXT NOT NULL,                          -- JSON: the Recap text and each clip's file, title and caption
+    price_cents INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending, approved, rejected
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,
