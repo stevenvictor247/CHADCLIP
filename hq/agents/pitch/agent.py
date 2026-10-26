@@ -9,7 +9,7 @@ from ... import approvals, db, llm, relay
 from ...config import CONFIG_DIR, model_for
 from ..base import Agent
 from ..chad import twitch
-from . import finder, mailer
+from . import finder, mailer, score as lead_score
 
 SYSTEM = """You write the first message from Steven, a clipper, to a streamer or podcaster who might pay him to clip
 their content for TikTok, YouTube Shorts and Instagram Reels.
@@ -276,6 +276,9 @@ class Pitch(Agent):
                 break
             checked += 1
             info = twitch.profile(s["id"])
+            pts, why = lead_score.lookup(s["login"], s["id"], info["bio"], info["type"], s["viewers"])
+            if pts < int(cfg.get("min_score", lead_score.MIN_SHOWN)):   # free check first: no email lookup or tokens on weak leads
+                continue
             found = finder.find_email("twitch", s["login"], info["bio"])
             email = found and found["email"]
             if not email:  # Pitch only drafts for creators it can email
@@ -287,7 +290,7 @@ class Pitch(Agent):
             if clips:
                 facts.append(f"Their most-viewed clip lately: \"{clips[0]['title']}\" ({clips[0]['views']:,} views).")
             lead = {"name": s["name"], "platform": "twitch", "handle": s["login"], "followers": s["viewers"],
-                    "contact": email, "notes": " ".join(facts),
+                    "contact": email, "notes": " ".join(facts), "score": pts, "score_why": why,
                     "email_source": found and finder.describe(found)}
             made.append(self.draft_lead(lead, quiet=True))
         if not made:
@@ -321,8 +324,9 @@ class Pitch(Agent):
         text = f"Subject: {draft['subject']}\n\n{draft['message']}"
         ts = db.now()
         lid = db.execute("INSERT INTO leads (name, platform, handle, followers, contact, notes, pitch, status, created_at, "
-                         "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'drafted', ?, ?)", lead["name"], lead["platform"],
-                         lead["handle"], lead.get("followers"), lead.get("contact"), lead.get("notes"), text, ts, ts)
+                         "updated_at, score, score_why) VALUES (?, ?, ?, ?, ?, ?, ?, 'drafted', ?, ?, ?, ?)", lead["name"],
+                         lead["platform"], lead["handle"], lead.get("followers"), lead.get("contact"), lead.get("notes"),
+                         text, ts, ts, lead.get("score"), lead.get("score_why"))
         to = mailer.address_in(lead.get("contact"))
         by_email = bool(to and mailer.configured())
         how = (f"Pressing Send email sends this from {mailer.credentials()[0]} to {to}.\n" if by_email else "")

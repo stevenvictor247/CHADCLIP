@@ -375,3 +375,55 @@ def test_scheduled_followup_check_is_free_when_nothing_is_due(_setup):
     assert pitch.nothing_to_do("x", {"followups": True}) is True         # pitched, but not yet due
     db.execute("UPDATE leads SET followup_at = '2000-01-01T00:00:00+00:00'")
     assert pitch.nothing_to_do("x", {"followups": True}) is False        # due: the round runs
+
+
+# ---- lead scoring ----
+
+from hq.agents.chad import twitch as twitch_mod
+from hq.agents.pitch import score as lead_score
+
+
+def test_score_prefers_mid_size_active_streamers():
+    good, _ = lead_score.score(3000, 12, "affiliate", "")
+    tiny, _ = lead_score.score(40, 0, "", "")
+    assert good >= 8 and tiny < lead_score.MIN_SHOWN
+
+
+def test_score_drops_streamers_with_a_clip_team():
+    plain, _ = lead_score.score(3000, 12, "", "I play games")
+    teamed, why = lead_score.score(3000, 12, "", "Clips by @editor, business: x@y.com")
+    assert teamed <= plain - 4 and "clip team" in why
+
+
+def test_score_handles_unknowns_and_stays_in_range():
+    pts, why = lead_score.score(None, None)
+    assert 1 <= pts <= 10 and "unknown" in why
+    assert lead_score.score(10**9, 99, "partner", "")[0] <= 10
+
+
+def test_find_skips_weak_leads_before_spending_tokens(monkeypatch):
+    streamers = [{"login": "tiny", "name": "Tiny", "id": "1", "viewers": 60, "game": "x"},
+                 {"login": "solid", "name": "Solid", "id": "2", "viewers": 300, "game": "y"}]
+    monkeypatch.setattr(twitch_mod, "small_streamers", lambda *a, **k: streamers)
+    monkeypatch.setattr(twitch_mod, "profile", lambda uid: {"bio": "", "type": "affiliate" if uid == "2" else ""})
+    monkeypatch.setattr(twitch_mod, "top_clips", lambda *a, **k: [])
+    monkeypatch.setattr(twitch_mod, "follower_count", lambda uid: 40 if uid == "1" else 3000)
+    monkeypatch.setattr(twitch_mod, "recent_vods", lambda uid, n=3: [{}] * (0 if uid == "1" else 10))
+    monkeypatch.setattr(pitch_mod.finder, "find_email",
+                        lambda *a, **k: {"email": "a@example.com", "source": "bio", "url": ""})
+    monkeypatch.setattr(pitch_mod.finder, "describe", lambda f: "from bio")
+    asked = []
+    monkeypatch.setattr(llm, "ask_json", lambda *a, **k: asked.append(1) or dict(DRAFT))
+    run({"find": 5})
+    rows = db.rows("SELECT handle, score, score_why FROM leads")
+    assert [r["handle"] for r in rows] == ["solid"] and rows[0]["score"] >= 8 and rows[0]["score_why"]
+    assert len(asked) == 1
+
+
+def test_follower_api_failure_falls_back_to_viewers(monkeypatch):
+    def boom(uid):
+        raise RuntimeError("403")
+    monkeypatch.setattr(twitch_mod, "follower_count", boom)
+    monkeypatch.setattr(twitch_mod, "recent_vods", lambda *a, **k: [{}] * 6)
+    pts, why = lead_score.lookup("x", "1", "", "", viewers=200)
+    assert pts >= 4 and "4,000 followers" in why
