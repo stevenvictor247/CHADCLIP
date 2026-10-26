@@ -200,10 +200,13 @@ price.
 Muse lives in the Writers' Room on Market Street in HQ Town and thinks up new ways for HQ to make money and run better:
 new businesses, new agents, add-ons to what HQ already does, and HQ upgrades. Its ideas are on the **Ideas** tab.
 
-- About once a week (`HQ_MUSE_EVERY_DAYS`, 7) Muse makes one Claude call (Sonnet, up to about $0.20) for
-  `HQ_MUSE_IDEAS` ideas (5). Before that, free checks in code skip the round when it's too soon, when last round's
-  ideas are still waiting for your answer, or when its monthly cap (`HQ_MUSE_MONTHLY_BUDGET`, $3) or the day's
-  `HQ_DAILY_BUDGET` would be passed. **Brainstorm now** (optionally with a topic) skips the wait but never the caps.
+- About once a week (`HQ_MUSE_EVERY_DAYS`, 7) the Boss sends Muse on its round: one Claude call (Sonnet, medium
+  effort) through Claude's half-price batch queue, up to about $0.07, asking only for as many ideas as there's room
+  for (up to `HQ_MUSE_IDEAS`, 5, open at once). The ideas land within the hour. Before that, free checks in code skip
+  the round when it's too soon, when there's no room for at least 3 new ideas because the last ones still wait for
+  your answer, or when its monthly cap (`HQ_MUSE_MONTHLY_BUDGET`, $3) or the day's `HQ_DAILY_BUDGET` would be passed.
+  **Brainstorm now** (optionally with a topic) answers in a minute at full price (up to about $0.14) and skips the
+  wait but never the caps.
 - Code, not Claude, drops ideas that repeat anything already built, already shown to you on an ideas page, parked
   (the cloud server) or turned down, and anything against HQ's rules, then ranks the rest by expected first-year
   profit for each hour of work.

@@ -1,7 +1,7 @@
 """Muse, the Creative Director: thinks up new ways for HQ to make money and run better, ranks them, and brings the
 best ones to Approvals.
 
-Once a week (or when you press "Brainstorm now", or the Boss asks), Muse gathers the facts HQ already has for free
+Once a week the Boss sends Muse on its round (or you press "Brainstorm now", or ask the Boss), and Muse gathers the facts HQ already has for free
 (the team, the money, the views, the campaigns, the leads, Sweep's findings and your past yes and no answers) and makes
 one Claude call for a handful of ideas: new businesses, new agents, add-ons to what HQ already does, and HQ upgrades.
 
@@ -11,9 +11,11 @@ Code, not Claude, then:
 - ranks the rest by one honest number: expected first-year profit for each hour of work (see score());
 - puts the top few in Approvals (dashboard and Telegram). "Build it" writes a build brief to paste to Claude.
 
-Money: before a scheduled round, free checks in code decide whether there is anything to do (open ideas you haven't
-looked at yet, too soon since the last round, the month's cap reached), so an idle week costs nothing. Every round,
-scheduled or not, stays under HQ_DAILY_BUDGET and Muse's own monthly cap (HQ_MUSE_MONTHLY_BUDGET).
+Money: before a weekly round, free checks in code decide whether there is anything to do (no room for new ideas
+because you haven't answered the last ones, too soon since the last round, the month's cap reached), so an idle week
+costs nothing. The weekly round goes through Claude's batch queue at half price (no one is waiting on it; the ideas
+land within the hour, a day at most), asks only for as many ideas as there is room for, and thinks at medium effort.
+Every round, weekly or not, stays under HQ_DAILY_BUDGET and Muse's own monthly cap (HQ_MUSE_MONTHLY_BUDGET).
 """
 
 import json
@@ -31,7 +33,11 @@ KINDS = {"business": "New business", "agent": "New agent", "addon": "Add-on", "h
 EFFORTS = ("small", "medium", "large")
 BUILD_HOURS = {"small": 2, "medium": 6, "large": 15}   # Claude's build work, counted as if it were hours of yours
 REASONS = ("Too expensive", "Too much work", "Not my thing", "Already doing it", "Bad timing")
-MAX_TOKENS = 16000
+MAX_TOKENS = 12000          # thinking plus up to 8 short ideas fits well inside this; a cut-off answer is wasted money
+PROMPT_TOKENS = 8000        # a little over what the prompt is (the no-repeat list is most of it), for the estimate
+BATCH_RATE = 0.5            # Claude's batch queue charges half the list price
+MIN_NEW = 3                 # a weekly round waits until there is room for at least this many new ideas
+BATCH_DAYS_MAX = 26 / 24    # the queue finishes within 24 hours; after this a round is given up and retried
 HOUR_VALUE = 15   # dollars: what an hour of Steven's time saved is worth, for ideas that save time instead of earning
 
 
@@ -60,6 +66,16 @@ def to_approvals() -> int:
 
 def monthly_budget() -> float:
     return max(0.0, _num("HQ_MUSE_MONTHLY_BUDGET", 3))
+
+
+def use_batch() -> bool:
+    """The weekly round goes through the half-price batch queue unless HQ_MUSE_BATCH=false."""
+    return os.getenv("HQ_MUSE_BATCH", "true").strip().lower() not in ("false", "0", "no", "off")
+
+
+def effort() -> str:
+    e = os.getenv("HQ_MUSE_EFFORT", "medium").strip().lower()
+    return e if e in ("low", "medium", "high") else "medium"
 
 
 # ---- what Muse must not pitch again ----------------------------------------------------------------------
@@ -376,7 +392,8 @@ Numbers, per idea:
 - effort: how much Claude has to build (small = one pull request, medium = two or three, large = a project).
 - effort_hours: Steven's own hours in the first month: sign-ups, setup, his part of running it.
 
-Write for Steven: short, plain sentences, no hype, no jargon. Titles under 8 words."""
+Write for Steven: short, plain sentences, no hype, no jargon. Titles under 8 words. Keep every field tight: a pitch
+under 60 words, steps under 15 words each, one sentence each for why_now, steven_does and risks."""
 
 ITEM = {
     "type": "object",
@@ -421,7 +438,7 @@ STEVEN'S VISION FILE
 {_vision()}
 
 HQ TODAY (live numbers)
-{json.dumps(facts(), indent=1, default=str)}
+{json.dumps(facts(), separators=(",", ":"), default=str)}
 
 ALREADY BUILT, SHOWN, PARKED OR TURNED DOWN (never pitch these again)
 {known}
@@ -453,10 +470,12 @@ def _save_state(s: dict):
     tmp.replace(STATE_PATH)
 
 
-def round_cost_estimate() -> float:
-    """The most one round can cost: a full answer plus the prompt, on Muse's model."""
+def round_cost_estimate(weekly: bool = False) -> float:
+    """The most one round can cost: the prompt plus a full answer, on Muse's model. A weekly round through the batch
+    queue costs half."""
     price_in, price_out = PRICES.get(model_for("muse"), UNKNOWN_PRICE)
-    return round((12000 * price_in + MAX_TOKENS * price_out) / 1_000_000, 3)
+    rate = BATCH_RATE if weekly and use_batch() else 1.0
+    return round((PROMPT_TOKENS * price_in + MAX_TOKENS * price_out) * rate / 1_000_000, 3)
 
 
 def open_ideas() -> int:
@@ -473,9 +492,14 @@ def _days_since_round(state: dict | None = None) -> float | None:
         return None
 
 
-def money_blocker() -> str | None:
+def pending() -> dict | None:
+    """The weekly round waiting in Claude's batch queue, if there is one."""
+    return _state().get("batch")
+
+
+def money_blocker(weekly: bool = False) -> str | None:
     """Why a round can't spend right now, or None. Holds for every round, even when you press the button."""
-    est = round_cost_estimate()
+    est = round_cost_estimate(weekly)
     cap = monthly_budget()
     if cap <= 0:
         return "Muse's monthly budget (HQ_MUSE_MONTHLY_BUDGET) is 0, so Muse is switched off."
@@ -488,20 +512,23 @@ def money_blocker() -> str | None:
 
 
 def why_not_now(manual: bool = False) -> str | None:
-    """The free look before a round. None means go ahead. A scheduled round also waits for the week to pass and for
-    Steven to go through the open ideas, so ideas never pile up unread and an idle week costs nothing."""
+    """The free look before a round. None means go ahead. A weekly round also waits for the week to pass and for room
+    for at least MIN_NEW new ideas, so ideas never pile up unread and an idle week costs nothing."""
     if not llm.HAS_LLM:
         return "Muse needs the Anthropic API key (Settings) to think up ideas."
+    if pending():
+        return "Muse's weekly round is with Claude's half-price queue. The ideas land here within the hour, a day at most."
     if not enabled() and not manual:
         return "Muse's weekly round is switched off (HQ_MUSE=false). Brainstorm now still works."
-    blocked = money_blocker()
+    blocked = money_blocker(weekly=not manual)
     if blocked:
         return blocked
     if manual:
         return None
     n = open_ideas()
-    if n >= per_round():
-        return f"{n} ideas are still waiting for your answer on the Ideas tab, so Muse waits before thinking up more."
+    if per_round() - n < MIN_NEW:
+        return (f"{n} ideas are still waiting for your answer on the Ideas tab, so Muse waits until there's room for "
+                f"at least {MIN_NEW} new ones.")
     days = _days_since_round()
     if days is not None and days < every_days():
         return f"Next round in about {max(1, round(every_days() - days))} day(s)."
@@ -611,19 +638,54 @@ def sift(raw_ideas: list[dict]) -> tuple[list[dict], list[str]]:
     return kept, dropped
 
 
+def _params(focus: str | None, n: int) -> dict:
+    """The one Claude request a round makes, the same whether it goes live or through the batch queue."""
+    return dict(model=model_for("muse"), max_tokens=MAX_TOKENS, system=SYSTEM,
+                messages=[{"role": "user", "content": prompt(focus, n)}], thinking={"type": "adaptive"},
+                output_config={"effort": effort(), "format": {"type": "json_schema", "schema": SCHEMA}})
+
+
+def wanted(manual: bool) -> int:
+    """How many ideas to ask for. A weekly round only fills the free places, so Claude never writes ideas that would
+    sit behind ones you haven't answered yet."""
+    return per_round() if manual else max(MIN_NEW, per_round() - open_ideas())
+
+
 def run(focus: str | None = None, manual: bool = False) -> str:
-    """One round. Free checks first; then one Claude call; then code sifts, ranks and files the ideas."""
+    """One round. Free checks first; then one Claude call (the weekly round through the half-price batch queue); then
+    code sifts, ranks and files the ideas."""
     mark_built_agents()
     blocked = why_not_now(manual)
     if blocked:
         return ("Skipped: " if not manual else "") + blocked
-    n = per_round()
+    n = wanted(manual)
     state = _state()
     state["last_round_at"] = db.now()   # saved before the call: a failing round must not be retried every tick
     _save_state(state)
-    response = llm.create(model_for("muse"), SYSTEM, [{"role": "user", "content": prompt(focus, n)}], effort="high",
+    params = _params(focus, n)
+    if not manual and use_batch():
+        batch = llm.client().messages.batches.create(requests=[{"custom_id": "muse", "params": params}])
+        state["batch"] = {"id": batch.id, "at": db.now(), "n": n, "focus": focus or None}
+        _save_state(state)
+        out = (f"Asked Claude for {n} ideas through the half-price queue. They land on the Ideas tab within the hour, "
+               "a day at most.")
+        db.log("Muse", out)
+        return out
+    p = dict(params)
+    response = llm.create(p.pop("model"), p.pop("system"), p.pop("messages"), effort=effort(),
                           max_tokens=MAX_TOKENS, output_schema=SCHEMA, agent="Muse")
-    data = json.loads(llm.text_of(response) or "{}")
+    return _file(llm.text_of(response), focus, getattr(response, "stop_reason", None))
+
+
+def _file(text: str, focus: str | None, stop_reason: str | None = None) -> str:
+    """Code's half of a round: sift, rank, save, and bring the best to Approvals."""
+    try:
+        data = json.loads(text or "{}")
+    except ValueError:
+        out = ("Claude's answer was cut off before the ideas were complete" if stop_reason == "max_tokens"
+               else "Claude's answer couldn't be read") + ", so this round added nothing."
+        db.log("Muse", out)
+        return out
     kept, dropped = sift(data.get("ideas") or [])
     for i in kept:
         i["id"] = save(i, focus)
@@ -650,6 +712,70 @@ def run(focus: str | None = None, manual: bool = False) -> str:
         out += f" Dropped {len(dropped)}: " + "; ".join(dropped)
     db.log("Muse", out[:600])
     return out
+
+
+# ---- the half-price queue --------------------------------------------------------------------------------
+
+def _age_days(at: str) -> float:
+    try:
+        return (datetime.now(timezone.utc) - datetime.fromisoformat(at)).total_seconds() / 86400
+    except ValueError:
+        return BATCH_DAYS_MAX + 1
+
+
+def batch_ready() -> bool:
+    """Free look (one status check, no tokens): is the weekly round back from the queue, or overdue?"""
+    b = pending()
+    if not b:
+        return False
+    if _age_days(b.get("at") or "") > BATCH_DAYS_MAX:
+        return True
+    try:
+        return llm.client().messages.batches.retrieve(b["id"]).processing_status == "ended"
+    except Exception:
+        return False   # offline for a moment: look again at the next check
+
+
+def _give_up(b: dict, why: str) -> str:
+    """A round that came back without ideas is tried again in about a day, not a week. Failed requests aren't billed."""
+    state = _state()
+    state.pop("batch", None)
+    retry_from = datetime.now(timezone.utc) - timedelta(days=max(0.0, every_days() - 1))
+    state["last_round_at"] = retry_from.isoformat(timespec="seconds")
+    _save_state(state)
+    out = f"Muse's weekly round didn't come back ({why}). Muse tries again in about a day."
+    db.log("Muse", out)
+    return out
+
+
+def collect() -> str:
+    """Pick up the weekly round from the queue, record its half-price cost, and file the ideas."""
+    b = pending()
+    if not b:
+        return "No round waiting in the queue."
+    try:
+        batch = llm.client().messages.batches.retrieve(b["id"])
+        if batch.processing_status != "ended":
+            if _age_days(b.get("at") or "") <= BATCH_DAYS_MAX:
+                return "Muse's ideas are still with Claude's queue."
+            llm.client().messages.batches.cancel(b["id"])
+            return _give_up(b, "it took over a day")
+        results = list(llm.client().messages.batches.results(b["id"]))
+    except Exception as e:
+        return f"Couldn't reach Claude to pick up Muse's ideas ({e}). Muse looks again shortly."
+    got = next((r.result for r in results if r.custom_id == "muse"), None)
+    if got is None or got.type != "succeeded":
+        return _give_up(b, getattr(got, "type", "no answer"))
+    msg = got.message
+    ledger.record("Muse", getattr(msg, "model", None) or model_for("muse"), msg.usage, rate=BATCH_RATE)
+    state = _state()
+    state.pop("batch", None)
+    _save_state(state)
+    if msg.stop_reason == "refusal":
+        out = "Claude declined this round, so it added nothing."
+        db.log("Muse", out)
+        return out
+    return _file(llm.text_of(msg), b.get("focus"), msg.stop_reason)
 
 
 # ---- your answers ----------------------------------------------------------------------------------------
@@ -719,13 +845,13 @@ def summary() -> dict:
                   "ORDER BY score DESC, id DESC LIMIT 3")
     counts = {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM ideas GROUP BY status")}
     return {"open": counts.get("proposed", 0), "approved": counts.get("approved", 0), "built": counts.get("built", 0),
-            "top": top}
+            "top": top, "thinking": bool(pending())}
 
 
 def _next_round_text(state: dict) -> str:
     reason = why_not_now()
     if reason is None:
-        return "Muse will think up new ideas at its next check (within a day)."
+        return "The Boss sends Muse on its weekly round at the next check (within the hour)."
     return reason
 
 
@@ -742,6 +868,8 @@ def latest() -> dict:
         "spent_month": round(spent_this_month(), 2),
         "monthly_budget": monthly_budget(),
         "round_cost": round_cost_estimate(),
+        "weekly_cost": round_cost_estimate(weekly=True),
+        "queued": bool(pending()),
         "every_days": every_days(),
         "per_round": per_round(),
         "model": model_for("muse"),

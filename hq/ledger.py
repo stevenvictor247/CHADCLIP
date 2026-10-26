@@ -12,13 +12,14 @@ def cost_of(model: str, input_tokens: int, output_tokens: int, cache_read: int =
             + output_tokens * price_out) / 1_000_000
 
 
-def record(agent: str, model: str, usage) -> float:
-    """Save one call's token use and return its cost in dollars. Never raises: a meter must not break an agent."""
+def record(agent: str, model: str, usage, rate: float = 1.0) -> float:
+    """Save one call's token use and return its cost in dollars. Never raises: a meter must not break an agent.
+    `rate` is the share of the list price paid: 0.5 for Claude's half-price batch queue."""
     try:
         i, o = usage.input_tokens or 0, usage.output_tokens or 0
         r = getattr(usage, "cache_read_input_tokens", 0) or 0
         w = getattr(usage, "cache_creation_input_tokens", 0) or 0
-        cost = cost_of(model, i, o, r, w)
+        cost = cost_of(model, i, o, r, w) * rate
         db.init()
         db.execute("INSERT INTO llm_usage (agent, model, input_tokens, output_tokens, cache_read_tokens, "
                    "cache_write_tokens, cost_usd, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

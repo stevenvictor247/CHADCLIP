@@ -12,7 +12,7 @@ def _fresh(monkeypatch, tmp_path, **env):
     monkeypatch.setenv("HQ_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("HQ_PASSWORD", "")
     for k in ("HQ_MUSE", "HQ_MUSE_EVERY_DAYS", "HQ_MUSE_MONTHLY_BUDGET", "HQ_MUSE_IDEAS", "HQ_MUSE_TO_APPROVALS",
-              "HQ_MODEL_MUSE", "HQ_AGENT_MODEL"):
+              "HQ_MODEL_MUSE", "HQ_AGENT_MODEL", "HQ_MUSE_BATCH", "HQ_MUSE_EFFORT"):
         monkeypatch.delenv(k, raising=False)
     for k, v in env.items():
         monkeypatch.setenv(k, v)
@@ -50,6 +50,38 @@ def _fake_llm(monkeypatch, hq, ideas, calls=None):
     monkeypatch.setattr(hq.llm, "create", create)
 
 
+class FakeQueue:
+    """Claude's batch queue, in memory."""
+    def __init__(self, ideas, outcome="succeeded"):
+        self.ideas, self.outcome, self.status, self.sent, self.cancelled = ideas, outcome, "in_progress", [], False
+
+    def create(self, requests):
+        self.sent.append(requests)
+        return SimpleNamespace(id="msgbatch_1", processing_status="in_progress")
+
+    def retrieve(self, batch_id):
+        assert batch_id == "msgbatch_1"
+        return SimpleNamespace(processing_status=self.status)
+
+    def cancel(self, batch_id):
+        self.cancelled = True
+
+    def results(self, batch_id):
+        msg = SimpleNamespace(content=[SimpleNamespace(type="text", text=json.dumps({"ideas": self.ideas}))],
+                              model="claude-sonnet-5-5", stop_reason="end_turn",
+                              usage=SimpleNamespace(input_tokens=5000, output_tokens=4000, cache_read_input_tokens=0,
+                                                    cache_creation_input_tokens=0))
+        return [SimpleNamespace(custom_id="muse", result=SimpleNamespace(type=self.outcome, message=msg))]
+
+
+def _fake_queue(monkeypatch, hq, ideas, outcome="succeeded"):
+    q = FakeQueue(ideas, outcome)
+    monkeypatch.setattr(hq.llm, "HAS_LLM", True)
+    monkeypatch.setattr(hq.llm, "client", lambda: SimpleNamespace(messages=SimpleNamespace(batches=q)))
+    monkeypatch.setattr(hq.llm, "create", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no live call")))
+    return q
+
+
 def _usage(db, agent, usd):
     db.execute("INSERT INTO llm_usage (agent, model, input_tokens, output_tokens, cost_usd, created_at) "
                "VALUES (?, 'claude-sonnet-5-5', 1, 1, ?, ?)", agent, usd, db.now())
@@ -61,7 +93,9 @@ def test_muse_lives_in_the_main_village_on_a_weekly_check():
     from hq.config import DEFAULT_MODELS
     m = AGENTS["muse"]
     assert m.village == "business" and not m.free          # it calls Claude, so the daily budget applies
-    assert m.schedule[0][0] == 24 and m.schedule[0][2] == {"brainstorm": True}
+    assert m.schedule == [(0.25, "Pick up the weekly ideas from Claude's queue.", {"collect": True})]
+    from hq import boss
+    assert [o[0] for o in boss.WEEKLY_ORDERS] == ["Muse"] and boss.WEEKLY_ORDERS[0][2] == {"weekly": True}
     assert DEFAULT_MODELS["muse"] == "claude-sonnet-5-5"
     assert "muse" in sweep.PROTECTED                         # Sweep never suggests a cheaper model for judgement work
     assert muse.approvals.HANDLERS["muse_idea"]
@@ -130,7 +164,7 @@ def test_a_round_ranks_ideas_and_brings_the_best_to_approvals(monkeypatch, tmp_p
 
 
 def test_free_checks_decide_when_a_scheduled_round_is_worth_it(monkeypatch, tmp_path):
-    hq = _fresh(monkeypatch, tmp_path)
+    hq = _fresh(monkeypatch, tmp_path, HQ_MUSE_BATCH="false")
     agent = hq.muse and __import__("hq.agents", fromlist=["AGENTS"]).AGENTS["muse"]
     params = {"brainstorm": True}
     monkeypatch.setattr(hq.llm, "HAS_LLM", False)
@@ -158,7 +192,8 @@ def test_free_checks_decide_when_a_scheduled_round_is_worth_it(monkeypatch, tmp_
 def test_money_caps_hold_even_for_the_button(monkeypatch, tmp_path):
     hq = _fresh(monkeypatch, tmp_path, HQ_MUSE_MONTHLY_BUDGET="1")
     _fake_llm(monkeypatch, hq, GOOD)
-    assert hq.muse.round_cost_estimate() == 0.184                    # 12k in + 16k out on Sonnet
+    assert hq.muse.round_cost_estimate() == 0.136                    # 8k in + 12k out on Sonnet
+    assert hq.muse.round_cost_estimate(weekly=True) == 0.068         # the weekly round is half price
     _usage(hq.db, "Muse", 0.9)
     assert "of its $1.00 for this month" in hq.muse.why_not_now(manual=True)
     assert "Muse has used" in hq.muse.run(manual=True)
@@ -267,3 +302,85 @@ def test_village_and_tab_are_wired():
     assert 'Muse: {color:' in html and "beret:" in html
     assert 'label: "Writers\' Room"' in world and 'style: "writers"' in world and 'key === "muse" ? S.ideas' in world and "ideasCard()" in world
     assert '{id: "ideas", icon: "💡", label: "Ideas", has: ["muse"]}' in tabs
+
+
+def test_the_boss_sends_muse_weekly_through_the_half_price_queue(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    import hq.boss
+    from hq.agents import AGENTS
+    agent = AGENTS["muse"]
+    q = _fake_queue(monkeypatch, hq, GOOD)
+    assert agent.nothing_to_do("x", {"collect": True}) is True       # nothing in the queue: no task, no network
+    state = {}
+    [task_id] = hq.boss.send_weekly_orders(state)
+    assert hq.boss.send_weekly_orders(state) == []                   # looks at most once an hour
+    task = hq.db.rows("SELECT * FROM tasks WHERE id = ?", task_id)[0]
+    assert task["agent"] == "Muse" and task["created_by"] == "Boss"
+    assert "Sent Muse on its weekly round." in [r["message"] for r in hq.db.rows("SELECT message FROM activity")]
+    out = agent.run(task)
+    assert out.startswith("Asked Claude for 5 ideas through the half-price queue")
+    params = q.sent[0][0]["params"]
+    assert q.sent[0][0]["custom_id"] == "muse" and "fallbacks" not in params      # the queue rejects fallbacks
+    assert params["output_config"]["effort"] == "medium" and params["thinking"] == {"type": "adaptive"}
+    assert params["output_config"]["format"]["schema"] == hq.muse.SCHEMA and params["max_tokens"] == 12000
+    assert "Give exactly 5 ideas" in params["messages"][0]["content"]
+    # while it's out, nothing else starts: no second weekly round and no full-price Brainstorm now
+    assert "half-price queue" in hq.muse.why_not_now(manual=True)
+    state["boss_orders_at"] = 0
+    assert hq.boss.send_weekly_orders(state) == []
+    assert hq.muse.summary()["thinking"] and hq.muse.latest()["queued"]
+    assert agent.nothing_to_do("x", {"collect": True}) is True       # still being worked on
+    q.status = "ended"
+    assert agent.nothing_to_do("x", {"collect": True}) is False
+    out = agent.run({"params": json.dumps({"collect": True}), "created_by": "Schedule"})
+    assert out.startswith("5 new idea(s), 3 brought to Approvals")
+    cost = hq.db.rows("SELECT agent, cost_usd FROM llm_usage")
+    assert cost == [{"agent": "Muse", "cost_usd": hq.ledger.cost_of("claude-sonnet-5-5", 5000, 4000) * 0.5}]
+    assert hq.muse.pending() is None and not hq.muse.summary()["thinking"]
+    assert "waits until there's room for at least 3" in hq.muse.why_not_now()
+
+
+def test_weekly_round_only_asks_for_the_free_places(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path, HQ_MUSE_BATCH="false")
+    calls = []
+    _fake_llm(monkeypatch, hq, GOOD[:2], calls)
+    hq.muse.run(manual=True)                                          # two ideas still open
+    assert hq.muse.wanted(manual=False) == 3 and hq.muse.wanted(manual=True) == 5
+    state = hq.muse._state()
+    state["last_round_at"] = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat(timespec="seconds")
+    hq.muse._save_state(state)
+    _fake_llm(monkeypatch, hq, GOOD[2:], calls)
+    hq.muse.run()
+    assert "Give exactly 3 ideas" in calls[-1]["prompt"] and calls[-1]["effort"] == "medium"
+    assert "waits until there's room" in hq.muse.why_not_now()        # 5 open now
+    assert '"team":[' in calls[-1]["prompt"]                          # facts sent compact, not pretty-printed
+
+
+def test_a_round_that_fails_in_the_queue_retries_in_a_day_and_costs_nothing(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    q = _fake_queue(monkeypatch, hq, GOOD, outcome="errored")
+    hq.muse.run()
+    q.status = "ended"
+    assert "didn't come back (errored)" in hq.muse.collect()
+    assert hq.muse.pending() is None and hq.db.rows("SELECT COUNT(*) n FROM llm_usage")[0]["n"] == 0
+    assert hq.muse.why_not_now() == "Next round in about 1 day(s)."
+    # a round stuck past a day is cancelled and retried the same way
+    q = _fake_queue(monkeypatch, hq, GOOD)
+    state = hq.muse._state()
+    state["last_round_at"] = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat(timespec="seconds")
+    hq.muse._save_state(state)
+    hq.muse.run()
+    state = hq.muse._state()
+    state["batch"]["at"] = (datetime.now(timezone.utc) - timedelta(hours=27)).isoformat(timespec="seconds")
+    hq.muse._save_state(state)
+    assert hq.muse.batch_ready() is True
+    assert "took over a day" in hq.muse.collect() and q.cancelled
+
+
+def test_a_cut_off_answer_is_reported_not_crashed(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path)
+    monkeypatch.setattr(hq.llm, "HAS_LLM", True)
+    monkeypatch.setattr(hq.llm, "create", lambda *a, **k: SimpleNamespace(
+        content=[SimpleNamespace(type="text", text='{"ideas": [{"kind": "bus')], stop_reason="max_tokens"))
+    assert hq.muse.run(manual=True).startswith("Claude's answer was cut off")
+    assert hq.db.rows("SELECT COUNT(*) n FROM ideas")[0]["n"] == 0
