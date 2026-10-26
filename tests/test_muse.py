@@ -399,7 +399,9 @@ def test_build_it_sends_the_brief_to_claude_once(monkeypatch, tmp_path):
     monkeypatch.setattr(hq.muse, "_fire", lambda text: sent.append(text) or {
         "type": "routine_fire", "claude_code_session_url": "https://claude.ai/code/session_1"})
     monkeypatch.setenv("HQ_BUILD_TOKEN", "sk-ant-oat01-test")
-    assert hq.muse.build_ready() and hq.muse.build_url().endswith("/routines/trig_01VtqaeKDHmdfWDv1C48fanf/fire")
+    assert not hq.muse.build_ready()                                         # the routine's address is needed too
+    monkeypatch.setenv("HQ_BUILD_URL", "https://api.anthropic.com/v1/claude_code/routines/trig_01Abc/fire")
+    assert hq.muse.build_ready()
     # the Approvals card (dashboard or phone) and the Ideas tab both send it
     card = hq.db.rows("SELECT id FROM approvals WHERE kind = 'muse_idea' AND payload LIKE ?", f'%"idea_id": {ids[1]}%')[0]
     assert "Sent to Claude to build it" in hq.approvals.decide(card["id"], "approve")
@@ -418,7 +420,8 @@ def test_build_it_sends_the_brief_to_claude_once(monkeypatch, tmp_path):
 def test_a_failed_send_is_explained_and_can_be_retried(monkeypatch, tmp_path):
     import io
     import urllib.error
-    hq = _fresh(monkeypatch, tmp_path, HQ_BUILD_TOKEN="sk-ant-oat01-secret-token")
+    hq = _fresh(monkeypatch, tmp_path, HQ_BUILD_TOKEN="sk-ant-oat01-secret-token",
+                HQ_BUILD_URL="https://api.anthropic.com/v1/claude_code/routines/trig_01Abc/fire")
     _fake_llm(monkeypatch, hq, GOOD[:1])
     hq.muse.run(manual=True)
     idea = hq.db.rows("SELECT id FROM ideas")[0]["id"]
