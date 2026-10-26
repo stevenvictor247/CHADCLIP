@@ -314,6 +314,10 @@ def init():
                 c.execute(f"ALTER TABLE posts ADD COLUMN {col} {kind}")
         if "source" not in {r["name"] for r in c.execute("PRAGMA table_info(campaigns)")}:
             c.execute("ALTER TABLE campaigns ADD COLUMN source TEXT")  # inbox, feed or manual
+        have = {r["name"] for r in c.execute("PRAGMA table_info(leads)")}
+        for col, kind in (("score", "INTEGER"), ("score_why", "TEXT")):   # Pitch's 1 to 10 lead score
+            if col not in have:
+                c.execute(f"ALTER TABLE leads ADD COLUMN {col} {kind}")
         have = {r["name"] for r in c.execute("PRAGMA table_info(ideas)")}
         for col in ("build_status", "build_url", "build_note", "build_at"):
             if col not in have:

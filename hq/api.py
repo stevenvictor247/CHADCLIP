@@ -246,8 +246,8 @@ def state():
         "football": football.state(),
         "tally": _tally_summary(),
         "ideas": _ideas_summary(),
-        "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at FROM leads "
-                         "ORDER BY id DESC LIMIT 50"),
+        "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at, score, score_why "
+                         "FROM leads WHERE score IS NULL OR score >= 4 ORDER BY score IS NULL, score DESC, id DESC LIMIT 50"),
         "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None, "village": "business"}] +
                   [{"name": a.name, "role": a.role, "doing": running.get(a.name), "village": a.village}
                    for a in agents.AGENTS.values()],
