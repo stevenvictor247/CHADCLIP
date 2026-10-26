@@ -288,6 +288,18 @@ CREATE TABLE IF NOT EXISTS recaps (
     created_at TEXT NOT NULL,
     decided_at TEXT
 );
+CREATE TABLE IF NOT EXISTS rally_posts (
+    id INTEGER PRIMARY KEY,
+    topic TEXT NOT NULL,                         -- upset_watch, rankings, rivalry, stat_fact
+    headline TEXT NOT NULL,
+    body TEXT NOT NULL,
+    caption TEXT NOT NULL,
+    card_path TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending, approved, rejected, posted
+    views INTEGER NOT NULL DEFAULT 0,            -- typed in by Steven after he posts it
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,

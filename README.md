@@ -171,6 +171,17 @@ it, and then HQ sends that one message from your Gmail. Safeguards: one email pe
 do-not-contact list (set a lead to `do_not_contact`, or tell the Boss `{"do_not_contact": "email"}`). If a send fails or
 is blocked, the same draft returns to Waiting for your OK. Leads without an email stay copy-and-send-yourself.
 
+## Rally (Saturday college football posts)
+
+Rally drafts short text-and-card posts for TikTok and Shorts about public college football storylines (upset watch,
+rankings, rivalry history, weekly stat facts). It reads a free public rankings feed (or facts you paste), asks the
+cheap Claude model for 5 posts, then checks them in code: any number not in the facts, or any mention of logos, film or
+highlights, is thrown out. Each post gets a plain 1080x1920 card (no school marks) and waits in Approvals. Approving
+only hands you the text and card to post yourself; Rally never posts. Once a day it checks for free whether a round is
+due (no round if posts are still waiting, one was drafted this week, or the season in `config/rally.yaml` is over).
+After you post, tell the Boss the views (`{"views": {"id": 4, "views": 1200}}`) and `{"report": true}` shows which
+topics work. Set the account's niche in `config/rally.yaml`.
+
 ## Relay (phone)
 
 Relay is a private Telegram bot. Message it to talk to the Boss, get each new clip as a video with Approve and
