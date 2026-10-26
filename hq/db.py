@@ -273,6 +273,17 @@ CREATE TABLE IF NOT EXISTS ideas (
     build_note TEXT,                             -- why sending it failed, in plain words
     build_at TEXT
 );
+CREATE TABLE IF NOT EXISTS recaps (
+    id INTEGER PRIMARY KEY,
+    client TEXT NOT NULL,
+    owner_note TEXT NOT NULL,                    -- how the owner handed the content over
+    source TEXT,
+    fingerprint TEXT NOT NULL UNIQUE,            -- same transcript never costs Claude twice
+    pack TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending, approved, rejected
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,

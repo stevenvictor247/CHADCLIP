@@ -9,6 +9,7 @@ about_me: ""                    # one honest line, e.g. "I run clipping accounts
 what_you_offer: "Short vertical clips of your best moments, with captions, posted to TikTok, YouTube Shorts and Instagram Reels."
 price: ""                       # e.g. "$250 a month for 10 clips". Blank means Pitch won't mention a price.
 portfolio_url: ""               # link to your clipping account or best clips, if you have one
+second_offer: ""              # optional cheaper offer Pitch adds, e.g. "Recap: a YouTube title, description, chapters and 5 post ideas for each long video, $49 a month for 4"
 free_sample: true               # offer to make one clip for them free
 opt_out_line: "If this isn't for you, just say so and I won't message again."
 
