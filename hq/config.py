@@ -18,11 +18,12 @@ DATA_DIR = Path(os.getenv("HQ_DATA_DIR", ROOT / "data"))
 SOURCES_DIR = DATA_DIR / "sources"
 CLIPS_DIR = DATA_DIR / "clips"
 SAMPLES_DIR = DATA_DIR / "samples"   # private pitch samples: never posted, deleted after 14 days
+PACKS_DIR = DATA_DIR / "packs"       # finished podcast clip packs, one folder each, waiting for Steven to send
 DB_PATH = DATA_DIR / "hq.sqlite3"
 SETTINGS_PATH = DATA_DIR / "settings.json"
 VISION_PATH = CONFIG_DIR / "vision.md"
 
-for d in (DATA_DIR, SOURCES_DIR, CLIPS_DIR, SAMPLES_DIR):
+for d in (DATA_DIR, SOURCES_DIR, CLIPS_DIR, SAMPLES_DIR, PACKS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 

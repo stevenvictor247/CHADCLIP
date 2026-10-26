@@ -31,7 +31,7 @@ def _save_state(s: dict):
 
 # Agents whose jobs take minutes (downloading, transcribing and cutting video) run in their own lane, so a long
 # clipping job never holds up Pitch, Scout, Sweep, the football agents or posting.
-SLOW_AGENTS = {"chad"}
+SLOW_AGENTS = {"chad", "packs"}
 HEARTBEAT = 60  # seconds: a running task's updated_at is refreshed this often, so Sweep can tell slow from stuck
 
 

@@ -173,6 +173,14 @@ def format_pack(pack: dict, client: str = "") -> str:
 
 # ---- making and approving a pack ----
 
+def write_pack(segs: list[dict], length: int) -> dict:
+    """The one Claude call: a checked pack for this transcript. Shared with Packs, which adds clips to it."""
+    if not llm.HAS_LLM:
+        raise RecapError("Recap needs ANTHROPIC_API_KEY set to write the pack.")
+    prompt = f"Video length: {stamp(length)}\n\nTranscript:\n{compact(segs)}"
+    return clean(llm.ask_json(model_for("recap"), SYSTEM, prompt, SCHEMA, effort="low", agent="Recap"), length)
+
+
 def make(params: dict) -> str:
     owner = " ".join(str(params.get("owner") or "").split())
     client = " ".join(str(params.get("client") or "").split())
@@ -188,10 +196,7 @@ def make(params: dict) -> str:
     fp = fingerprint(segs)
     if (old := db.rows("SELECT id, status FROM recaps WHERE fingerprint = ?", fp)):
         return f"Recap #{old[0]['id']} already covers this transcript ({old[0]['status']}). Nothing new was made."
-    if not llm.HAS_LLM:
-        raise RecapError("Recap needs ANTHROPIC_API_KEY set to write the pack.")
-    prompt = f"Video length: {stamp(length)}\n\nTranscript:\n{compact(segs)}"
-    pack = clean(llm.ask_json(model_for("recap"), SYSTEM, prompt, SCHEMA, effort="low", agent="Recap"), length)
+    pack = write_pack(segs, length)
     rid = db.execute("INSERT INTO recaps (client, owner_note, source, fingerprint, pack, status, created_at) "
                      "VALUES (?, ?, ?, ?, ?, 'pending', ?)", client, owner, str(params.get("file") or "pasted text"),
                      fp, json.dumps(pack), db.now())
