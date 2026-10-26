@@ -6,6 +6,9 @@ from . import db
 from .config import DAILY_BUDGET, FOOTBALL_AGENTS, FOOTBALL_DAILY_BUDGET, PRICES, UNKNOWN_PRICE
 
 
+WEB_SEARCH_FEE = 0.01  # dollars per web search the API runs for us ($10 per 1,000)
+
+
 def cost_of(model: str, input_tokens: int, output_tokens: int, cache_read: int = 0, cache_write: int = 0) -> float:
     price_in, price_out = PRICES.get(model, UNKNOWN_PRICE)
     return (input_tokens * price_in + cache_read * price_in * 0.1 + cache_write * price_in * 1.25
@@ -19,7 +22,8 @@ def record(agent: str, model: str, usage, rate: float = 1.0) -> float:
         i, o = usage.input_tokens or 0, usage.output_tokens or 0
         r = getattr(usage, "cache_read_input_tokens", 0) or 0
         w = getattr(usage, "cache_creation_input_tokens", 0) or 0
-        cost = cost_of(model, i, o, r, w) * rate
+        searches = getattr(getattr(usage, "server_tool_use", None), "web_search_requests", 0)
+        cost = cost_of(model, i, o, r, w) * rate + (searches if isinstance(searches, int) else 0) * WEB_SEARCH_FEE
         db.init()
         db.execute("INSERT INTO llm_usage (agent, model, input_tokens, output_tokens, cache_read_tokens, "
                    "cache_write_tokens, cost_usd, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
