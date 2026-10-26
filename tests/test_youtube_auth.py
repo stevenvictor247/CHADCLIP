@@ -43,6 +43,8 @@ def test_sign_in_needs_the_client_file_first(account):
 
 
 def test_sign_in_link_then_pasted_address_saves_the_token(account, monkeypatch, tmp_path):
+    from hq import db
+    db.init()
     youtube_auth.save_client("youtube_main", GOOD)
     q = parse_qs(urlparse(youtube_auth.start_sign_in("youtube_main")).query)
     assert q["client_id"] == ["abc.apps.googleusercontent.com"] and q["access_type"] == ["offline"]
@@ -85,3 +87,16 @@ def test_api_needs_the_settings_page(account):
     r = c.post("/api/youtube/client", json={"account": "youtube_main", "text": GOOD}).json()
     assert r["accounts"][0]["has_client"]
     assert c.get("/api/settings").json()["youtube"][0]["name"] == "youtube_main"
+
+
+def test_expired_sign_in_tells_you_how_to_redo_it(tmp_path, monkeypatch):
+    from hq import connections
+    from hq.agents.chad.publish import youtube as yt
+    (tmp_path / "t.json").write_text("{}")
+    monkeypatch.setattr(connections, "ROOT", tmp_path)
+
+    def expired(account):
+        raise RuntimeError("invalid_grant: Token has been expired or revoked.")
+    monkeypatch.setattr(yt, "_credentials", expired)
+    r = connections.youtube({"name": "youtube_main", "token_file": "t.json"})
+    assert not r["ok"] and "Open Google sign-in" in r["message"] and "7 days" in r["message"]
