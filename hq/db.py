@@ -321,7 +321,8 @@ def init():
         # Databases made before these columns existed get them added in place.
         have = {r["name"] for r in c.execute("PRAGMA table_info(clips)")}
         for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER"),
-                          ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT")):
+                          ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT"),
+                          ("approved_at", "TEXT"), ("stale_state", "TEXT")):   # queue age; stale_state: flagged or kept
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
         have = {r["name"] for r in c.execute("PRAGMA table_info(posts)")}
@@ -370,4 +371,5 @@ def update_task(task_id: int, status: str, result: str | None = None):
 
 
 def set_clip_status(clip_id: int, status: str):
-    execute("UPDATE clips SET status = ? WHERE id = ?", status, clip_id)
+    execute("UPDATE clips SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN ? ELSE approved_at END WHERE id = ?",
+            status, status, now(), clip_id)
