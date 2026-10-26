@@ -1,6 +1,7 @@
 """Depth: the Monday opponent personnel sheet. Every player here is made up."""
 
 import io
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -161,6 +162,8 @@ def test_monday_5pm_queues_tells_for_the_newest_export_or_asks(_setup):
     assert scouting.run_if_due(datetime(2026, 10, 26, 17, 5)) == "queued"
     t = db.rows("SELECT agent, params FROM tasks WHERE agent = 'Tells'")[0]
     assert "NMU new.xlsx" in t["params"] and "Northern Michigan" in t["params"]
+    kinds = [json.loads(x["params"]).get("kind", "scouting") for x in db.rows("SELECT params FROM tasks WHERE agent = 'Tells' ORDER BY id")]
+    assert kinds == ["scouting", "birds"]                                       # the one-page Birds and Rabbits too
     for n in ("NMU old.xlsx", "NMU new.xlsx", "Ferris.xlsx"):
         (FOOTBALL_INBOX / n).unlink()
 

@@ -625,6 +625,7 @@ class FootballItemIn(BaseModel):
 
 class FootballReportIn(BaseModel):
     opponent: str | None = None
+    kind: str = "scouting"   # or "birds" for just Birds and Rabbits
 
 
 class TextIn(BaseModel):
@@ -668,8 +669,11 @@ def football_check(file_id: int, request: Request):
 def football_report(file_id: int, body: FootballReportIn, request: Request):
     _from_hq_page(request)
     name = _football_file(file_id)
-    params = {"file": name, **({"opponent": body.opponent.strip()} if body.opponent and body.opponent.strip() else {})}
-    return {"task_id": db.create_task("Tells", f"Scouting report from {name}", params, created_by="Steven")}
+    birds = body.kind == "birds"
+    params = {"file": name, **({"opponent": body.opponent.strip()} if body.opponent and body.opponent.strip() else {}),
+              **({"kind": "birds"} if birds else {})}
+    return {"task_id": db.create_task("Tells", f"{'Birds and Rabbits' if birds else 'Scouting report'} from {name}", params,
+                                      created_by="Steven")}
 
 
 @app.post("/api/football/checklist")

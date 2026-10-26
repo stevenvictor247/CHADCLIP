@@ -1,5 +1,5 @@
 """The Monday scouting report: at 5 PM Monday (or later that week if HQ was off) Tells builds this week's scouting report
-and tendency numbers from the newest tagged Hudl export for the opponent. The report waits in Approvals for your OK.
+and the one-page Birds and Rabbits from the newest tagged Hudl export for the opponent. Both wait in Approvals for your OK.
 If there's no export for that opponent yet, it texts you what it needs. Once a week."""
 
 import json
@@ -40,6 +40,8 @@ def run_if_due(now: datetime | None = None) -> str | None:
     name = newest_export(g["opponent"])
     if name:
         db.create_task("Tells", f"Scouting report from {name}", {"file": name, "opponent": g["opponent"]}, created_by="Schedule")
+        db.create_task("Tells", f"Birds and Rabbits from {name}", {"file": name, "opponent": g["opponent"], "kind": "birds"},
+                       created_by="Schedule")
         return "queued"
     relay.notify(f"📊 Tells\nI need the tagged Hudl export for {g['opponent']} to make this week's scouting report. Drop it in "
                  "the Inbox (put the team name in the file name).")
