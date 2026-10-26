@@ -497,6 +497,12 @@ def check_other_agents() -> list[dict]:
                          f"{_plural(picks, 'streamer suggestion is', 'streamer suggestions are')} over a week old",
                          "They clutter the Pitch tab and their numbers are out of date.",
                          "Skip the ones you won't use.", ("Open Pitch", "/#pitch")))
+    ideas = db.rows("SELECT COUNT(*) n FROM ideas WHERE status = 'proposed' AND created_at < ?", _ago(days=7))[0]["n"]
+    if ideas:
+        tips.append(_tip("muse_waiting", "organization", "low",
+                         f"{_plural(ideas, 'idea from Muse has', 'ideas from Muse have')} waited over a week",
+                         "Muse doesn't think up more until you've answered these, so new ideas stop coming.",
+                         "Press Build it, Later or Not for me on each one on the Ideas tab.", ("Open Ideas", "/#ideas")))
     sheets = db.rows("SELECT COUNT(*) n FROM football_files WHERE status = 'failed'")[0]["n"]
     if sheets:
         tips.append(_tip("football_failed_sheets", "quality", "low",

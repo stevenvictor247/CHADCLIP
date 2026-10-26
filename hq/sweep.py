@@ -56,7 +56,7 @@ BOSS_CHAT_TOKENS = _int("HQ_SWEEP_BOSS_TOKENS", 30_000)   # estimated size at wh
 LOOP_CALLS_PER_HOUR = _int("HQ_SWEEP_LOOP_CALLS", 30)
 TRANSIENT = re.compile(r"timed? ?out|timeout|connection|overloaded|rate.?limit|429|\b50[0234]\b|temporarily|"
                        r"network|reset by peer|unavailable", re.I)
-PROTECTED = {"boss", "pitch", "chad"}              # wording and judgement agents: never suggested for a cheaper model
+PROTECTED = {"boss", "pitch", "chad", "muse"}              # wording and judgement agents: never suggested for a cheaper model
 STEP_DOWN = {"claude-opus-5-5": "claude-sonnet-5-5", "claude-opus-5": "claude-sonnet-5-5",
              "claude-sonnet-5-5": "claude-haiku-5-5", "claude-sonnet-5": "claude-haiku-5-5"}
 
