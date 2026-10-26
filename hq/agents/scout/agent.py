@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 
 from ... import campaigns, creators, db, discovery, ledger, llm, relay
 from ...config import model_for
@@ -45,6 +46,28 @@ SCHEMA = {
 }
 
 
+SEARCH_SYSTEM = """You are Scout's researcher. You search the open web for paid clipping campaigns that Steven, a beginner, could
+clip for: a streamer, creator or brand pays people per 1,000 views of short clips posted to their own TikTok, YouTube
+Shorts or Instagram accounts.
+
+Find campaigns that are open right now and publicly described on a page anyone can read without logging in: a
+creator's or agency's own site, a public sign-up page, a news or blog roundup that links the real page. Search a few
+different ways (streamer clipping programs, "clipper" pay per view programs, brand clipping campaigns).
+
+Skip anything that asks for money, a deposit or login details up front, promises vague or guaranteed riches, or has no
+stated pay. Never invent a campaign, a link or a number. For each one give the page link exactly as found, the
+campaign name, and an excerpt copied as written from the page or search result (rules, pay per 1,000 views, budget).
+It is fine to return few or none.
+
+Finish with one JSON object and nothing after it, shaped exactly like this:
+{"candidates": [{"name": "...", "url": "...", "excerpt": "..."}]}"""
+
+SEARCH_PROMPT = "Find up to {n} open paid clipping campaigns. Return only ones you actually found, with their real page links."
+
+SEARCH_TURNS = 4   # a long search can pause; this many resumes at most
+SEARCH_USES = 6    # web searches per run, about 6 cents
+
+
 def describe(c: dict) -> str:
     """A short message about a campaign for the phone or the Boss."""
     pay = f"${c['rate_per_1k']:g} per 1,000 views" if c.get("rate_per_1k") is not None else "pay not stated"
@@ -85,6 +108,8 @@ class Scout(Agent):
                 return True
             if discovery.inbox("queued"):
                 return False   # links waiting to be rated
+            if discovery.web_search_due():
+                return False   # the daily web search hasn't run yet today
             return None if discovery.feed_urls() else True   # feeds may or may not have new links: back off if empty
         return None
 
@@ -175,6 +200,19 @@ class Scout(Agent):
                     break
                 discovery.mark_seen(link)
 
+        if discovery.web_search_due() and len(found) < cap and not ledger.over_budget():
+            try:
+                for cand in self._search():
+                    if discovery.seen(cand["url"]) or campaigns.by_url(cand["url"]):
+                        continue
+                    text, how = self._read_candidate(cand)
+                    if not rate(text, cand["url"], how):
+                        break
+                    discovery.mark_seen(cand["url"])
+            except Exception as e:
+                notes.append(f"web search: {str(e)[:200]}")
+            discovery.mark_web_search_done()
+
         good = sorted((c for c in found if c["status"] == "proposed" and (c["score"] or 0) >= min_score),
                       key=lambda c: -(c["score"] or 0))
         for c in good[:3]:
@@ -185,6 +223,49 @@ class Scout(Agent):
         if stuck:
             text += f" {stuck} inbox link(s) need you to paste the page text."
         return " ".join([text] + notes)
+
+    def _search(self) -> list[dict]:
+        """Ask Claude to search the web for open campaigns. Anthropic runs the searches, so no site is scraped by HQ;
+        Whop and Discord are excluded from the results. Returns candidates with a link and an excerpt."""
+        cap = int(os.getenv("SCOUT_MAX_PER_RUN", "10") or 10)
+        tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": SEARCH_USES,
+                  "blocked_domains": sorted(discovery.BLOCKED_HOSTS)}]
+        messages = [{"role": "user", "content": SEARCH_PROMPT.format(n=cap)}]
+        for _ in range(SEARCH_TURNS):
+            # No output schema: web search results always carry citations, which structured outputs can't combine with.
+            response = llm.create(model_for("scout_search"), SEARCH_SYSTEM, messages, tools=tools, effort="low",
+                                  agent="Scout")
+            if response.stop_reason != "pause_turn":
+                break
+            messages = messages + [{"role": "assistant", "content": response.content}]  # the API resumes by itself
+        out = []
+        for c in self._candidates_in(llm.text_of(response)):
+            url = (c.get("url") or "").strip()
+            if url.lower().startswith(("http://", "https://")) and not discovery.blocked_reason(url) and c.get("excerpt"):
+                out.append({**c, "url": url})
+        return out[:cap]
+
+    @staticmethod
+    def _candidates_in(text: str) -> list[dict]:
+        """The candidates object the search answer ends with. Anything before it is ignored; unreadable means none."""
+        decoder = json.JSONDecoder()
+        for start in [m.start() for m in re.finditer(r"\{\s*\"candidates\"", text)][::-1]:
+            try:
+                data, _ = decoder.raw_decode(text[start:])
+            except ValueError:
+                continue
+            found = data.get("candidates") if isinstance(data, dict) else None
+            return [c for c in found if isinstance(c, dict)] if isinstance(found, list) else []
+        return []
+
+    @staticmethod
+    def _read_candidate(cand: dict) -> tuple[str, str]:
+        """The page itself when its site allows it (robots.txt, no blocked hosts), otherwise the excerpt the search
+        found. The second kind is marked, so Steven knows the rules weren't read from the page."""
+        try:
+            return discovery.to_text(discovery.fetch(cand["url"])), "web"
+        except Exception:
+            return "From a web search result, not the full page:\n" + cand["excerpt"], "web (excerpt only)"
 
     def find_creators(self, n: int) -> str:
         """Suggest streamers who are big right now and whose clips are getting views. Free: no Claude call."""

@@ -129,6 +129,13 @@ the submitting and the numbers are manual for now.
 
 ### Scout finds campaigns on its own
 
+**Web search (new).** Once a day Scout asks Claude to search the open web for campaigns that are open right now, with no
+pasting needed. Anthropic runs the searches (about 6 cents a day plus a little Claude time, counted in the Ledger), Whop and
+Discord are excluded from the results, and every find is rated like the rest. Pages are read only where `robots.txt`
+allows; otherwise the rating uses the search excerpt and the campaign is marked "web (excerpt only)". Turn it off with
+`SCOUT_WEB_SEARCH=0`; use `HQ_MODEL_SCOUT_SEARCH=claude-opus-5-5` for a deeper search. It needs web search switched on for
+your Anthropic organization (Console, Settings, Privacy).
+
 Every 6 hours Scout reads its **inbox** (the box on the dashboard's Campaigns section: paste links or page text) and any
 public feeds you list in `SCOUT_FEED_URLS` (Settings page), rates what is new with the cheap model, and puts the good ones
 (`SCOUT_MIN_SCORE`, default 6) on the dashboard and your phone for a Join decision. It never joins or signs up for you,
