@@ -154,3 +154,49 @@ def test_long_chat_rolls_over_before_the_next_message(monkeypatch):
     assert boss.chat("What next?") == "ok"
     assert boss.current_conversation() == 2
     assert seen["n"] == 3 and seen["first"].startswith(boss.RECAP_TAG)   # recap, ack, new message: not 30k tokens
+
+
+def test_scout_scheduled_rounds_are_free_when_nothing_is_due(monkeypatch):
+    from hq import agents, campaigns, db, discovery, llm
+    db.init()
+    db.execute("DELETE FROM posts")
+    db.execute("DELETE FROM submissions")
+    scout = agents.get("Scout")
+    assert scout.nothing_to_do("Find posted campaign clips that still need submitting.", {"sync": True}) is True
+    cid = db.execute("INSERT INTO campaigns (name, status, created_at) VALUES ('c', 'joined', ?)",
+                     db.now())
+    clip = db.execute("INSERT INTO clips (task_id, creator, source_url, source_title, start_s, end_s, path, title, caption, "
+                      "hashtags, status, campaign_id, created_at) VALUES (1, 'x', 'u', 't', 0, 1, 'p', 't', 'c', '[]', "
+                      "'approved', ?, ?)", cid, db.now())
+    db.execute("INSERT INTO posts (clip_id, platform, account, status, url, created_at) VALUES (?, 'tiktok', 'a', "
+               "'posted', 'http://x', ?)", clip, db.now())
+    assert scout.nothing_to_do("x", {"sync": True}) is False             # a posted campaign clip needs logging
+    campaigns.sync_submissions()
+    assert scout.nothing_to_do("x", {"sync": True}) is True              # logged: nothing left
+    monkeypatch.setattr(llm, "HAS_LLM", True)
+    monkeypatch.setattr(discovery, "inbox", lambda status=None: [])
+    monkeypatch.setattr(discovery, "feed_urls", lambda: [])
+    assert scout.nothing_to_do("Look for new campaigns", {"discover": True}) is True
+    monkeypatch.setattr(discovery, "feed_urls", lambda: ["http://feed"])
+    assert scout.nothing_to_do("Look for new campaigns", {"discover": True}) is None
+    monkeypatch.setattr(discovery, "inbox", lambda status=None: [{"id": 1}])
+    assert scout.nothing_to_do("Look for new campaigns", {"discover": True}) is False
+    assert scout.nothing_to_do("vet", {"text": "rules"}) is None
+
+
+def test_pitch_recheck_round_is_free_when_every_card_has_an_email(monkeypatch):
+    from hq import agents, approvals
+    pitch = agents.get("Pitch")
+    monkeypatch.setattr(approvals, "pending", lambda: [{"kind": "pitch", "payload": {"email": True}}])
+    assert pitch.nothing_to_do("x", {"recheck": True}) is True
+    monkeypatch.setattr(approvals, "pending", lambda: [{"kind": "pitch", "payload": {"email": False}}])
+    assert pitch.nothing_to_do("x", {"recheck": True}) is None or pitch.nothing_to_do("x", {"recheck": True}) is False
+
+
+def test_report_rolls_a_long_chat_over_too(monkeypatch):
+    from hq import boss, db
+    db.init()
+    db.execute("DELETE FROM boss_messages")
+    boss._save(1, "assistant", [{"type": "text", "text": "z" * (boss.AUTO_ROLL_TOKENS * 4)}])
+    boss.report()
+    assert boss.current_conversation() == 2 and boss.chat_tokens(2) < 5000

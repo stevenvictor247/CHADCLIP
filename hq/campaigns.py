@@ -96,6 +96,13 @@ def as_creators() -> list[dict]:
     return out
 
 
+def has_unsynced_posts() -> bool:
+    """A free look: is there a posted campaign clip that sync_submissions() would log?"""
+    return bool(db.rows("SELECT 1 FROM posts p JOIN clips c ON c.id = p.clip_id WHERE p.status = 'posted' "
+                        "AND p.platform != 'practice' AND c.campaign_id IS NOT NULL "
+                        "AND p.id NOT IN (SELECT post_id FROM submissions) LIMIT 1"))
+
+
 def sync_submissions() -> list[dict]:
     """Make a to-do entry for each posted clip from a campaign that hasn't been logged yet. Returns the new ones."""
     new = []

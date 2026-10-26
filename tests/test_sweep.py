@@ -107,9 +107,9 @@ def test_idle_huge_boss_chat_is_closed_but_active_one_is_not(monkeypatch, tmp_pa
     import hq.boss
     importlib.reload(hq.boss)
     big = json.dumps([{"type": "text", "text": "x" * 600_000}])
-    hq.db.execute("INSERT INTO boss_messages (conversation, role, content, created_at) VALUES (1, 'user', ?, ?)", big, _ago(minutes=10))
+    hq.db.execute("INSERT INTO boss_messages (conversation, role, content, created_at) VALUES (1, 'user', ?, ?)", big, _ago(minutes=3))
     assert hq.sweep.fix_boss_chat() == []                      # talked to a moment ago
-    hq.db.execute("UPDATE boss_messages SET created_at = ?", _ago(hours=5))
+    hq.db.execute("UPDATE boss_messages SET created_at = ?", _ago(minutes=30))   # quiet for a while, no longer in use
     assert "fresh Boss conversation" in hq.sweep.fix_boss_chat()[0]
     assert hq.boss.current_conversation() == 2
     assert hq.sweep.fix_boss_chat() == []                      # the new one is empty

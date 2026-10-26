@@ -231,6 +231,8 @@ class Pitch(Agent):
         if params.get("followups") and set(params) == {"followups"}:
             return not db.rows("SELECT 1 FROM leads WHERE status = 'pitched' AND followup_at IS NOT NULL "
                                "AND followup_at <= ? LIMIT 1", _iso())
+        if params == {"recheck": True}:   # only cards still without an email are worth another look
+            return not any(a["kind"] == "pitch" and not a["payload"].get("email") for a in approvals.pending())
         return None
 
     def run(self, task: dict) -> str:

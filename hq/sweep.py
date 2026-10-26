@@ -52,7 +52,7 @@ def keep_days() -> int:
 
 TRASH_DAYS = 7                                       # how long trashed files can be restored
 LOG_LIMIT = 5 * 1024 * 1024                          # logs bigger than this are cut down to their last megabyte
-BOSS_CHAT_TOKENS = _int("HQ_SWEEP_BOSS_TOKENS", 120_000)   # estimated size at which an idle Boss chat is closed
+BOSS_CHAT_TOKENS = _int("HQ_SWEEP_BOSS_TOKENS", 30_000)   # estimated size at which the Boss chat is rolled over
 LOOP_CALLS_PER_HOUR = _int("HQ_SWEEP_LOOP_CALLS", 30)
 TRANSIENT = re.compile(r"timed? ?out|timeout|connection|overloaded|rate.?limit|429|\b50[0234]\b|temporarily|"
                        r"network|reset by peer|unavailable", re.I)
@@ -417,17 +417,16 @@ def _size(n: float) -> str:
 
 
 def fix_boss_chat() -> list[str]:
-    """Every Boss message re-sends the whole conversation. Close one that is huge and has been quiet for hours."""
+    """Every Boss message re-sends the whole conversation. Close one that is too big (a recap carries over)."""
     from . import boss
     conv = boss.current_conversation()
-    r = db.rows("SELECT COALESCE(SUM(LENGTH(content)), 0) chars, MAX(created_at) last FROM boss_messages "
-                "WHERE conversation = ? AND role != 'marker'", conv)[0]
-    tokens = r["chars"] // 4
-    if tokens < BOSS_CHAT_TOKENS or not r["last"] or r["last"] > _ago(hours=3):
+    tokens = boss.chat_tokens(conv)
+    last = db.rows("SELECT MAX(created_at) last FROM boss_messages WHERE conversation = ?", conv)[0]["last"]
+    if tokens < BOSS_CHAT_TOKENS or (last and last > _ago(minutes=10)):   # a chat in use rolls itself between messages
         return []
     boss.new_conversation()
     msg = (f"Started a fresh Boss conversation: the old one was about {tokens // 1000}k tokens and was re-sent on "
-           "every message. It is still saved, and your vision file carries over")
+           "every message. It is still saved, and your vision file and a short recap carry over")
     _log(msg)
     return [msg]
 
