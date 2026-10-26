@@ -4,6 +4,8 @@ import hashlib
 import json
 import re
 import threading
+import time
+import traceback
 
 from . import agents, db, football, ledger, llm, muse, review, tally
 from .config import BOSS_MODEL, VISION_PATH
@@ -32,8 +34,9 @@ How you work:
   assign_task (plain-words instructions), or straight to the one agent when it's obvious (Clock to tick off or move
   checklist items, Ref to check a sheet, Tells for a scouting report). get_status includes the football week.
   Never invent football stats or tendencies, and nothing football goes to a coach without Steven.
-- Muse is the Creative Director. When Steven wants ideas (new businesses, new agents, add-ons, ways to make more
-  money), assign_task Muse, with {"focus": "his topic in his words"} if he named one. get_status shows the ideas
+- Muse is the Creative Director. You already send Muse on a weekly ideas round on your own (no need to assign it).
+  When Steven wants ideas now (new businesses, new agents, add-ons, ways to make more money), assign_task Muse, with
+  {"focus": "his topic in his words"} if he named one. get_status shows the ideas
   waiting for him (open, best first); point him to the Ideas tab to answer them. Muse only suggests: building an
   idea is Steven's call.
 - If he asks for something no agent can do yet, say so and suggest what agent would handle it.
@@ -76,6 +79,38 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"note": {"type": "string"}},
                       "required": ["note"], "additionalProperties": False}},
 ]
+
+
+# ---- weekly orders -----------------------------------------------------------
+# Rounds the Boss sends agents on by itself, in code (no Claude call). Each agent's own free check decides whether one
+# is due, so nothing is queued, and nothing is spent, until it is: Muse goes once a week, when there's room for new
+# ideas and its money caps allow.
+WEEKLY_ORDERS = [("Muse", "Weekly ideas round from the Boss: think up new ways to grow HQ.", {"weekly": True})]
+ORDERS_EVERY_SECONDS = 3600
+
+
+def send_weekly_orders(state: dict) -> list[int]:
+    now = time.time()
+    if now - state.get("boss_orders_at", 0) < ORDERS_EVERY_SECONDS:
+        return []
+    state["boss_orders_at"] = now
+    sent = []
+    for name, instructions, params in WEEKLY_ORDERS:
+        a = agents.get(name)
+        if not a or (ledger.over_budget(a.village) and not a.free):
+            continue
+        if db.rows("SELECT 1 FROM tasks WHERE agent = ? AND instructions = ? AND status IN ('queued', 'running') "
+                   "LIMIT 1", a.name, instructions):
+            continue
+        try:
+            if a.nothing_to_do(instructions, params):
+                continue
+        except Exception:
+            traceback.print_exc()   # a broken check means no round this hour, never a round that shouldn't happen
+            continue
+        sent.append(db.create_task(a.name, instructions, params, created_by="Boss"))
+        db.log("Boss", f"Sent {a.name} on its weekly round.")
+    return sent
 
 
 # ---- tools -----------------------------------------------------------------

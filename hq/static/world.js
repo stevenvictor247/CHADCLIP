@@ -1485,7 +1485,7 @@ window.HQWorld = {
              followups: leads.filter(l => l.status === "pitched" && l.followup_at && l.followup_at <= now).length,
              views7d: s.tally?.views_7d || 0,
              live: camps.filter(x => x.status === "joined").length, proposed: camps.filter(x => x.status === "proposed").length,
-             ideas: s.ideas?.open || 0, museBusy: !!(s.agents || []).find(a => a.name === "Muse")?.doing,
+             ideas: s.ideas?.open || 0, museBusy: !!(s.agents || []).find(a => a.name === "Muse")?.doing || !!s.ideas?.thinking,
              news: (s.activity || []).filter(r => business.has(String(r.agent).toLowerCase())).slice(0, 4).map(r => ({who: r.agent, text: r.message}))};
     if (prevIdeas !== null && shown.ideas > prevIdeas) museDelivers(shown.ideas - prevIdeas);
     prevIdeas = shown.ideas;

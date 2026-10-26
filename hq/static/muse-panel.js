@@ -150,11 +150,12 @@
       <details><summary>How Muse ranks</summary><p class="mu-small">${esc(data.how)}</p></details>
       <div class="mu-ask">
         <input id="mu-focus" maxlength="500" placeholder="Point Muse at something (optional), e.g. ways to earn from my clipping accounts" value="${esc(focusDraft)}">
-        <button id="mu-run" ${busy || data.running || !data.has_llm ? "disabled" : ""}>${data.running || busy === "run" ? "Thinking…" : "✨ Brainstorm now"}</button>
+        <button id="mu-run" ${busy || data.running || data.queued || !data.has_llm ? "disabled" : ""}>${data.running || data.queued || busy === "run" ? "Thinking…" : "✨ Brainstorm now"}</button>
       </div>
-      <div class="mu-meta">${data.running ? "Muse is thinking. New ideas show here in a minute or two. " : esc(data.next) + " "}
-        This month: <b>${usd(data.spent_month)}</b> of <b>${usd(data.monthly_budget)}</b> · up to ${usd(data.round_cost)} a round ·
-        about every ${data.every_days} days, ${data.per_round} ideas each.
+      <div class="mu-meta">${data.running && !data.queued ? "Muse is thinking. New ideas show here in a minute or two. " : esc(data.next) + " "}
+        This month: <b>${usd(data.spent_month)}</b> of <b>${usd(data.monthly_budget)}</b> ·
+        the Boss sends Muse about every ${data.every_days} days (half price, up to ${usd(data.weekly_cost)}) ·
+        Brainstorm now up to ${usd(data.round_cost)}.
         ${last ? `<br>Last round ${esc(ago(last.at))}${last.focus ? ` on "${esc(last.focus)}"` : ""}: ${last.kept} new${(last.dropped || []).length ? `, ${last.dropped.length} dropped as repeats or against the rules` : ""}.` : ""}</div>
       ${last && (last.dropped || []).length ? `<details><summary>What Muse dropped and why</summary><div class="mu-dropped">${last.dropped.map(esc).join("<br>")}</div></details>` : ""}
       <div class="mu-err">${esc(err)}</div>

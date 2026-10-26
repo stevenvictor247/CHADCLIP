@@ -216,6 +216,10 @@ def tick():
         _save_state(state)
         return
     queue_scheduled(state)
+    try:
+        boss.send_weekly_orders(state)   # the Boss's own weekly rounds (Muse), free checks in code
+    except Exception:
+        traceback.print_exc()
     _save_state(state)   # now, not at the end: if a later step raises, the schedule must not forget it just queued jobs
     try:
         from . import sweep
