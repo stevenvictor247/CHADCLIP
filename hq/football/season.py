@@ -56,6 +56,10 @@ def items() -> list[dict]:
     return [i for i in out if not i.get("removed") and i.get("days_before") is not None]
 
 
+def site_for(opponent: str) -> str | None:
+    return (_defaults().get("sites") or {}).get(opponent)
+
+
 def find_opponent(text: str) -> str | None:
     """The opponent a name or file name points to, using full names and nicknames (DU, SVSU, NMU...)."""
     up = " " + re.sub(r"[^A-Z0-9]+", " ", (text or "").upper()) + " "

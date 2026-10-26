@@ -43,3 +43,19 @@ nicknames:
   Northern Michigan: [NMU, NORTHERN]
   Ferris State: [FSU, FERRIS]
   Michigan Tech: [MTU, MICH TECH, TECH]
+
+# Each opponent's athletics site, where Depth fetches the roster and stats for the personnel sheet. These are best guesses
+# that haven't been tried from your PC yet. If one doesn't load, Depth says so: change the address here (or send a new one to
+# the Boss), or upload that team's sheet by hand instead.
+sites:
+  Northwood: https://northwoodsports.com
+  Hillsdale: https://hillsdalechargers.com
+  Wisconsin-La Crosse: https://uwlathletics.com
+  Quincy: https://quincyhawks.com
+  Grand Valley State: https://gvsulakers.com
+  Roosevelt: https://rooseveltlakers.com
+  Saginaw Valley State: https://svsucardinals.com
+  Davenport: https://davenportpanthers.com
+  Northern Michigan: https://nmuwildcats.com
+  Ferris State: https://ferrisstatebulldogs.com
+  Michigan Tech: https://michigantechhuskies.com
