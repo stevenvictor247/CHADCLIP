@@ -9,7 +9,7 @@ from ... import approvals, db, llm, relay
 from ...config import CONFIG_DIR, model_for
 from ..base import Agent
 from ..chad import twitch
-from . import finder, mailer
+from . import finder, mailer, sample
 
 SYSTEM = """You write the first message from Steven, a clipper, to a streamer or podcaster who might pay him to clip
 their content for TikTok, YouTube Shorts and Instagram Reels.
@@ -137,6 +137,8 @@ def set_status(lead_id: int, status: str, note: str = "") -> None:
         mailer.add_do_not_contact(email, note)
     db.execute("UPDATE leads SET status = ?, notes = COALESCE(notes, '') || ?, updated_at = ? WHERE id = ?",
                status, f"\n[{db.now()[:10]}] {note}" if note else "", db.now(), lead_id)
+    if status in ("replied", "client"):
+        sample.mark_replied(lead_id)
 
 
 def they_said_yes(lead_id: int, how: str = "") -> str:
@@ -198,6 +200,7 @@ def _handle_followup_decision(payload: dict, decision: str) -> str:
 
 approvals.HANDLERS["pitch"] = _handle_pitch_decision
 approvals.HANDLERS["followup"] = _handle_followup_decision
+approvals.HANDLERS["sample"] = sample.handle_decision
 
 
 class Pitch(Agent):
@@ -210,13 +213,14 @@ class Pitch(Agent):
                         '{"lead": {"name": "...", "platform": "youtube", "handle": "...", "contact": "email or link", '
                         '"notes": "what you know about them"}} to draft a pitch for someone you found; {"followups": true}; '
                         '{"mark": {"lead_id": 1, "status": "replied|client|dead|do_not_contact", "note": "..."}}; '
-                        '{"do_not_contact": "email@example.com"}; {"recheck": true} to look for emails for pitches already waiting for your OK; {"report": true}.',
+                        '{"sample": 1} to cut a private sample clip for a drafted lead you marked as good (you approve it before its link goes in the pitch); {"do_not_contact": "email@example.com"}; {"recheck": true} to look for emails for pitches already waiting for your OK; {"report": true}.',
             schedule=self._schedule(),
         )
 
     @staticmethod
     def _schedule() -> list:
         out = [(24, "Check which pitched leads need a follow-up.", {"followups": True}),
+               (24, "Delete private sample clips older than 14 days.", {"sample_cleanup": True}),
                (24, "Look for emails for pitches waiting for approval that have none.", {"recheck": True})]
         try:
             cfg = settings()
@@ -231,6 +235,8 @@ class Pitch(Agent):
         if params.get("followups") and set(params) == {"followups"}:
             return not db.rows("SELECT 1 FROM leads WHERE status = 'pitched' AND followup_at IS NOT NULL "
                                "AND followup_at <= ? LIMIT 1", _iso())
+        if params == {"sample_cleanup": True}:
+            return not sample.due_for_cleanup()
         if params == {"recheck": True}:   # only cards still without an email are worth another look
             return not any(a["kind"] == "pitch" and not a["payload"].get("email") for a in approvals.pending())
         return None
@@ -239,6 +245,10 @@ class Pitch(Agent):
         params = json.loads(task.get("params") or "{}")
         if params.get("find"):
             return self.find(int(params["find"]))
+        if params.get("sample"):
+            return sample.make(int(params["sample"]))
+        if params.get("sample_cleanup"):
+            return f"Deleted {sample.cleanup()} old sample clip(s)."
         if params.get("lead"):
             return self.draft_lead(params["lead"])
         if params.get("do_not_contact"):
@@ -433,4 +443,4 @@ class Pitch(Agent):
         counts = {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM leads GROUP BY status")}
         if not counts:
             return "No leads yet."
-        return "Leads: " + ", ".join(f"{n} {s}" for s, n in counts.items())
+        return "Leads: " + ", ".join(f"{n} {s}" for s, n in counts.items()) + (f". {sample.summary()}" if sample.summary() else "")
