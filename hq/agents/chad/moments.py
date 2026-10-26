@@ -1,6 +1,6 @@
 """Choosing which parts of a video become clips."""
 
-from ... import llm
+from ... import hooks, llm
 from ...config import model_for
 
 SYSTEM = """You are Chad, a short-form video clipper. You find the moments in long videos that will
@@ -28,10 +28,12 @@ SCHEMA = {
                     "title": {"type": "string", "description": "On-platform title, under 80 characters"},
                     "caption": {"type": "string", "description": "Post caption, 1-2 sentences"},
                     "hashtags": {"type": "array", "items": {"type": "string"}},
+                    "hooks": {"type": "array", "items": {"type": "string"},
+                              "description": "Exactly 3 opening lines of under 12 words, one per style asked for, in that order"},
                     "score": {"type": "number", "description": "Expected performance from 0 to 10"},
                     "reason": {"type": "string", "description": "Why this moment works, one sentence"},
                 },
-                "required": ["start", "end", "title", "caption", "hashtags", "score", "reason"],
+                "required": ["start", "end", "title", "caption", "hashtags", "hooks", "score", "reason"],
                 "additionalProperties": False,
             },
         }
@@ -46,12 +48,15 @@ def pick(transcript: dict | None, duration: float, video_title: str, creator: di
     if llm.HAS_LLM and transcript and transcript["segments"]:
         lines = "\n".join(f"[{s['start']:.1f}-{s['end']:.1f}] {s['text']}" for s in transcript["segments"])
         from ... import tally
-        results = "\n".join(x for x in (tally.for_chad(creator.get("name")), tally.your_taste(creator.get("name"))) if x)
+        results = "\n".join(x for x in (tally.for_chad(creator.get("name")), tally.your_taste(creator.get("name")),
+                                         hooks.for_chad()) if x)
+        styles = "\n".join(f"{i}. {hooks.STYLES[s]}" for i, s in enumerate(hooks.ordered_styles(hooks.winning_style()), 1))
         prompt = (
             f"Video: {video_title}\nCreator: {creator.get('name')}\nCreator notes: {creator.get('notes', '')}\n"
             + (f"{results}\n" if results else "") +
             f"Video length: {duration:.0f} s\n\nPick the {count} best clips, each {min_len:.0f}-{max_len:.0f} "
-            f"seconds long, not overlapping. Start and end on sentence boundaries from the transcript.\n\n"
+            f"seconds long, not overlapping. Start and end on sentence boundaries from the transcript.\n"
+            f"For each clip also write 3 opening lines (hooks), one per style, in this order:\n{styles}\n\n"
             f"Transcript:\n{lines}"
         )
         moments = llm.ask_json(model_for("chad"), SYSTEM, prompt, SCHEMA, agent="Chad")["moments"]

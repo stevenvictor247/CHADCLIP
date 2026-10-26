@@ -68,6 +68,14 @@ Without `HQ_PASSWORD`, HQ only listens on the computer it runs on, exactly as be
 database and settings into `data/backups`, and HQ does this by itself once a day. To move HQ to an always-on
 cloud server later, see `deploy/cloud/install.sh`.
 
+## Hook Lab
+
+Chad gives every clip three opening lines in different styles (question, bold claim, tease), labeled A, B and C. Tap
+one on the clip's approval card and it becomes the first line of the caption. Tally saves the chosen style next to the
+clip's views, and once 20 counted clips have a chosen hook it reports which style got the most views. From then on
+Chad writes that style as option A. It costs nothing extra: the lines come from Chad's existing Claude call (templates
+fill in when there's no key). Until there are enough views the report says "no winner yet".
+
 ## The Boss
 
 Chat with it on the dashboard. It reads `config/vision.md` before every conversation, assigns tasks to
