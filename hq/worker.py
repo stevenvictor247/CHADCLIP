@@ -169,13 +169,14 @@ def daily_report(state: dict):
 
 def football_tick():
     """Warrior Village's own rounds: Ref checks new sheets in the football Inbox, Clock sends the morning reminder."""
-    from .football import depth, files, printing, season
+    from .football import depth, files, printing, scouting, season
     try:
         for name in files.scan():
             db.create_task("Ref", f"Check {name}", {"file": name}, created_by="Inbox")
         season.remind_if_due(FOOTBALL_REMINDER_HOUR)
         printing.run_if_due()
         depth.run_if_due()
+        scouting.run_if_due()
         printing.ensure_folders_daily()
     except Exception as e:  # never let the football side stop the business side
         traceback.print_exc()

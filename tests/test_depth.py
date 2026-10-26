@@ -141,3 +141,24 @@ def test_api_upload_and_build(tmp_path):
     assert r.status_code == 200 and r.json()["players"] == 13
     assert c.post("/api/football/depth/upload", files={"file": ("a.xlsx", body)}, headers=h).status_code == 400
     assert c.post("/api/football/depth/build?opponent=Ferris%20State", headers=h).json()["task_id"]
+
+
+# ---- the Monday 5 PM scouting report ----
+
+def test_monday_5pm_queues_tells_for_the_newest_export_or_asks(_setup):
+    from hq.config import FOOTBALL_INBOX
+    from hq.football import scouting
+    scouting.STATE.unlink(missing_ok=True)
+    db.execute("DELETE FROM football_files")
+    assert scouting.run_if_due(datetime(2026, 10, 26, 16, 59)) is None           # not yet 5 PM
+    assert scouting.run_if_due(datetime(2026, 10, 26, 17, 0)) == "asked" and "Northern Michigan" in _setup[-1]
+    assert scouting.run_if_due(datetime(2026, 10, 26, 18, 0)) is None            # once a week
+    scouting.STATE.unlink(missing_ok=True)
+    for n in ("NMU old.xlsx", "NMU new.xlsx", "Ferris.xlsx"):
+        (FOOTBALL_INBOX / n).write_bytes(b"x")
+        db.execute("INSERT INTO football_files (name, status, modified, added_at) VALUES (?, 'checked', 0, ?)", n, db.now())
+    assert scouting.run_if_due(datetime(2026, 10, 26, 17, 5)) == "queued"
+    t = db.rows("SELECT agent, params FROM tasks WHERE agent = 'Tells'")[0]
+    assert "NMU new.xlsx" in t["params"] and "Northern Michigan" in t["params"]
+    for n in ("NMU old.xlsx", "NMU new.xlsx", "Ferris.xlsx"):
+        (FOOTBALL_INBOX / n).unlink()
