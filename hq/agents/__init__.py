@@ -4,11 +4,12 @@ from .chad import Chad
 from .football import Captain, Clock, Depth, Ref, Scribe, Tells
 from .muse import Muse
 from .pitch import Pitch
+from .recap import Recap
 from .scout import Scout
 from .sweep import Sweep
 from .tally import Tally
 
-AGENTS = {a.name.lower(): a for a in [Chad(), Scout(), Pitch(), Tally(), Sweep(), Muse(), Captain(), Clock(), Ref(), Tells(), Scribe(), Depth()]}
+AGENTS = {a.name.lower(): a for a in [Chad(), Scout(), Pitch(), Recap(), Tally(), Sweep(), Muse(), Captain(), Clock(), Ref(), Tells(), Scribe(), Depth()]}
 
 
 def get(name: str):

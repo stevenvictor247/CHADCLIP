@@ -315,6 +315,7 @@ class Pitch(Agent):
             f"Price to mention: {cfg.get('price')}" if cfg.get("price") else "Do not mention a price.",
             f"About Steven: {cfg.get('about_me')}" if cfg.get("about_me") else "Say nothing about Steven's background.",
             f"Portfolio link to include: {cfg.get('portfolio_url')}" if cfg.get("portfolio_url") else "No portfolio link.",
+            f"Second, cheaper offer: mention it in one sentence after the first: {cfg.get('second_offer')}" if cfg.get("second_offer") else None,
             "Offer one free sample clip." if cfg.get("free_sample") else "Do not offer a free sample.",
             f"Opt-out line: {cfg.get('opt_out_line')}", f"Sign as: {cfg.get('sender_name')}"] if x)
         draft = llm.ask_json(model_for("pitch"), SYSTEM, facts, SCHEMA, effort="low", agent="Pitch")

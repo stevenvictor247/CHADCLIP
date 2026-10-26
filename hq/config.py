@@ -46,6 +46,7 @@ DEFAULT_MODELS = {
     "report": "claude-sonnet-5-5",  # the daily report: summarising facts HQ already gathered
     "sweep": "claude-sonnet-5-5",   # Sweep's one coach's note a day: spotting the pattern behind its findings
     "muse": "claude-sonnet-5-5",    # the Creative Director's weekly ideas: judgement and fresh thinking, about $0.20 a round
+    "recap": "claude-haiku-5-5",    # titles and chapters from long transcripts: the cheap model keeps long VODs affordable
 }
 SIMPLE_MODEL = "claude-haiku-5-5"   # every other agent: sorting, drafting, summarising
 
