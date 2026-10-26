@@ -55,7 +55,10 @@ def _rows(path: Path) -> list[list]:
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     except Exception:
         raise DepthError(f"I couldn't open {path.name}. Save it again as .xlsx or .csv.")
-    return [list(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
+    try:
+        return [list(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
+    finally:
+        wb.close()   # Windows won't let a file be replaced or deleted while it's open
 
 
 def read(path: Path) -> dict:
@@ -142,11 +145,15 @@ def layout(players: list[dict]) -> dict:
     return cols
 
 
+def _day(d: date) -> str:
+    return f"{d.strftime('%a %b')} {d.day}"   # %-d isn't available on Windows
+
+
 def _subline(opponent: str, meta: dict) -> str:
     g = next((x for x in season.games() if x["opponent"] == opponent), None)
     parts = []
     if g:
-        parts.append(g["date"].strftime("%a %b %-d").upper() if hasattr(g["date"], "strftime") else str(g["date"]))
+        parts.append(_day(g["date"]).upper() if hasattr(g["date"], "strftime") else str(g["date"]))
     kick = meta.get("KICKOFF") or (g or {}).get("kickoff")
     if kick:
         parts.append(str(kick).upper())
@@ -242,7 +249,7 @@ def build_pdf(opponent: str, data: dict, path: Path, today: date | None = None) 
     c.setFillColor(grey); c.setFont("Helvetica", 7)
     c.drawString(M, foot - 28, "WAYNE STATE WARRIORS   ·   WAYNE.EDU")
     games = f", {meta['GAMES']} games" if meta.get("GAMES") else ""
-    c.drawRightString(W - M, foot - 28, f"Compiled {today.strftime('%a %b %-d, %Y')}   ·   ST = starts{games}")
+    c.drawRightString(W - M, foot - 28, f"Compiled {_day(today)}, {today.year}   ·   ST = starts{games}")
     c.save()
     return path
 
