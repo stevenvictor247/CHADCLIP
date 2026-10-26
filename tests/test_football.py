@@ -472,3 +472,22 @@ def test_a_downloaded_notebook_imports_back_without_extra_entries():
     db.execute("DELETE FROM football_notes")
     assert notebook.import_markdown(out) == 1
     assert notebook.shown(notebook.notes()[0]) == "10/1/26 — Made-up entry" and notebook.notes()[0]["tab"] == "Fronts"
+
+
+def test_outbox_pdf_opens_in_the_browser_and_can_be_deleted_and_drafts_preview_before_approval(_setup):
+    rows = [play(i, form="TREY", kind="Run") for i in range(1, 12)] + [play(i, kind="Pass") for i in range(12, 24)]
+    write_xlsx("Davenport week.xlsx", rows)
+    tells_mod.build("Davenport week.xlsx", kind="birds")
+    ap = approvals.pending()[0]
+    c = api()
+    r = c.get(f"/api/approvals/{ap['id']}/file")   # preview of the draft, before anything is approved
+    assert r.status_code == 200 and r.content.startswith(b"%PDF") and r.headers["content-disposition"].startswith("inline")
+    approvals.decide(ap["id"], "approve")
+    assert c.get(f"/api/approvals/{ap['id']}/file").status_code == 404   # nothing left to preview once decided
+    name = next(FOOTBALL_OUTBOX.glob("*.pdf")).name
+    r = c.get(f"/api/football/outbox/{name}")
+    assert r.status_code == 200 and r.headers["content-disposition"].startswith("inline")
+    assert c.post(f"/api/football/outbox/{name}/delete").status_code in (400, 403)   # needs the dashboard header
+    assert c.post(f"/api/football/outbox/{name}/delete", headers={"X-HQ": "1"}).status_code == 200
+    assert not (FOOTBALL_OUTBOX / name).exists()
+    assert c.post("/api/football/outbox/nothing.pdf/delete", headers={"X-HQ": "1"}).status_code == 404

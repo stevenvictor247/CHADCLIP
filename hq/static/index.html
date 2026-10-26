@@ -608,7 +608,7 @@ function renderApprovals(list) {
     list.map(a => `<div class="camp"><h3>${esc(a.title)} <span class="tag">${esc(a.agent)}</span>${villages.size > 1 || a.village === "football"
       ? `<span class="tag village-${esc(a.village || "business")}">${VILLAGE[a.village || "business"]}</span>` : ""}</h3>
     <pre>${esc(a.preview)}</pre>
-    <div class="row"><button onclick="decideApproval(${a.id}, 'approve')">${esc(a.yes_label)}</button>
+    <div class="row">${(a.payload || {}).draft ? `<button class="ghost" onclick="window.open('/api/approvals/${a.id}/file', '_blank')">👁 Preview</button>` : ""}<button onclick="decideApproval(${a.id}, 'approve')">${esc(a.yes_label)}</button>
     <button class="ghost" onclick="decideApproval(${a.id}, 'reject')">${esc(a.no_label)}</button></div></div>`).join("");
 }
 $("apprfilter").onchange = () => renderApprovals(allApprovals);
