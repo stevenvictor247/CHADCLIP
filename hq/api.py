@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
 from . import muse_api, sweep_api
-from .config import CLIPS_DIR, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
+from .config import CLIPS_DIR, FOOTBALL_DATA, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
 app = FastAPI(title="Agent HQ")
 app.include_router(sweep_api.router)
@@ -819,7 +819,31 @@ def football_outbox_file(name: str):
     path = (FOOTBALL_OUTBOX / Path(name).name).resolve()
     if path.parent != FOOTBALL_OUTBOX.resolve() or not path.is_file():
         raise HTTPException(404, "Not in the football Outbox")
-    return FileResponse(path, filename=path.name)
+    inline = path.suffix.lower() in (".pdf", ".png", ".jpg", ".jpeg", ".txt")   # these open in the browser instead of downloading
+    return FileResponse(path, filename=path.name, content_disposition_type="inline" if inline else "attachment")
+
+
+@app.get("/api/approvals/{approval_id}/file")
+def approval_file(approval_id: int):
+    """Opens the draft file behind an approval (a scouting PDF, a personnel sheet) so you can look before you say yes."""
+    rows = [a for a in approvals.pending() if a["id"] == approval_id]
+    draft = (rows[0]["payload"].get("draft") if rows else None)
+    path = Path(draft).resolve() if draft else None
+    if not path or path.parent != (FOOTBALL_DATA / "drafts").resolve() or not path.is_file():
+        raise HTTPException(404, "There's no draft file to preview for that.")
+    inline = path.suffix.lower() in (".pdf", ".png", ".jpg", ".jpeg", ".txt")
+    return FileResponse(path, filename=path.name, content_disposition_type="inline" if inline else "attachment")
+
+
+@app.post("/api/football/outbox/{name}/delete")
+def football_outbox_delete(name: str, request: Request):
+    _from_hq_page(request)
+    path = (FOOTBALL_OUTBOX / Path(name).name).resolve()
+    if path.parent != FOOTBALL_OUTBOX.resolve() or not path.is_file():
+        raise HTTPException(404, "Not in the football Outbox")
+    path.unlink()
+    db.log("Steven", f"Deleted {path.name} from the football Outbox")
+    return {"message": f"Deleted {path.name}."}
 
 
 @app.get("/api/update")

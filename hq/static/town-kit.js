@@ -491,7 +491,7 @@ function approvalsCard(village) {
           <div class="row"><button data-act="clip-yes" data-id="${c.id}">👍 Approve</button><button class="bad" data-act="clip-no" data-id="${c.id}">Reject</button></div></div>`).join("") +
         items.map(a => `<div class="item"><b>${esc(a.title)}</b><small class="muted">from ${esc(a.agent)}</small>
           <pre>${esc(String(a.preview || "").slice(0, 900))}${String(a.preview || "").length > 900 ? "…" : ""}</pre>
-          <div class="row"><button data-act="yes" data-id="${a.id}">${esc(a.yes_label || "Approve")}</button><button class="ghost" data-act="no" data-id="${a.id}">${esc(a.no_label || "No")}</button></div></div>`).join(""),
+          <div class="row">${(a.payload || {}).draft ? `<button class="ghost" onclick="window.open('/api/approvals/${a.id}/file', '_blank')">👁 Preview</button>` : ""}<button data-act="yes" data-id="${a.id}">${esc(a.yes_label || "Approve")}</button><button class="ghost" data-act="no" data-id="${a.id}">${esc(a.no_label || "No")}</button></div></div>`).join(""),
       buttons: [{act: "open", label: "Open Approvals ↗", kind: "ghost"}],
       acts: {
         "clip-yes": b => decide(b, `/api/clips/${b.dataset.id}/approve`, `👍 Clip #${b.dataset.id} approved`),
