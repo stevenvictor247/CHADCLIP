@@ -69,6 +69,13 @@ def profile_by_login(login: str) -> dict:
     return {"bio": u.get("description", ""), "type": u.get("broadcaster_type", "")}
 
 
+def follower_count(broadcaster_id: str) -> int:
+    """How many followers a channel has (Helix returns just the total with first=1)."""
+    r = requests.get(f"{HELIX}/channels/followers", headers=_headers(), params={"broadcaster_id": broadcaster_id, "first": 1}, timeout=30)
+    r.raise_for_status()
+    return int(r.json()["total"])
+
+
 def top_clips(broadcaster_id: str, days: int = 1, limit: int = 5) -> list[dict]:
     """Most-viewed clips from the last `days` days (Twitch returns them sorted by views)."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")

@@ -21,6 +21,7 @@ daily_leads: 5                  # how many new pitches to draft per run
 min_viewers: 50
 max_viewers: 2000
 language: en
+min_score: 4                    # leads Pitch scores under this (1 to 10) are skipped and hidden from the review list
 auto_find: false                # true = draft new pitches once a day on its own
 
 # Follow-ups

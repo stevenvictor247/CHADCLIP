@@ -622,7 +622,7 @@ function renderLeads(list) {
   const key = JSON.stringify(list);
   if (key === shownLeads) return;
   shownLeads = key;
-  $("leads").innerHTML = list.map(l => `<div class="leadrow"><b>${esc(l.name)}</b><span class="meta">${esc(l.platform)}</span>
+  $("leads").innerHTML = list.map(l => `<div class="leadrow"><b>${esc(l.name)}</b><span class="meta">${esc(l.platform)}</span>${l.score ? `<span class="meta" title="${esc(l.score_why || "")}">★ ${l.score}/10 · ${esc(l.score_why || "")}</span>` : ""}
     <select onchange="setLead(${l.id}, this.value)" aria-label="Status of ${esc(l.name)}">${LEAD_STATUSES.map(s =>
       `<option ${s === l.status ? "selected" : ""}>${s}</option>`).join("")}</select>
     ${l.platform === "twitch" && l.status !== "client" ? `<button onclick="leadYes(${l.id})">They said yes</button>` : ""}
