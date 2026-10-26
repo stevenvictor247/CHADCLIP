@@ -24,8 +24,9 @@ def sheets_for(path: Path, opponent: str | None) -> list[Path]:
     opp = opponent or season.find_opponent(path.stem)
     found = [path]
     if opp:
-        found += [p for p in files._sheets() if p != path and season.find_opponent(p.stem) == opp]
-    return sorted(set(found), key=lambda p: (p.stat().st_mtime, p.name))
+        found += [p for p in files._sheets() if season.find_opponent(p.stem) == opp]
+    unique = {p.name.casefold(): p for p in reversed(found)}   # the same file can be spelled two ways (Windows paths)
+    return sorted(unique.values(), key=lambda p: (p.stat().st_mtime, p.name))
 
 
 def build(name: str, opponent: str | None = None, kind: str = "scouting") -> str:
