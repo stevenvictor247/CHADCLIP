@@ -71,7 +71,7 @@ DAILY_BUDGET = float(os.getenv("HQ_DAILY_BUDGET", "5") or 0)
 
 # The football village (Warrior Village). Its agents, its own daily Claude budget, and where its files live.
 # Its spending never counts against HQ_DAILY_BUDGET, and the business side's never counts against this one.
-FOOTBALL_AGENTS = ("Captain", "Clock", "Ref", "Tells", "Scribe")
+FOOTBALL_AGENTS = ("Captain", "Clock", "Ref", "Tells", "Scribe", "Depth")
 FOOTBALL_DAILY_BUDGET = float(os.getenv("HQ_FOOTBALL_DAILY_BUDGET", "1") or 0)
 # Your private football data (rulebook, notebook overrides) always stays in data/football.
 FOOTBALL_DATA = DATA_DIR / "football"

@@ -713,6 +713,28 @@ def football_tagsheet_clear(request: Request):
     return {"message": "Tag sheet removed."}
 
 
+@app.post("/api/football/depth/upload")
+def football_depth_upload(request: Request, file: UploadFile = File(...), opponent: str | None = Form(None)):
+    _from_hq_page(request)
+    from .football import depth
+    data = file.file.read(10 * 1024 * 1024 + 1)
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(400, "That file is over 10 MB.")
+    try:
+        info = depth.save_upload(Path(file.filename or "depth.xlsx").name, data, opponent or None)
+    except depth.DepthError as e:
+        raise HTTPException(400, str(e))
+    db.log("Steven", f"Uploaded the {info['opponent']} depth chart and stats")
+    return {"message": f"Saved the {info['opponent']} depth chart ({info['players']} offensive players).", **info}
+
+
+@app.post("/api/football/depth/build")
+def football_depth_build(request: Request, opponent: str | None = None):
+    _from_hq_page(request)
+    return {"task_id": db.create_task("Depth", "Personnel sheet" + (f": {opponent}" if opponent else ""),
+                                      {"opponent": opponent} if opponent else {}, created_by="Steven")}
+
+
 @app.post("/api/football/print/pause")
 def football_print_pause(body: PauseIn, request: Request):
     _from_hq_page(request)
