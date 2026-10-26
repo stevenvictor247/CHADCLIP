@@ -188,6 +188,7 @@
         <div class="row">
           <select data-opp="${f.id}">${opponentOptions()}</select>
           <button data-report="${f.id}" ${f.status === "checking" ? "disabled" : ""}>📊 Build scouting report</button>
+          <button data-birds="${f.id}" ${f.status === "checking" ? "disabled" : ""}>🐦 Build Birds and Rabbits</button>
           <button class="ghost" data-check="${f.id}" ${f.status === "checking" ? "disabled" : ""}>Check again</button>
         </div></div>`).join("")
       : `<div class="empty"><span class="big">📭</span>No sheets yet. Export a playlist from Hudl (Excel) and drop it above.</div>`;
@@ -196,6 +197,13 @@
       const r = await post(`/api/football/files/${b.dataset.check}/check`);
       toast(r.ok ? "🚩 Ref is checking it again" : esc(r.message));
       shown.files = null; refresh();
+    });
+    $("fbfilelist").querySelectorAll("[data-birds]").forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      const opp = $("fbfilelist").querySelector(`[data-opp="${b.dataset.birds}"]`).value;
+      const r = await post(`/api/football/files/${b.dataset.birds}/report`, {opponent: opp || null, kind: "birds"});
+      toast(r.ok ? "🐦 Tells is building Birds and Rabbits. It will wait for your OK in Approvals." : esc(r.message));
+      b.disabled = false; refresh();
     });
     $("fbfilelist").querySelectorAll("[data-report]").forEach(b => b.onclick = async () => {
       b.disabled = true;

@@ -100,6 +100,40 @@ def scouting_docx(a: dict, opponent: str, path: Path) -> Path:
     return path
 
 
+def birds_rabbits_docx(a: dict, opponent: str, path: Path) -> Path:
+    """Just the Birds and Rabbits page: the biggest run tells and pass tells, each with its sample size."""
+    from docx import Document
+    from docx.oxml.ns import qn
+    from docx.shared import Pt, RGBColor
+
+    doc = Document()
+    for s in doc.sections:
+        s.left_margin = s.right_margin = s.top_margin = s.bottom_margin = Pt(54)
+    normal = doc.styles["Normal"]
+    normal.font.name, normal.font.size = "Arial", Pt(11)
+    normal.element.rPr.rFonts.set(qn("w:eastAsia"), "Arial")
+
+    def heading(text, size, color):
+        p = doc.add_paragraph()
+        r = p.add_run(text)
+        r.bold, r.font.size, r.font.color.rgb, r.font.name = True, Pt(size), RGBColor.from_string(color), "Arial"
+        p.paragraph_format.space_before, p.paragraph_format.space_after = Pt(10), Pt(3)
+
+    heading(f"{opponent.upper()} OFFENSE: BIRDS AND RABBITS", 17, GREEN)
+    p = doc.add_paragraph(f"{a['plays']} plays ({a['run']} run, {a['pass']} pass) from {a['file']}. "
+                          "Every number is a count of your tags. A tell needs 5+ plays and a 70%+ lean.")
+    p.runs[0].font.size = Pt(9)
+    for title, key, word in (("RUN TELLS (RABBITS)", "run_tells", "run"), ("PASS TELLS (BIRDS)", "pass_tells", "pass")):
+        heading(title, 13, GOLD)
+        if not a[key]:
+            doc.add_paragraph(f"No {word} tell strong enough.", style="List Bullet")
+        for t in a[key]:
+            doc.add_paragraph(t["text"], style="List Bullet")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(path)
+    return path
+
+
 def ref_copy(source: Path, result: dict, path: Path) -> Path | None:
     """Your sheet with Ref's flags: flagged cells colored (red = fix, yellow = check) and a REF column saying why.
     Only for .xlsx files; your original file is never changed."""

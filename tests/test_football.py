@@ -199,6 +199,31 @@ def test_tells_report_waits_for_ok_then_lands_in_outbox(_setup):
     assert len(saved) == 1 and saved[0].name.startswith("Davenport scouting report")
 
 
+def test_birds_and_rabbits_is_its_own_one_page_document_with_its_own_button(_setup):
+    from docx import Document
+    rows = [play(i, form="TREY", kind="Run") for i in range(1, 12)] + [play(i, kind="Pass") for i in range(12, 24)]
+    write_xlsx("Davenport week.xlsx", rows)
+    out = tells_mod.build("Davenport week.xlsx", kind="birds")
+    assert out.startswith("Birds and Rabbits for Davenport")
+    ap = approvals.pending()[0]
+    assert ap["title"].startswith("Birds and Rabbits: Davenport")
+    approvals.decide(ap["id"], "approve")
+    saved = list(FOOTBALL_OUTBOX.glob("*.docx"))
+    assert len(saved) == 1 and saved[0].name.startswith("Davenport birds and rabbits")
+    text = "\n".join(p.text for p in Document(saved[0]).paragraphs)
+    assert "BIRDS AND RABBITS" in text and "RUN TELLS" in text and "PASS TELLS" in text and "TREY" in text.upper()
+    assert "FORMATION" not in text.upper().split("TELLS")[-1]   # no tendency tables: those are in the scouting report
+    # the dashboard buttons make the right tasks
+    api_client = api()
+    r = api_client.post("/api/football/upload", files={"file": ("Ferris week.xlsx", (FOOTBALL_INBOX / "Davenport week.xlsx").read_bytes())},
+                        headers={"X-HQ": "1"})
+    fid = files.listing()[0]["id"]
+    api_client.post(f"/api/football/files/{fid}/report", json={"kind": "birds"}, headers={"X-HQ": "1"})
+    api_client.post(f"/api/football/files/{fid}/report", json={}, headers={"X-HQ": "1"})
+    params = [json.loads(t["params"]) for t in db.rows("SELECT params FROM tasks WHERE agent = 'Tells' ORDER BY id")]
+    assert params[-2].get("kind") == "birds" and "kind" not in params[-1]
+
+
 def test_tells_refuses_a_sheet_with_too_few_plays():
     write_xlsx("small.xlsx", [play(1), play(2)])
     assert "too few" in tells_mod.build("small.xlsx") and not approvals.pending()

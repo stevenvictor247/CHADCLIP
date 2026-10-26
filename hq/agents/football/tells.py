@@ -18,7 +18,7 @@ DRAFTS = FOOTBALL_DATA / "drafts"
 MIN_REPORT_PLAYS = 10
 
 
-def build(name: str, opponent: str | None = None) -> str:
+def build(name: str, opponent: str | None = None, kind: str = "scouting") -> str:
     path = files.inbox_path(name)
     if not path.exists():
         return f"There's no {name} in the football Inbox."
@@ -31,17 +31,19 @@ def build(name: str, opponent: str | None = None) -> str:
         return (f"{path.name} has only {a['plays']} plays tagged run or pass (PLAY TYPE or RESULT), too few for a "
                 "report. Tells needs at least 10.")
     opp = opponent or season.find_opponent(path.stem) or "Opponent"
-    out_name = reports.safe_name(f"{opp} scouting report {date.today().isoformat()}.docx")
-    draft = reports.scouting_docx(a, opp, DRAFTS / out_name)
+    birds = kind == "birds"
+    out_name = reports.safe_name(f"{opp} {'birds and rabbits' if birds else 'scouting report'} {date.today().isoformat()}.docx")
+    draft = (reports.birds_rabbits_docx if birds else reports.scouting_docx)(a, opp, DRAFTS / out_name)
     preview = tendencies.birds_and_rabbits(a, opp)
     ref = db.rows("SELECT fix FROM football_files WHERE name = ? AND status = 'checked'", path.name)
     if ref and ref[0]["fix"]:
         preview += f"\n\nRef found {ref[0]['fix']} tag{'s' if ref[0]['fix'] > 1 else ''} to fix in this sheet. Fix them and rebuild for cleaner numbers."
     if opp == "Opponent":
         preview += "\n\n(I couldn't tell the opponent from the file name. Tell the Boss who it is and I'll rebuild it.)"
-    approvals.request("Tells", "football_report", f"Scouting report: {opp} ({a['plays']} plays)", preview,
+    label = "Birds and Rabbits" if birds else "Scouting report"
+    approvals.request("Tells", "football_report", f"{label}: {opp} ({a['plays']} plays)", preview,
                       {"draft": str(draft), "name": out_name, "opponent": opp}, yes="Save to Outbox", no="Throw away")
-    return f"Scouting report for {opp} is ready for your OK ({a['plays']} plays)."
+    return f"{label} for {opp} is ready for your OK ({a['plays']} plays)."
 
 
 def _decide(payload: dict, decision: str) -> str:
@@ -74,8 +76,8 @@ class Tells(Agent):
             name="Tells",
             role="Scouting report and Birds and Rabbits. Counts tendencies from a tagged sheet and lists the 3 biggest "
                  "run tells and 3 biggest pass tells, each with its sample size. Plain counting, no made-up numbers.",
-            params_help='{"file": "sheet in the football Inbox", "opponent": "Davenport"}. Without a file, uses the '
-                        'newest sheet.',
+            params_help='{"file": "sheet in the football Inbox", "opponent": "Davenport", "kind": "scouting" or "birds"}. '
+                        'Without a file, uses the newest sheet. "birds" makes just the one-page Birds and Rabbits.',
             village="football",
         )
 
@@ -87,4 +89,4 @@ class Tells(Agent):
             if not newest:
                 return "There are no sheets in the football Inbox yet. Drop a Hudl export in first."
             name = newest[0]["name"]
-        return build(Path(name).name, p.get("opponent"))
+        return build(Path(name).name, p.get("opponent"), p.get("kind", "scouting"))
