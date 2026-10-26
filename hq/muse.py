@@ -817,9 +817,9 @@ def decide(idea_id: int, decision: str, reason: str | None = None, from_card: bo
 # ---- Build it -> Claude ----------------------------------------------------------------------------------
 # "Build it" fires a Claude Code routine over HTTP (its API trigger). The routine hands the brief to Steven's Claude
 # project, which starts a new thread that builds it in CHADCLIP. The token is made once on claude.ai/code/routines
-# (open "HQ Build it button", Add another trigger, API, Generate token) and pasted into Settings; it only lets HQ start
+# (open "HQ Build it", Add another trigger, API, Generate token) and pasted into Settings; it only lets HQ start
 # that one routine, and never leaves this PC except to Anthropic.
-BUILD_URL = "https://api.anthropic.com/v1/claude_code/routines/trig_01Vt3RbV228mW37j4qrNzGri/fire"
+BUILD_URL = "https://api.anthropic.com/v1/claude_code/routines/trig_01VtqaeKDHmdfWDv1C48fanf/fire"
 BUILD_URL_RE = re.compile(r"^https://api\.anthropic\.com/v1/claude_code/routines/trig_[A-Za-z0-9]+/fire$")
 
 
