@@ -5,6 +5,7 @@ python-dotenv
 pyyaml
 openpyxl
 python-docx
+reportlab
 requests
 yt-dlp
 faster-whisper

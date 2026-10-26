@@ -97,6 +97,12 @@
         <div class="row"><button id="fbprintnow">Print now</button><button class="ghost" id="fbprintpause">Pause</button><button class="ghost" id="fbprintfolders">Make opponent folders</button></div>
         <div class="msg" id="fbprintmsg"></div>
       </section>
+      <section id="fbdepth"><h2>📋 Monday personnel sheet</h2><div id="fbdepthbody"></div>
+        <div class="row"><select id="fbdepthopp"></select><label class="ghost" style="cursor:pointer">Upload depth chart + stats<input type="file" id="fbdepthpick" accept=".xlsx,.xlsm,.csv" style="display:none"></label>
+          <button class="ghost" id="fbdepthbuild">Build now</button></div>
+        <div class="muted" style="margin-top:6px">One Excel or CSV per opponent with POS, NO, NAME and GS (starts) plus carries, attempts or catches. Every Monday Depth builds that week's sheet and asks for your OK.</div>
+        <div class="msg" id="fbdepthmsg"></div>
+      </section>
       <section id="fbtags"><h2>🏷️ Tag sheet</h2><div id="fbtagbody"></div>
         <div class="drop" id="fbtagdrop">Drop your sheet of all your tags here (Excel, CSV or text), or <label>pick a file<input type="file" id="fbtagpick"
           accept=".xlsx,.xlsm,.csv,.md,.txt"></label>. Captain reads it, and Ref won't flag a word that's on it.</div>
@@ -297,6 +303,33 @@
     refresh();
   };
 
+  // ---- the Monday personnel sheet ----
+  function drawDepth(fb) {
+    const d = fb.depth;
+    if (!d || !changed("depth", [d, fb.week && fb.week.game && fb.week.game.opponent])) return;
+    const sel = $("fbdepthopp"), cur = sel.value || (fb.week && fb.week.game && fb.week.game.opponent) || "";
+    sel.innerHTML = d.map(x => `<option ${x.opponent === cur ? "selected" : ""}>${esc(x.opponent)}</option>`).join("");
+    const week = fb.week && fb.week.game && fb.week.game.opponent;
+    $("fbdepthbody").innerHTML = d.filter(x => x.opponent === week || x.uploaded).map(x =>
+      `<div class="fbline">${x.uploaded ? "✅" : "⚠"} ${esc(x.opponent)}${x.opponent === week ? " (this week)" : ""} — ${x.uploaded ? "uploaded " + esc(x.when.replace("T", " ")) : "needs the depth chart and stats"}</div>`).join("") ||
+      `<div class="muted">No game this week.</div>`;
+  }
+  async function sendDepth(file) {
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    form.append("opponent", $("fbdepthopp").value);
+    const r = await post("/api/football/depth/upload", form, true);
+    $("fbdepthmsg").textContent = r.message || "";
+    if (r.ok) { shown.depth = null; refresh(); }
+  }
+  $("fbdepthpick").onchange = e => { sendDepth(e.target.files[0]); e.target.value = ""; };
+  $("fbdepthbuild").onclick = async () => {
+    const r = await post("/api/football/depth/build?opponent=" + encodeURIComponent($("fbdepthopp").value));
+    $("fbdepthmsg").textContent = r.ok ? "Depth is building it. It will show up in Approvals." : r.message;
+    if (r.ok) refresh();
+  };
+
   // ---- the tag sheet ----
   function drawTags(fb) {
     const t = fb.tagsheet;
@@ -343,6 +376,7 @@
       drawRules(fb);
       drawPrint(fb);
       drawTags(fb);
+      drawDepth(fb);
     },
   };
 })();

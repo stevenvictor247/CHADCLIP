@@ -18,7 +18,7 @@ from hq.agents.football import scribe as scribe_mod
 from hq.agents.football import tells as tells_mod
 from hq.agents.football.clock import Clock
 from hq.config import FOOTBALL_INBOX, FOOTBALL_OUTBOX, village_of
-from hq.football import files, notebook, rulebook, season, sheet, tagrules, tendencies
+from hq.football import depth, files, notebook, rulebook, scouting, season, sheet, tagrules, tendencies
 
 HEADER = ["PLAY #", "ODK", "DN", "DIST", "YARD LN", "HASH", "PLAY TYPE", "GN/LS", "RESULT", "PERSONNEL", "OFF FORM",
           "FORMATION TAG", "BACKFIELD", "MOTION", "OFF PLAY"]
@@ -49,6 +49,8 @@ def _setup(monkeypatch):
         folder.mkdir(parents=True, exist_ok=True)
         for p in folder.iterdir():
             p.unlink()
+    monkeypatch.setattr(depth, "run_if_due", lambda *a: None)       # the Monday jobs depend on the real day of the week
+    monkeypatch.setattr(scouting, "run_if_due", lambda *a: None)
     season.CHANGES_PATH.unlink(missing_ok=True)
     rulebook.PATH.unlink(missing_ok=True)
     sent, asked = [], []
