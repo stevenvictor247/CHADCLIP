@@ -31,7 +31,8 @@ class Clock(Agent):
                         '"kickoff": "1:00 PM", "site": "home"}}; {"due": {"item": "Teamworks itinerary", "weekday": '
                         '"Thursday"}} or {"due": {"item": "...", "days_before": 3, "add": true}} or {"due": {"item": "...", '
                         '"remove": true}}; {"folders": true} makes the opponent folders; {"print": true} prints '
-                        'the Thursday print folder now; {"pause": true} or {"resume": true} for the Thursday print',
+                        'the Thursday print folder now; {"pause": true} or {"resume": true} for the Thursday print; '
+                        '{"print_file": "name.pdf"} prints one Outbox file',
             village="football",
             notify_when_done=True,
         )
@@ -53,6 +54,8 @@ class Clock(Agent):
         if p.get("folders"):
             made = printing.ensure_folders()
             return ("Made folders for " + ", ".join(made) + ".") if made else "Every opponent already has a folder."
+        if p.get("print_file"):
+            return printing.print_outbox_file(p["print_file"])
         if p.get("print"):
             return printing.print_now("Print now")
         if p.get("pause") or p.get("resume"):

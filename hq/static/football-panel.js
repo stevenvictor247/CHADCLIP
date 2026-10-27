@@ -235,8 +235,14 @@
     if (!changed("outbox", list)) return;
     $("fboutlist").innerHTML = list.length ? list.map(f => `<div class="fbline">📄 <a href="/api/football/outbox/${encodeURIComponent(f.name)}" target="_blank" rel="noopener">${esc(f.name)}</a>
         <span class="when">${Math.max(1, Math.round(f.bytes / 1024))} KB</span>
+        <button class="ghost" data-print="${esc(f.name)}" title="Print this file now">🖨 Print</button>
         <button class="fbdel" data-del="${esc(f.name)}" title="Delete this file">🗑 Delete</button></div>`).join("")
       : `<div class="muted">Empty. Reports you OK and Ref's marked-up copies land here.</div>`;
+    $("fboutlist").querySelectorAll("[data-print]").forEach(b => b.onclick = async () => {
+      const r = await post(`/api/football/outbox/${encodeURIComponent(b.dataset.print)}/print`);
+      b.textContent = r.ok ? "🖨 Sent to Clock" : "⚠ " + r.message;
+      setTimeout(() => { b.textContent = "🖨 Print"; }, 4000);
+    });
     $("fboutlist").querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
       if (!confirm(`Delete ${b.dataset.del} from the Outbox? This can't be undone.`)) return;
       await post(`/api/football/outbox/${encodeURIComponent(b.dataset.del)}/delete`);
@@ -295,8 +301,26 @@
       ${p.files.length ? p.files.map(f => `<div class="fbline">${f.problem ? "⚠" : "📄"} ${esc(f.name)}${f.problem ? ` <span class="muted">${esc(f.problem)}</span>` : ""}</div>`).join("") :
         `<div class="muted">Nothing waiting. Put PDF, Word or Excel files in this week's opponent folder and Clock prints them at the next print time. Files stay in the folder. A file prints once, and again only if you change it.</div>`}
       ${ready && !p.paused ? `<div class="muted">${ready} ready to print.</div>` : ""}
+      <div class="fbline" style="display:block"><b>Printed every week</b> <span class="muted">(whoever we play, once per game week)</span>
+        ${(p.extras || []).map(n => `<div>📄 ${esc(n)} <button class="ghost" data-rmextra="${esc(n)}">Remove</button></div>`).join("") || `<div class="muted">Nothing yet.</div>`}
+        <div class="row"><label class="ghost" style="cursor:pointer">＋ Add a sheet<input type="file" id="fbextrafile" accept=".pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg" hidden></label></div></div>
       ${p.log.length ? `<div class="muted" style="margin-top:8px">Recent: ${p.log.slice(0, 4).map(l => esc(l.at.replace("T", " ") + " " + l.text)).join("<br>")}</div>` : ""}`;
   }
+  $("fbprint").addEventListener("change", async e => {
+    if (e.target.id !== "fbextrafile" || !e.target.files.length) return;
+    const form = new FormData();
+    form.append("file", e.target.files[0]);
+    const r = await post("/api/football/print/extras", form, true);
+    $("fbprintmsg").textContent = r.message || "";
+    shown.print = null; refresh();
+  });
+  $("fbprint").addEventListener("click", async e => {
+    const n = e.target.dataset && e.target.dataset.rmextra;
+    if (!n) return;
+    const r = await post(`/api/football/print/extras/${encodeURIComponent(n)}/remove`);
+    $("fbprintmsg").textContent = r.message || "";
+    shown.print = null; refresh();
+  });
   $("fbprintnow").onclick = async () => {
     $("fbprintnow").disabled = true;
     const r = await post("/api/football/print/now");

@@ -806,6 +806,29 @@ def football_depth_build(request: Request, opponent: str | None = None, fetch: b
                                       created_by="Steven")}
 
 
+@app.post("/api/football/print/extras")
+def football_print_extras(request: Request, file: UploadFile = File(...)):
+    _from_hq_page(request)
+    from .football import printing
+    data = file.file.read(15 * 1024 * 1024 + 1)
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(400, "That file is over 15 MB.")
+    try:
+        name = printing.save_extra(file.filename or "sheet.pdf", data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"message": f"{name} will print every Thursday with the opponent folder.", "print": printing.state()}
+
+
+@app.post("/api/football/print/extras/{name}/remove")
+def football_print_extras_remove(name: str, request: Request):
+    _from_hq_page(request)
+    from .football import printing
+    if not printing.remove_extra(name):
+        raise HTTPException(404, "That sheet isn't on the list.")
+    return {"message": f"{name} removed from the Thursday print.", "print": printing.state()}
+
+
 @app.post("/api/football/print/pause")
 def football_print_pause(body: PauseIn, request: Request):
     _from_hq_page(request)
@@ -870,6 +893,16 @@ def approval_file(approval_id: int):
         raise HTTPException(404, "There's no draft file to preview for that.")
     inline = path.suffix.lower() in (".pdf", ".png", ".jpg", ".jpeg", ".txt")
     return FileResponse(path, filename=path.name, content_disposition_type="inline" if inline else "attachment")
+
+
+@app.post("/api/football/outbox/{name}/print")
+def football_outbox_print(name: str, request: Request):
+    _from_hq_page(request)
+    path = (FOOTBALL_OUTBOX / Path(name).name).resolve()
+    if path.parent != FOOTBALL_OUTBOX.resolve() or not path.is_file():
+        raise HTTPException(404, "Not in the football Outbox")
+    return {"message": f"Printing {path.name}…",
+            "task_id": db.create_task("Clock", f"Print {path.name}", {"print_file": path.name}, created_by="Steven")}
 
 
 @app.post("/api/football/outbox/{name}/delete")
