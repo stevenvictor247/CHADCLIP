@@ -145,7 +145,7 @@ function instagramSection(i) {
   const state = i.connected ? `<span class="tag">Connected · token doesn't expire</span>` : `<span class="tag no">Not connected</span>`;
   const guide = `<details class="help" style="margin:8px 0" ${i.connected ? "" : "open"}><summary>Step by step: connect Instagram (one time, about 20 minutes)</summary>
     <ol style="margin:6px 0 0 18px;padding:0">
-      <li><b>Instagram account type.</b> On your phone: Instagram app, Settings, <i>Account type and tools</i>, <i>Switch to professional account</i>, pick <b>Creator</b> (or Business). It must be professional or posting won't work.</li>
+      <li><b>Instagram account type.</b> On your phone: Instagram app, Settings, <i>Account type and tools</i>, <i>Switch to professional account</i>, pick <b>Business</b> (safest for posting; you can switch to Creator later). It must be a professional account or posting won't work.</li>
       <li><b>Facebook Page.</b> Make a free Page at <a href="https://www.facebook.com/pages/create" target="_blank">facebook.com/pages/create</a> (any name). Then in Instagram: Edit profile, <i>Page</i>, and link the Page to your Instagram account.</li>
       <li><b>Meta developer app.</b> Go to <a href="https://developers.facebook.com/apps/creation/" target="_blank">developers.facebook.com</a>, sign in with the same Facebook, and press <i>Create app</i>. Name it anything, choose use case <i>Other</i>, then app type <i>Business</i>.</li>
       <li>In the app, open <i>App settings, Basic</i>. Copy the <b>App ID</b> and <b>App secret</b> into <b>IG_APP_ID</b> and <b>IG_APP_SECRET</b> above, then press <b>Save and restart HQ</b>.</li>

@@ -164,7 +164,7 @@ def instagram(account: dict, values=None) -> dict:
     token = _v(account.get("access_token_env", ""), values)
     if not user_id or not token:
         return _bad(f"{account['name']} needs both the Instagram user ID and the access token.")
-    graph = os.getenv("HQ_GRAPH_API", "https://graph.facebook.com/v21.0")
+    graph = os.getenv("HQ_GRAPH_API", "https://graph.facebook.com/v25.0")
     try:
         data = requests.get(f"{graph}/{user_id}", timeout=TIMEOUT,
                             params={"fields": "username", "access_token": token}).json()
