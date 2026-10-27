@@ -236,3 +236,51 @@ def test_worker_tick_calls_the_scheduled_print(monkeypatch):
     monkeypatch.setattr(season, "remind_if_due", lambda *a: False)   # needs a real game date, and only runs after 8 am
     worker.football_tick()
     assert calls == [1]
+
+
+def test_an_outbox_pdf_prints_straight_from_the_outbox(monkeypatch):
+    from hq.config import FOOTBALL_OUTBOX
+    sent = []
+    monkeypatch.setattr(printing, "_send", lambda p: sent.append(p.name))
+    FOOTBALL_OUTBOX.mkdir(parents=True, exist_ok=True)
+    (FOOTBALL_OUTBOX / "Report.pdf").write_bytes(b"%PDF-1.4")
+    (FOOTBALL_OUTBOX / "Notes.zip").write_bytes(b"x")
+    assert printing.print_outbox_file("Report.pdf").startswith("Sent Report.pdf")
+    assert sent == ["Report.pdf"]
+    assert "can't be printed" in printing.print_outbox_file("Notes.zip")
+    assert "no Missing.pdf" in printing.print_outbox_file("Missing.pdf")
+    assert "../x" not in printing.print_outbox_file("../x.pdf")   # only ever the Outbox
+    assert sent == ["Report.pdf"]
+
+
+def test_an_every_week_sheet_prints_once_per_game_week_with_or_without_an_opponent_folder(_setup, monkeypatch):
+    shutil.rmtree(printing.EXTRAS_DIR, ignore_errors=True)
+    name = printing.save_extra("Press Box Chart.pdf", b"%PDF-1.4")
+    p = printing.EXTRAS_DIR / name
+    t = time.time() - 3600
+    os.utime(p, (t, t))
+    shutil.rmtree(WEEK)   # no opponent folder this week: the chart still prints
+    printing.print_now()
+    printing.print_now()
+    assert _setup["printed"] == ["Press Box Chart.pdf"]
+    monkeypatch.setattr(season, "current_game", lambda today=None: {"opponent": "Ferris State"})
+    printing.print_now()   # a new game week: it prints again
+    assert _setup["printed"] == ["Press Box Chart.pdf", "Press Box Chart.pdf"]
+    assert printing.state()["extras"] == ["Press Box Chart.pdf"]
+    assert printing.remove_extra(name) and not printing.extras()
+    with pytest.raises(ValueError):
+        printing.save_extra("notes.zip", b"x")
+
+
+def test_api_adds_and_removes_an_every_week_sheet(_setup):
+    import importlib
+    import hq.api, hq.config, hq.db
+    for m in (hq.config, hq.db, hq.api):
+        importlib.reload(m)
+    shutil.rmtree(printing.EXTRAS_DIR, ignore_errors=True)
+    c = TestClient(hq.api.app)
+    r = c.post("/api/football/print/extras", files={"file": ("Chart.pdf", b"%PDF-1.4")}, headers={"X-HQ": "1"})
+    assert r.status_code == 200 and r.json()["print"]["extras"] == ["Chart.pdf"]
+    assert c.post("/api/football/print/extras", files={"file": ("Chart.zip", b"x")}, headers={"X-HQ": "1"}).status_code == 400
+    r = c.post("/api/football/print/extras/Chart.pdf/remove", headers={"X-HQ": "1"})
+    assert r.status_code == 200 and r.json()["print"]["extras"] == []

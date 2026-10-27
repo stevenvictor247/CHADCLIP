@@ -22,6 +22,7 @@ from . import season
 from ..config import FOOTBALL_DATA, FOOTBALL_PRINT_DIR, FOOTBALL_PRINT_HOUR, FOOTBALL_PRINT_WEEKDAY, FOOTBALL_PRINTER
 
 STATE_PATH = FOOTBALL_DATA / "print.json"
+EXTRAS_DIR = FOOTBALL_DATA / "print_extras"   # sheets that print every week, whoever the opponent is (the press box chart)
 PRINTABLE = (".pdf", ".docx", ".doc", ".xlsx", ".xls", ".xlsm", ".csv", ".txt", ".png", ".jpg", ".jpeg", ".pptx", ".ppt")
 SETTLE_SECONDS = 60          # a file that changed this recently may still be syncing from Drive
 LATE_HOURS = 4               # if HQ wasn't running at print time, still print up to this long after; later, just say so
@@ -141,26 +142,54 @@ def deliver(src: Path, opponent: str | None) -> Path | None:
     return dest
 
 
+def extras() -> list[Path]:
+    try:
+        return sorted(p for p in EXTRAS_DIR.iterdir() if p.is_file() and not p.name.startswith((".", "~$")))
+    except OSError:
+        return []
+
+
+def save_extra(filename: str, data: bytes) -> str:
+    from .reports import safe_name
+    name = safe_name(Path(filename or "sheet.pdf").name)
+    if Path(name).suffix.lower() not in PRINTABLE:
+        raise ValueError("Send a PDF, Word, Excel or image file.")
+    EXTRAS_DIR.mkdir(parents=True, exist_ok=True)
+    (EXTRAS_DIR / name).write_bytes(data)
+    _log(f"Added {name} to the sheets printed every week.")
+    return name
+
+
+def remove_extra(name: str) -> bool:
+    path = EXTRAS_DIR / Path(name).name
+    if not path.is_file():
+        return False
+    path.unlink()
+    _log(f"Removed {path.name} from the sheets printed every week.")
+    return True
+
+
 def waiting(now: float | None = None) -> list[dict]:
     """Files that would print now. Each has a reason when it can't: still syncing, or a type that can't print."""
     now = now or time.time()
     s, out = _state().get("printed", {}), []
     opp = week_opponent()
     folder = folder_for(opp) if opp else None
-    if folder is None:
-        return []
-    try:
-        entries = sorted(p for p in folder.iterdir() if p.is_file())
-    except OSError:
-        return []
-    for p in entries:
+    sources = []
+    if folder is not None:
+        try:
+            sources += [(p, f"{folder.name}/{p.name}") for p in sorted(p for p in folder.iterdir() if p.is_file())]
+        except OSError:
+            pass
+    if opp:   # the every-week sheets print once per game week, so the key carries the opponent
+        sources += [(p, f"every week/{opp}/{p.name}") for p in extras()]
+    for p, key in sources:
         if p.name.startswith(("~$", ".")) or p.suffix.lower() in (".tmp", ".crdownload", ".ini"):
             continue
         try:
             mtime = p.stat().st_mtime
         except OSError:
             continue
-        key = f"{folder.name}/{p.name}"
         if s.get(key) == mtime:
             continue   # printed already: never print the same version twice
         item = {"name": p.name, "path": p, "key": key, "mtime": mtime, "problem": None}
@@ -230,6 +259,24 @@ def print_now(reason: str = "Print now") -> str:
     return text
 
 
+def print_outbox_file(name: str) -> str:
+    """Print one file straight from the Outbox, on demand. Doesn't touch the Thursday print's record."""
+    from ..config import FOOTBALL_OUTBOX
+    path = (FOOTBALL_OUTBOX / Path(name).name).resolve()
+    if path.parent != FOOTBALL_OUTBOX.resolve() or not path.is_file():
+        return f"There's no {Path(name).name} in the football Outbox."
+    if path.suffix.lower() not in PRINTABLE:
+        return f"{path.name}: {path.suffix or 'This'} files can't be printed. Use PDF, Word, Excel or an image."
+    try:
+        _send(path)
+    except Exception as e:
+        msg = f"Couldn't print {path.name} ({e})."
+    else:
+        msg = f"Sent {path.name} to {FOOTBALL_PRINTER or 'the default printer'}."
+    _log(msg)
+    return msg
+
+
 def run_if_due(now: datetime | None = None) -> str | None:
     """The scheduled print. Called every few seconds by the worker; acts once per scheduled slot."""
     from .. import relay
@@ -279,5 +326,6 @@ def state() -> dict:
         "when": f"{DAYS[FOOTBALL_PRINT_WEEKDAY]}s at {_hour_text(FOOTBALL_PRINT_HOUR)}",
         "next": next_slot().isoformat(timespec="minutes"), "paused": bool(s.get("paused")),
         "files": [{"name": f["name"], "problem": f["problem"]} for f in files],
+        "extras": [p.name for p in extras()],
         "log": s.get("log", [])[:8],
     }
