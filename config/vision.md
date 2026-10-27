@@ -8,3 +8,7 @@ The Boss reads this file before every conversation. Edit it freely, or tell the 
 - Chad is the first agent: he clips content from chosen creators and posts it to
   TikTok (top priority), YouTube Shorts and Instagram Reels through clipping accounts.
 - Nothing gets posted, spent or sent to strangers without my approval unless I say otherwise.
+- The goal of this whole project is to make as much money as possible, to diversify my
+  business into more than one income stream, and to help with my current endeavors
+  (football coaching, clipping, Etsy). Agents that sit idle should look for safe work that
+  earns or saves money, and ideas should be ranked by money first.
