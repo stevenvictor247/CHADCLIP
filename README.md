@@ -68,6 +68,14 @@ Without `HQ_PASSWORD`, HQ only listens on the computer it runs on, exactly as be
 database and settings into `data/backups`, and HQ does this by itself once a day. To move HQ to an always-on
 cloud server later, see `deploy/cloud/install.sh`.
 
+## Hook Lab
+
+Chad gives every clip three opening lines in different styles (question, bold claim, tease), labeled A, B and C. Tap
+one on the clip's approval card and it becomes the first line of the caption. Tally saves the chosen style next to the
+clip's views, and once 20 counted clips have a chosen hook it reports which style got the most views. From then on
+Chad writes that style as option A. It costs nothing extra: the lines come from Chad's existing Claude call (templates
+fill in when there's no key). Until there are enough views the report says "no winner yet".
+
 ## The Boss
 
 Chat with it on the dashboard. It reads `config/vision.md` before every conversation, assigns tasks to
@@ -120,6 +128,13 @@ the Boss the views and earnings and Scout keeps the totals on the dashboard. Who
 the submitting and the numbers are manual for now.
 
 ### Scout finds campaigns on its own
+
+**Web search (new).** Once a day Scout asks Claude to search the open web for campaigns that are open right now, with no
+pasting needed. Anthropic runs the searches (about 6 cents a day plus a little Claude time, counted in the Ledger), Whop and
+Discord are excluded from the results, and every find is rated like the rest. Pages are read only where `robots.txt`
+allows; otherwise the rating uses the search excerpt and the campaign is marked "web (excerpt only)". Turn it off with
+`SCOUT_WEB_SEARCH=0`; use `HQ_MODEL_SCOUT_SEARCH=claude-opus-5-5` for a deeper search. It needs web search switched on for
+your Anthropic organization (Console, Settings, Privacy).
 
 Every 6 hours Scout reads its **inbox** (the box on the dashboard's Campaigns section: paste links or page text) and any
 public feeds you list in `SCOUT_FEED_URLS` (Settings page), rates what is new with the cheap model, and puts the good ones
@@ -239,3 +254,13 @@ only go up; the pay you typed in is never changed), works out what the campaigns
 and writes a short note of the clips that did best, which Chad reads when he picks moments. It never calls Claude, so
 it costs nothing. YouTube is counted through the same sign-in you make under **Connect YouTube** in ⚙️ Settings.
 TikTok inbox uploads have no video id until you post them in the app, so TikTok views come later.
+
+## Podcast clip packs
+
+Packs turns one podcast episode into a $49 pack: 5 captioned vertical clips (Chad's editor) plus Recap's three titles,
+description, chapters and 5 post ideas. Ask the Boss for a pack, or queue a Packs task with
+`{"client": "podcast name", "owner": "emailed me ep 12 and said yes to clips, 26 Oct", "file": "path/to/episode.mp4"}`.
+Packs refuses without that permission note, a video of 10+ minutes and Whisper, checks all of that in code before any
+Claude spend, and never makes the same episode twice. The finished folder (`data/packs/`) waits in Approvals; approving
+it shows you the message to send, including a request for a testimonial. Packs never sends, posts or takes payment:
+create the $49 Stripe payment link yourself and send it with the files.

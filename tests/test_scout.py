@@ -298,3 +298,78 @@ def test_steven_can_add_a_streamer_himself(tmp_path, monkeypatch):
         creators.add_allowed("two words", "public open-clipping policy")
     with pytest.raises(ValueError):
         creators.add_allowed("someone", "ok")   # too vague to count as permission
+
+
+def _search_reply(*candidates, stop="end_turn"):
+    from types import SimpleNamespace as NS
+    return NS(stop_reason=stop, content=[NS(type="text", text="Here is what I found.\n" + json.dumps({"candidates": list(candidates)}))])
+
+
+def _web(monkeypatch, replies):
+    """Scout's web search with Claude's answers faked. Returns the list of create() calls."""
+    db.execute("DELETE FROM scout_inbox")   # other tests share this database: start from a quiet Scout
+    db.execute("DELETE FROM scout_seen")
+    asked = _discover(monkeypatch, lambda u: (_ for _ in ()).throw(discovery.NotAllowed("robots.txt says no")))
+    monkeypatch.setenv("SCOUT_WEB_SEARCH", "1")
+    calls = []
+
+    def create(model, system, messages, tools=None, **kw):
+        calls.append({"model": model, "messages": messages, "tools": tools})
+        return replies.pop(0)
+    monkeypatch.setattr(llm, "create", create)
+    return asked, calls
+
+
+def test_web_search_finds_campaigns_by_itself_once_a_day(monkeypatch):
+    good = {"name": "Streamer clip program", "url": "https://clips.example/program", "excerpt": "Pays $2 per 1,000 views. Tag @x."}
+    whop = {"name": "Whop thing", "url": "https://whop.com/some-campaign/", "excerpt": "Pays $3 per 1k"}
+    asked, calls = _web(monkeypatch, [_search_reply(good, whop)])
+    out = scout_pkg.Scout().run({"params": '{"discover": true}'})
+    found = [c for c in campaigns.all_campaigns() if (c["source"] or "").startswith("web")]
+    assert [c["url"] for c in found] == ["https://clips.example/program"]   # the Whop link never gets through
+    assert found[0]["source"] == "web (excerpt only)" and found[0]["status"] == "proposed" and asked == [found[0]["id"]]
+    tool = calls[0]["tools"][0]
+    assert tool["name"] == "web_search" and "whop.com" in tool["blocked_domains"] and "discord.com" in tool["blocked_domains"]
+    assert "1 new" in out
+    # a second run the same day does not search again, and Scout knows there is nothing to start
+    scout_pkg.Scout().run({"params": '{"discover": true}'})
+    assert len(calls) == 1
+    assert scout_pkg.Scout().nothing_to_do("", {"discover": True}) is True
+
+
+def test_a_paused_web_search_is_resumed(monkeypatch):
+    from types import SimpleNamespace as NS
+    paused = NS(stop_reason="pause_turn", content=[NS(type="server_tool_use")])
+    _, calls = _web(monkeypatch, [paused, _search_reply()])
+    scout_pkg.Scout().run({"params": '{"discover": true}'})
+    assert len(calls) == 2 and calls[1]["messages"][-1]["role"] == "assistant"   # no extra "continue" message
+
+
+def test_web_search_can_be_switched_off(monkeypatch):
+    _, calls = _web(monkeypatch, [])
+    monkeypatch.setenv("SCOUT_WEB_SEARCH", "0")
+    scout_pkg.Scout().run({"params": '{"discover": true}'})
+    assert not calls and scout_pkg.Scout().nothing_to_do("", {"discover": True}) is True
+
+
+def test_web_search_due_means_a_round_is_queued(monkeypatch):
+    _web(monkeypatch, [])
+    assert scout_pkg.Scout().nothing_to_do("", {"discover": True}) is False
+
+
+def test_a_failed_web_search_is_reported_not_retried_all_day(monkeypatch):
+    _, calls = _web(monkeypatch, [])   # create() has no answers left: pop from empty list raises
+    out = scout_pkg.Scout().run({"params": '{"discover": true}'})
+    assert "web search:" in out and not discovery.web_search_due()
+
+
+def test_web_searches_are_billed_in_the_ledger():
+    from types import SimpleNamespace as NS
+    from hq import ledger
+    usage = NS(input_tokens=0, output_tokens=0, server_tool_use=NS(web_search_requests=5))
+    assert ledger.record("Scout", "claude-sonnet-5-5", usage) == pytest.approx(0.05)
+
+
+def test_search_answer_without_json_means_no_candidates():
+    assert scout_pkg.Scout._candidates_in("I found nothing useful.") == []
+    assert scout_pkg.Scout._candidates_in('{"candidates": "oops"}') == []

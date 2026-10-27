@@ -195,12 +195,17 @@ def test_tells_report_waits_for_ok_then_lands_in_outbox(_setup):
     assert _setup["asked"], "the phone got the approval too"
     assert not list(FOOTBALL_OUTBOX.iterdir())
     approvals.decide(pending[0]["id"], "approve")
-    saved = list(FOOTBALL_OUTBOX.glob("*.docx"))
+    saved = list(FOOTBALL_OUTBOX.glob("*.pdf"))
     assert len(saved) == 1 and saved[0].name.startswith("Davenport scouting report")
+    assert saved[0].read_bytes().startswith(b"%PDF")
 
 
-def test_birds_and_rabbits_is_its_own_one_page_document_with_its_own_button(_setup):
-    from docx import Document
+def pdf_pages(path) -> int:
+    data = path.read_bytes()
+    return data.count(b"/Type /Page") - data.count(b"/Type /Pages")
+
+
+def test_birds_and_rabbits_is_its_own_one_page_pdf_with_its_own_button(_setup):
     rows = [play(i, form="TREY", kind="Run") for i in range(1, 12)] + [play(i, kind="Pass") for i in range(12, 24)]
     write_xlsx("Davenport week.xlsx", rows)
     out = tells_mod.build("Davenport week.xlsx", kind="birds")
@@ -208,11 +213,9 @@ def test_birds_and_rabbits_is_its_own_one_page_document_with_its_own_button(_set
     ap = approvals.pending()[0]
     assert ap["title"].startswith("Birds and Rabbits: Davenport")
     approvals.decide(ap["id"], "approve")
-    saved = list(FOOTBALL_OUTBOX.glob("*.docx"))
+    saved = list(FOOTBALL_OUTBOX.glob("*.pdf"))
     assert len(saved) == 1 and saved[0].name.startswith("Davenport birds and rabbits")
-    text = "\n".join(p.text for p in Document(saved[0]).paragraphs)
-    assert "BIRDS AND RABBITS" in text and "RUN TELLS" in text and "PASS TELLS" in text and "TREY" in text.upper()
-    assert "FORMATION" not in text.upper().split("TELLS")[-1]   # no tendency tables: those are in the scouting report
+    assert saved[0].read_bytes().startswith(b"%PDF") and pdf_pages(saved[0]) == 1
     # the dashboard buttons make the right tasks
     api_client = api()
     r = api_client.post("/api/football/upload", files={"file": ("Ferris week.xlsx", (FOOTBALL_INBOX / "Davenport week.xlsx").read_bytes())},
@@ -222,6 +225,22 @@ def test_birds_and_rabbits_is_its_own_one_page_document_with_its_own_button(_set
     api_client.post(f"/api/football/files/{fid}/report", json={}, headers={"X-HQ": "1"})
     params = [json.loads(t["params"]) for t in db.rows("SELECT params FROM tasks WHERE agent = 'Tells' ORDER BY id")]
     assert params[-2].get("kind") == "birds" and "kind" not in params[-1]
+
+
+def test_several_games_become_one_report_with_a_per_game_breakdown(_setup):
+    for name, n in (("Davenport game one.xlsx", 14), ("Davenport game two.xlsx", 16)):
+        write_xlsx(name, [play(i, form="TREY", kind="Run") for i in range(1, n)] +
+                   [play(i, kind="Pass") for i in range(n, n + 12)])
+    a = tendencies.analyse([sheet.read(FOOTBALL_INBOX / "Davenport game one.xlsx"), sheet.read(FOOTBALL_INBOX / "Davenport game two.xlsx")])
+    assert len(a["games"]) == 2 and a["plays"] == sum(g["snaps"] for g in a["games"])
+    assert a["run_tells"][0]["games"] and sum(g["n"] for g in a["run_tells"][0]["games"]) == a["run_tells"][0]["plays"]
+    assert a["by_down"] and a["stat_tables"]["Formation"]
+    out = tells_mod.build("Davenport game one.xlsx")
+    assert "Davenport" in out
+    assert "2 games" in approvals.pending()[0]["preview"]
+    approvals.decide(approvals.pending()[0]["id"], "approve")
+    saved = list(FOOTBALL_OUTBOX.glob("*.pdf"))
+    assert len(saved) == 1 and pdf_pages(saved[0]) >= 1
 
 
 def test_tells_refuses_a_sheet_with_too_few_plays():
@@ -453,3 +472,22 @@ def test_a_downloaded_notebook_imports_back_without_extra_entries():
     db.execute("DELETE FROM football_notes")
     assert notebook.import_markdown(out) == 1
     assert notebook.shown(notebook.notes()[0]) == "10/1/26 — Made-up entry" and notebook.notes()[0]["tab"] == "Fronts"
+
+
+def test_outbox_pdf_opens_in_the_browser_and_can_be_deleted_and_drafts_preview_before_approval(_setup):
+    rows = [play(i, form="TREY", kind="Run") for i in range(1, 12)] + [play(i, kind="Pass") for i in range(12, 24)]
+    write_xlsx("Davenport week.xlsx", rows)
+    tells_mod.build("Davenport week.xlsx", kind="birds")
+    ap = approvals.pending()[0]
+    c = api()
+    r = c.get(f"/api/approvals/{ap['id']}/file")   # preview of the draft, before anything is approved
+    assert r.status_code == 200 and r.content.startswith(b"%PDF") and r.headers["content-disposition"].startswith("inline")
+    approvals.decide(ap["id"], "approve")
+    assert c.get(f"/api/approvals/{ap['id']}/file").status_code == 404   # nothing left to preview once decided
+    name = next(FOOTBALL_OUTBOX.glob("*.pdf")).name
+    r = c.get(f"/api/football/outbox/{name}")
+    assert r.status_code == 200 and r.headers["content-disposition"].startswith("inline")
+    assert c.post(f"/api/football/outbox/{name}/delete").status_code in (400, 403)   # needs the dashboard header
+    assert c.post(f"/api/football/outbox/{name}/delete", headers={"X-HQ": "1"}).status_code == 200
+    assert not (FOOTBALL_OUTBOX / name).exists()
+    assert c.post("/api/football/outbox/nothing.pdf/delete", headers={"X-HQ": "1"}).status_code == 404

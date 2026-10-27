@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from ... import db, ledger
+from ... import db, hooks, ledger
 from ...config import CLIPS_DIR, CONFIG_DIR
 from ..base import Agent
 from . import editor, moments, sources, twitch
@@ -190,6 +190,12 @@ class Chad(Agent):
             out += "No viewer-clipped moments found there yet (or all already done)."
         return out + " Note: Twitch VODs expire after ~14-60 days, so this only reaches recent streams."
 
+    @staticmethod
+    def add_hooks(clip_id, texts, title):
+        """Hook Lab: three opening lines (A, B, C) for Steven to pick from on the approval card."""
+        db.execute("UPDATE clips SET hooks = ? WHERE id = ?",
+                   json.dumps(hooks.build(texts, title, hooks.winning_style())), clip_id)
+
     def clip_whole(self, task_id, video, title, views, creator, cfg) -> int:
         """Twitch clips are already short and already picked by viewers, so use the whole thing."""
         length = min(editor.duration(video["path"]), float(cfg.get("max_clip_seconds", 59)))
@@ -205,6 +211,7 @@ class Chad(Agent):
             f"{title}\n\nCredit: {creator['credit']}", json.dumps(["twitch", "streamer", "funny", "fyp"]),
             float(views), f"{views:,} views on Twitch in the last day(s).",
             int(bool(cfg.get("captions", True) and words)), db.now())
+        self.add_hooks(clip_id, None, title)
         db.log("Chad", f"Clip #{clip_id} ready for approval: {title}")
         sources.mark_seen(video["id"])
         return 1
@@ -230,6 +237,7 @@ class Chad(Agent):
                 json.dumps(_with_required_tags(m["hashtags"], creator)), m.get("score"), m.get("reason"),
                 int(bool(cfg.get("captions", True) and words)), db.now(),
             )
+            self.add_hooks(clip_id, m.get("hooks"), m["title"])
             if creator.get("campaign_id"):
                 db.execute("UPDATE clips SET campaign_id = ? WHERE id = ?", creator["campaign_id"], clip_id)
             db.log("Chad", f"Clip #{clip_id} ready for approval: {m['title']}")

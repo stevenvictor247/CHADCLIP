@@ -233,9 +233,15 @@
   // ---- the Outbox ----
   function drawOutbox(list) {
     if (!changed("outbox", list)) return;
-    $("fboutlist").innerHTML = list.length ? list.map(f => `<div class="fbline">📄 <a href="/api/football/outbox/${encodeURIComponent(f.name)}">${esc(f.name)}</a>
-        <span class="when">${Math.max(1, Math.round(f.bytes / 1024))} KB</span></div>`).join("")
+    $("fboutlist").innerHTML = list.length ? list.map(f => `<div class="fbline">📄 <a href="/api/football/outbox/${encodeURIComponent(f.name)}" target="_blank" rel="noopener">${esc(f.name)}</a>
+        <span class="when">${Math.max(1, Math.round(f.bytes / 1024))} KB</span>
+        <button class="fbdel" data-del="${esc(f.name)}" title="Delete this file">🗑 Delete</button></div>`).join("")
       : `<div class="muted">Empty. Reports you OK and Ref's marked-up copies land here.</div>`;
+    $("fboutlist").querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+      if (!confirm(`Delete ${b.dataset.del} from the Outbox? This can't be undone.`)) return;
+      await post(`/api/football/outbox/${encodeURIComponent(b.dataset.del)}/delete`);
+      window.hqRefresh && window.hqRefresh();
+    });
   }
 
   // ---- the notebook ----

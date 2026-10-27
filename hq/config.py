@@ -18,11 +18,12 @@ DATA_DIR = Path(os.getenv("HQ_DATA_DIR", ROOT / "data"))
 SOURCES_DIR = DATA_DIR / "sources"
 CLIPS_DIR = DATA_DIR / "clips"
 SAMPLES_DIR = DATA_DIR / "samples"   # private pitch samples: never posted, deleted after 14 days
+PACKS_DIR = DATA_DIR / "packs"       # finished podcast clip packs, one folder each, waiting for Steven to send
 DB_PATH = DATA_DIR / "hq.sqlite3"
 SETTINGS_PATH = DATA_DIR / "settings.json"
 VISION_PATH = CONFIG_DIR / "vision.md"
 
-for d in (DATA_DIR, SOURCES_DIR, CLIPS_DIR, SAMPLES_DIR):
+for d in (DATA_DIR, SOURCES_DIR, CLIPS_DIR, SAMPLES_DIR, PACKS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -47,6 +48,7 @@ DEFAULT_MODELS = {
     "report": "claude-sonnet-5-5",  # the daily report: summarising facts HQ already gathered
     "sweep": "claude-sonnet-5-5",   # Sweep's one coach's note a day: spotting the pattern behind its findings
     "muse": "claude-sonnet-5-5",    # the Creative Director's weekly ideas: judgement and fresh thinking, about $0.20 a round
+    "scout_search": "claude-sonnet-5-5",  # Scout's daily web search for new campaigns: searching and judging what's real
     "recap": "claude-haiku-5-5",    # titles and chapters from long transcripts: the cheap model keeps long VODs affordable
 }
 SIMPLE_MODEL = "claude-haiku-5-5"   # every other agent: sorting, drafting, summarising

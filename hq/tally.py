@@ -11,7 +11,7 @@ video id until you post them in the app, so they're counted once TikTok's video 
 import json
 from datetime import datetime, timedelta, timezone
 
-from . import db
+from . import db, hooks
 from .config import DATA_DIR
 
 TALLY_DIR = DATA_DIR / "tally"
@@ -146,7 +146,8 @@ def summary() -> dict:
     week = db.rows("SELECT COUNT(*) n, COALESCE(SUM(views), 0) v FROM posts WHERE status = 'posted' AND views IS NOT NULL "
                    "AND created_at >= ?", _ago(7))[0]
     return {"posts_counted_7d": week["n"], "views_7d": week["v"], "best": best_clips(limit=3),
-            "estimated_campaign_pay_usd": estimated_pay(), "report": _saved_report().get("text", "")}
+            "estimated_campaign_pay_usd": estimated_pay(), "report": _saved_report().get("text", ""),
+            "hooks": hooks.stats()}
 
 
 def _today() -> str:
@@ -243,6 +244,8 @@ def run(send_now: bool = False) -> str:
         send_report(force=send_now)
         return "No posted clips to count yet. Tally starts once a real account (YouTube first) is posting."
     out = f"Counted views on {counted} posts; updated {synced} campaign submissions."
+    if line := hooks.report_line():
+        out += " " + line
     if data["best"]:
         top = data["best"][0]
         out += f" Best lately: \"{top['title']}\" with {int(top['views'] or 0):,} views."

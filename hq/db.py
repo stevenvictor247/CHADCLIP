@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS clips (
     reason TEXT,
     captioned INTEGER,                           -- 1 if words were burned in, 0 if the clip has no captions
     boss_note TEXT,                              -- the Boss's review note, shown on the approval card
+    hooks TEXT,                                  -- Hook Lab: JSON list of 3 opening lines [{label, style, text}]
+    hook_label TEXT,                             -- A, B or C: the one Steven chose
+    hook_style TEXT,                             -- the chosen line's style, saved next to the clip's views by Tally
+    hook_text TEXT,                              -- the chosen line (so a later pick can replace it in the caption)
     status TEXT NOT NULL DEFAULT 'pending_approval', -- pending_approval, approved, rejected, posted, failed
     created_at TEXT NOT NULL
 );
@@ -284,6 +288,19 @@ CREATE TABLE IF NOT EXISTS recaps (
     created_at TEXT NOT NULL,
     decided_at TEXT
 );
+CREATE TABLE IF NOT EXISTS clip_packs (
+    id INTEGER PRIMARY KEY,
+    client TEXT NOT NULL,
+    owner_note TEXT NOT NULL,                    -- how the podcaster gave permission and the episode
+    source TEXT,
+    fingerprint TEXT NOT NULL UNIQUE,            -- same episode never costs Claude or Chad twice
+    folder TEXT NOT NULL,
+    pack TEXT NOT NULL,                          -- JSON: the Recap text and each clip's file, title and caption
+    price_cents INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending, approved, rejected
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,
@@ -316,7 +333,9 @@ def init():
         c.executescript(SCHEMA)
         # Databases made before these columns existed get them added in place.
         have = {r["name"] for r in c.execute("PRAGMA table_info(clips)")}
-        for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER")):
+        for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER"),
+                          ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT"),
+                          ("approved_at", "TEXT"), ("stale_state", "TEXT")):   # queue age; stale_state: flagged or kept
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
         have = {r["name"] for r in c.execute("PRAGMA table_info(posts)")}
@@ -365,4 +384,5 @@ def update_task(task_id: int, status: str, result: str | None = None):
 
 
 def set_clip_status(clip_id: int, status: str):
-    execute("UPDATE clips SET status = ? WHERE id = ?", status, clip_id)
+    execute("UPDATE clips SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN ? ELSE approved_at END WHERE id = ?",
+            status, status, now(), clip_id)
