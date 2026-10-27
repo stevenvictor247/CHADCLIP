@@ -11,7 +11,7 @@ import requests
 
 from . import settings
 
-GRAPH = os.getenv("HQ_GRAPH_API", "https://graph.facebook.com/v21.0")
+GRAPH = os.getenv("HQ_GRAPH_API", "https://graph.facebook.com/v25.0")
 TIMEOUT = 30
 USER_ID_KEY, TOKEN_KEY = "IG_USER_ID_MAIN", "IG_ACCESS_TOKEN_MAIN"
 

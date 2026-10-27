@@ -12,8 +12,8 @@ import requests
 
 from ....config import PUBLIC_BASE_URL
 
-GRAPH = os.getenv("HQ_GRAPH_API", "https://graph.facebook.com/v21.0")
-RUPLOAD = os.getenv("HQ_IG_UPLOAD_API", "https://rupload.facebook.com/ig-api-upload/v21.0")
+GRAPH = os.getenv("HQ_GRAPH_API", "https://graph.facebook.com/v25.0")
+RUPLOAD = os.getenv("HQ_IG_UPLOAD_API", "https://rupload.facebook.com/ig-api-upload/v25.0")
 
 
 def publish(clip: dict, account: dict) -> tuple[str, str | None]:
