@@ -199,6 +199,7 @@ def test_quill_writes_new_designs_only(monkeypatch, tmp_path):
     store.add_brief(season.evergreen()[:3], "calendar")
     store.add_design(_design(slogan="Coffee first"))
     monkeypatch.setattr(quill, "HAS_LLM", True)
+    monkeypatch.setattr(quill, "STARTER", [])   # opening shirts already used
     asked = {}
 
     def fake(model, system, prompt, schema, effort, agent):
@@ -210,6 +211,24 @@ def test_quill_writes_new_designs_only(monkeypatch, tmp_path):
     assert "Wrote 1" in out and "Coffee first" in asked["prompt"] and asked["agent"] == "Quill"
     new = store.designs("written")[-1]
     assert new["slogan"] == "Dog hair don't care" and new["price_cents"] == 1999
+
+
+def test_opening_shirts_come_first_free_and_pass_warden(monkeypatch, tmp_path):
+    hq = _fresh(monkeypatch, tmp_path, HQ_ETSY_DESIGNS_PER_DAY="4", HQ_ETSY_MAX_WAITING="8")
+    from hq.agents import AGENTS
+    from hq.agents.etsy import quill
+    from hq.etsy import rules, store
+    from hq.etsy.starter import STARTER
+    for d in STARTER:   # every opening shirt passes Warden with no warnings
+        d = dict(d, price_cents=2499, tags=rules.clean_tags(d["tags"]),
+                 description=rules.finish_description(d["description"], False))
+        assert rules.check(d) == {"problems": [], "warnings": []}, d["slogan"]
+    monkeypatch.setattr(quill, "HAS_LLM", False)
+    monkeypatch.setattr(quill.llm, "ask_json", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no Claude")))
+    assert AGENTS["quill"].nothing_to_do("", {}) is False      # no brief, no Claude, but starters are waiting
+    assert "Added 4" in quill.write()
+    assert len(store.designs()) == 4 and quill.room() == 0
+    assert len(quill.starters_left()) == len(STARTER) - 4
 
 
 def test_etsy_routes(monkeypatch, tmp_path):
