@@ -6,6 +6,7 @@ import json
 from ... import db, ledger, llm
 from ...config import HAS_LLM, model_for
 from ...etsy import art, store
+from ...etsy.starter import STARTER
 from ..base import Agent
 
 SYSTEM = """You are Quill, the copywriter of a small Etsy shop selling printed t-shirts (made to order by Printify).
@@ -54,10 +55,28 @@ def pick_themes(brief: dict, n: int) -> list[dict]:
     return themes[:max(1, min(n, 3))]
 
 
+def starters_left() -> list[dict]:
+    """The hand-written opening shirts not yet on the board."""
+    used = {_key(s) for s in store.used_slogans(1000)}
+    return [d for d in STARTER if _key(d["slogan"]) not in used]
+
+
+def add_starters(n: int) -> list[int]:
+    """Puts up to n opening shirts on the board. Free: no Claude call."""
+    made = []
+    for d in starters_left()[:n]:
+        made.append(store.add_design(d))
+        db.log("Quill", f"Added an opening shirt for {d['theme']}: {d['slogan']}")
+    return made
+
+
 def write(n: int | None = None, theme: str | None = None) -> str:
     n = room() if n is None else n
     if n <= 0:
         return "Nothing to write: enough designs are waiting or today's are done."
+    if not theme and starters_left():
+        made = add_starters(n)
+        return f"Added {len(made)} of the shop's opening shirts (free, no Claude)."
     if not HAS_LLM:
         return "Nothing to write without a Claude key (Quill needs Claude)."
     if ledger.over_budget("etsy"):
@@ -99,7 +118,7 @@ class Quill(Agent):
         )
 
     def nothing_to_do(self, instructions: str, params: dict) -> bool | None:
-        return room() <= 0 or not store.latest_brief() or not HAS_LLM
+        return room() <= 0 or (not starters_left() and (not store.latest_brief() or not HAS_LLM))
 
     def run(self, task: dict) -> str:
         p = json.loads(task.get("params") or "{}")
