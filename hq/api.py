@@ -11,12 +11,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
-from . import muse_api, sweep_api
+from . import etsy, etsy_api, muse_api, sweep_api
 from .config import CLIPS_DIR, FOOTBALL_DATA, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
 app = FastAPI(title="Agent HQ")
 app.include_router(sweep_api.router)
 app.include_router(muse_api.router)
+app.include_router(etsy_api.router)
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
 STATIC = Path(__file__).parent / "static"
 SESSION_COOKIE = "hq_session"
@@ -244,6 +245,7 @@ def state():
         "allowed_creators": creators.allowed(),
         "approvals": [{**a, "village": village_of(a["agent"])} for a in approvals.pending()],
         "football": football.state(),
+        "etsy": etsy.state(),
         "tally": _tally_summary(),
         "ideas": _ideas_summary(),
         "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at, score, score_why "
@@ -825,11 +827,14 @@ def football_outbox_file(name: str):
 
 @app.get("/api/approvals/{approval_id}/file")
 def approval_file(approval_id: int):
-    """Opens the draft file behind an approval (a scouting PDF, a personnel sheet) so you can look before you say yes."""
+    """Opens the draft file behind an approval (a scouting PDF, a personnel sheet, a shirt preview) so you can look
+    before you say yes."""
     rows = [a for a in approvals.pending() if a["id"] == approval_id]
     draft = (rows[0]["payload"].get("draft") if rows else None)
     path = Path(draft).resolve() if draft else None
-    if not path or path.parent != (FOOTBALL_DATA / "drafts").resolve() or not path.is_file():
+    from .etsy.work import DESIGNS_DIR
+    allowed = path and (path.parent == (FOOTBALL_DATA / "drafts").resolve() or path.parent.parent == DESIGNS_DIR.resolve())
+    if not allowed or not path.is_file():
         raise HTTPException(404, "There's no draft file to preview for that.")
     inline = path.suffix.lower() in (".pdf", ".png", ".jpg", ".jpeg", ".txt")
     return FileResponse(path, filename=path.name, content_disposition_type="inline" if inline else "attachment")

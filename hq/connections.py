@@ -196,11 +196,50 @@ def practice(account: dict, values=None) -> dict:
     return _ok("Practice account: clips are saved to data/practice-posts instead of being uploaded.")
 
 
+def printify(values=None) -> dict:
+    """Reads your Printify shops: nothing is created, published or ordered."""
+    token = _v("HQ_PRINTIFY_TOKEN", values)
+    if not token:
+        return _bad("No token yet. In Printify: My account, Connections, API tokens, Generate. Paste it here.")
+    try:
+        r = requests.get("https://api.printify.com/v1/shops.json", timeout=TIMEOUT,
+                         headers={"Authorization": f"Bearer {token}", "User-Agent": "CHADCLIP-HQ"})
+    except requests.RequestException:
+        return _offline("Printify")
+    if r.status_code == 401:
+        return _bad("Printify says this token is wrong or expired. Generate a new one in Printify and paste it here.")
+    if r.status_code != 200:
+        return _bad(f"Printify answered {r.status_code}. Try again in a minute.")
+    shops = r.json() or []
+    etsy = [x for x in shops if str(x.get("sales_channel", "")).lower() == "etsy"]
+    if not shops:
+        return _bad("The token works, but there's no shop yet. In Printify, connect your Etsy shop (Manage my stores).")
+    shop = (etsy or shops)[0]
+    note = "" if etsy else " It isn't an Etsy shop: connect Etsy in Printify so published shirts land there."
+    return {"ok": not note, "message": f"Printify works. Dock will use \"{shop.get('title')}\".{note}"}
+
+
+def openai_images(values=None) -> dict:
+    """Lists models with the key: free, makes no picture."""
+    key = _v("HQ_OPENAI_API_KEY", values)
+    if not key:
+        return _ok("No image key: designs are words only, which is free. Add one to get pictures.")
+    try:
+        r = requests.get("https://api.openai.com/v1/models", timeout=TIMEOUT, headers={"Authorization": f"Bearer {key}"})
+    except requests.RequestException:
+        return _offline("OpenAI")
+    if r.status_code == 401:
+        return _bad("OpenAI says this key is wrong. Make a new one at platform.openai.com, API keys.")
+    return _ok("Image key works.") if r.status_code == 200 else _bad(f"OpenAI answered {r.status_code}.")
+
+
 # Settings keys with a Test button, and which test each one runs.
 KEY_TESTS = {"ANTHROPIC_API_KEY": "claude", "TELEGRAM_BOT_TOKEN": "telegram", "TELEGRAM_OWNER_ID": "telegram",
              "TWITCH_CLIENT_ID": "twitch", "TWITCH_CLIENT_SECRET": "twitch",
-             "PITCH_EMAIL_ADDRESS": "pitch_email", "PITCH_EMAIL_APP_PASSWORD": "pitch_email"}
-SERVICE_TESTS = {"claude": claude, "telegram": telegram, "twitch": twitch, "pitch_email": pitch_email}
+             "PITCH_EMAIL_ADDRESS": "pitch_email", "PITCH_EMAIL_APP_PASSWORD": "pitch_email",
+             "HQ_PRINTIFY_TOKEN": "printify", "HQ_OPENAI_API_KEY": "openai_images"}
+SERVICE_TESTS = {"claude": claude, "telegram": telegram, "twitch": twitch, "pitch_email": pitch_email,
+                 "printify": printify, "openai_images": openai_images}
 ACCOUNT_TESTS = {"tiktok": tiktok, "instagram": instagram, "youtube": youtube, "practice": practice}
 
 

@@ -1,4 +1,4 @@
-// Splits the dashboard into tabs (Home, Approvals, Boss, Campaigns, Pitch, Clips, Warrior Village, Sweep, Ideas, Activity) so nothing needs a long scroll.
+// Splits the dashboard into tabs (Home, Approvals, Boss, Campaigns, Pitch, Clips, Warrior Village, Etsy Village, Sweep, Ideas, Activity) so nothing needs a long scroll.
 // The money strip and header stay above the tabs on every page. The last tab is remembered, and links like /#approvals open a tab.
 (function () {
   // Each tab lists the ids of things inside the sections it shows. A section is found from any element inside it.
@@ -13,6 +13,7 @@
      empty: "No leads or creators to clip yet. Pitch and Scout put them here when they find some."},
     {id: "clips", icon: "🎞️", label: "Clips", has: ["allowedsection", "library"]},
     {id: "football", icon: "🏈", label: "Warrior Village", has: ["towns", "football"]},
+    {id: "etsy", icon: "🛍️", label: "Etsy Village", has: ["towns", "etsy"]},
     {id: "sweep", icon: "🧹", label: "Sweep", has: ["sweep"]},
     {id: "ideas", icon: "💡", label: "Ideas", has: ["muse"]},
     {id: "activity", icon: "📜", label: "Activity", has: ["activity"]},

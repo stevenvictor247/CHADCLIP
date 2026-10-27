@@ -16,3 +16,4 @@ pytest
 httpx
 python-multipart
 pywebview
+pillow

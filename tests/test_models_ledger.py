@@ -54,11 +54,15 @@ def test_ledger_records_and_budget_stops_scheduled_work(monkeypatch):
     assert ledger.over_budget()
     from hq import worker
     state = {}
-    queued = db.rows("SELECT COUNT(*) n FROM tasks WHERE agent NOT IN ('Sweep', 'Tally')")[0]["n"]
+    from hq.config import ETSY_AGENTS
+    free = "('Sweep', 'Tally', " + ", ".join(f"'{a}'" for a in ETSY_AGENTS) + ")"
+    queued = db.rows(f"SELECT COUNT(*) n FROM tasks WHERE agent NOT IN {free}")[0]["n"]
     worker.queue_scheduled(state)
-    # Sweep (the janitor) and Tally (the counter) cost no Claude money, so they keep working; everyone else waits
-    assert db.rows("SELECT COUNT(*) n FROM tasks WHERE agent NOT IN ('Sweep', 'Tally')")[0]["n"] == queued
-    assert set(state) == {"sched:Sweep:Tidy up and check what Claude is costing.", "sched:Tally:Count views on posted clips."}
+    # Sweep (the janitor) and Tally (the counter) cost no Claude money, so they keep working; everyone else waits.
+    # The Etsy village has its own budget, so the business one running out doesn't stop it.
+    assert db.rows(f"SELECT COUNT(*) n FROM tasks WHERE agent NOT IN {free}")[0]["n"] == queued
+    business = {k for k in state if k.split(":")[1] not in ETSY_AGENTS}
+    assert business == {"sched:Sweep:Tidy up and check what Claude is costing.", "sched:Tally:Count views on posted clips."}
 
 
 def test_create_records_usage_and_skips_fallback_for_haiku(monkeypatch):
