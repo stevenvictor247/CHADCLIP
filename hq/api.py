@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
+from . import activity, agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
 from . import etsy, etsy_api, muse_api, sweep_api
 from .config import CLIPS_DIR, FOOTBALL_DATA, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
@@ -245,6 +245,10 @@ def pause(body: PauseIn):
 def state():
     from .agents.chad.publish import paused
     running = {r["agent"]: r["instructions"] for r in db.rows("SELECT agent, instructions FROM tasks WHERE status = 'running'")}
+    try:
+        act = activity.by_name()   # why an idle agent is idle; never lets a failed look break the dashboard
+    except Exception:
+        act = {}
     return {
         "has_llm": HAS_LLM,
         "paused": paused(),
@@ -262,7 +266,9 @@ def state():
         "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at, score, score_why "
                          "FROM leads WHERE score IS NULL OR score >= 4 ORDER BY score IS NULL, score DESC, id DESC LIMIT 50"),
         "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None, "village": "business"}] +
-                  [{"name": a.name, "role": a.role, "doing": running.get(a.name), "village": a.village}
+                  [{"name": a.name, "role": a.role, "doing": running.get(a.name), "village": a.village,
+                    "state": act.get(a.name, {}).get("state"), "why": act.get(a.name, {}).get("why"),
+                    "unlock": act.get(a.name, {}).get("unlock")}
                    for a in agents.AGENTS.values()],
         "counts": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},
         "pending": _pending_clips(),
@@ -585,6 +591,12 @@ def instagram_disconnect(request: Request):
 class YouTubeIn(BaseModel):
     account: str
     text: str = ""
+
+
+@app.get("/api/activity")
+def agent_activity():
+    """Every agent: working, waiting (and why, and what unlocks it) or ready, with its rounds in the last 7 days."""
+    return activity.report()
 
 
 @app.get("/api/youtube")

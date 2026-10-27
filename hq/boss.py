@@ -7,7 +7,7 @@ import threading
 import time
 import traceback
 
-from . import agents, db, etsy, football, ledger, llm, muse, review, tally
+from . import activity, agents, db, etsy, football, ledger, llm, muse, review, tally
 from .config import BOSS_MODEL, VISION_PATH
 
 SYSTEM = """You are the Boss, the head of an AI agent team that runs parts of Steven's online business.
@@ -143,6 +143,7 @@ def get_status() -> dict:
         "football": football.status(),
         "etsy": etsy.status(),
         "ideas": muse.summary(),
+        "agents": activity.brief(),   # who is working, who is idle and what would put them to work
     }
 
 

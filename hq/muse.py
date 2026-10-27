@@ -314,7 +314,7 @@ def _safe(fn, default=None):
 
 def facts() -> dict:
     """A snapshot of HQ for Muse to think about. Reads only; never calls Claude."""
-    from . import agents, campaigns, creators, money, tally
+    from . import activity, agents, campaigns, creators, money, tally
     from .config import village_of
     team = [{"name": a.name, "role": a.role, "village": village_of(a.name)} for a in agents.AGENTS.values()]
     months = _safe(lambda: money.summary().get("periods", {}), {})
@@ -334,6 +334,8 @@ def facts() -> dict:
                        "ORDER BY usd DESC", _month_start())
     return {
         "team": team,
+        "agents_idle": _safe(lambda: [{"name": r["name"], "why": r["why"], "rounds_7d": r["runs_7d"]}
+                                      for r in activity.report() if r["state"] == "waiting"], []),   # capacity to put to work
         "money": months,   # today, month and all time: made (campaigns + logged income), spent (Claude + expenses), net
         "claude_cost_this_month_by_agent": by_agent,
         "clips_by_status": clips,

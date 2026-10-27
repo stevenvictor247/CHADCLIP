@@ -440,7 +440,7 @@ function setCount(key, value) {
 
 function renderAgents(list) {
   list = list.filter(a => (a.village || "business") === "business");   // the football team is in the Warrior Village panel
-  const key = list.map(a => a.name + "|" + (a.doing || "")).join(";");
+  const key = list.map(a => a.name + "|" + (a.doing || "") + "|" + (a.why || "")).join(";");
   if (key === shownAgents) return;   // keep the animations running smoothly
   shownAgents = key;
   $("agents").innerHTML = rooms(list);
@@ -448,13 +448,13 @@ function renderAgents(list) {
 function rooms(list) {
   return list.map(a => {
     const l = look(a.name);
-    return `<div class="room ${a.doing ? "busy" : ""}" style="--c:${l.color}" title="${esc(a.doing || a.role)}">
+    return `<div class="room ${a.doing ? "busy" : ""}" style="--c:${l.color}" title="${esc(a.doing || (a.why ? a.why + (a.unlock ? " To fix: " + a.unlock : "") : a.role))}">
       <span class="tag">${a.doing ? "working" : "idle"}</span>
       <span class="zzz">z z</span>
       <div class="critter">${critter(l)}<span class="prop">${l.prop}</span></div>
       <div class="name">${esc(a.name)}</div>
       <div class="bubble">${esc(a.doing || "")}</div>
-      <div class="role">${a.doing ? "" : esc(a.role)}</div>
+      <div class="role">${a.doing ? "" : esc(a.why || a.role)}</div>
     </div>`;
   }).join("");
 }
