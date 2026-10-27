@@ -54,7 +54,7 @@ GROUPS = [
     ("boss", "🎩", "Boss", "The Boss's brain, daily report, phone chat (Telegram) and the Build it button.",
      ("HQ_MODEL_BOSS", "HQ_BOSS_MODEL", "HQ_REPORT_HOUR", "HQ_BUILD_TOKEN", "HQ_BUILD_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_ID"), ()),
     ("chad", "🎬", "Chad (clips and posting)", "How many posts a day, approval, practice mode, and your TikTok, Instagram, YouTube and Twitch accounts.",
-     ("HQ_MODEL_CHAD", "HQ_MAX_POSTS_PER_DAY", "HQ_POST_GAP_MINUTES", "HQ_REQUIRE_APPROVAL", "HQ_PRACTICE_POSTING", "HQ_WHISPER_MODEL",
+     ("HQ_MODEL_CHAD", "HQ_MAX_POSTS_PER_DAY", "HQ_MAX_CLIPS_PER_DAY", "HQ_POST_GAP_MINUTES", "HQ_REQUIRE_APPROVAL", "HQ_PRACTICE_POSTING", "HQ_WHISPER_MODEL",
       "HQ_PUBLIC_BASE_URL"), ("IG_", "TIKTOK_", "TWITCH_")),
     ("pitch", "✉️", "Pitch (finding clients)", "Your Gmail for sending, and the pitch wording and limits.",
      ("HQ_MODEL_PITCH",), ("PITCH_",)),
@@ -71,6 +71,7 @@ GROUPS = [
 # Plain-English names for the settings people look for most. Anything not listed shows its setting name.
 LABELS = {
     "HQ_MAX_POSTS_PER_DAY": "Posts per day (each account)",
+    "HQ_MAX_CLIPS_PER_DAY": "New clips per day (Chad, 4 or more)",
     "HQ_POST_GAP_MINUTES": "Minutes between posts",
     "HQ_DAILY_BUDGET": "Daily Claude spending limit ($)",
     "HQ_REQUIRE_APPROVAL": "Wait for my approval before posting",

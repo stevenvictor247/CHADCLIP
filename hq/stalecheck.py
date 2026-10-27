@@ -1,7 +1,7 @@
 """Stale-check for the approved-clip queue: free checks in code, one Approvals card, bulk keep or drop.
 
 Before a queued clip posts, it must still be worth posting: not a duplicate of a clip already posted or ahead of it in
-the queue, its creator still on the list, its caption still valid, and not sitting in the queue for over a week.
+the queue, its creator still on the list, its caption still valid, and not sitting in the queue for over 3 days.
 Clips that fail are held (publish skips them) and listed on ONE card for Steven to keep or drop. Kept clips are never
 flagged again, so the card can't become extra approval work.
 """
@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from . import approvals, db
 
-STALE_DAYS = 7
+STALE_DAYS = 3
 KIND = "stale_clips"
 
 

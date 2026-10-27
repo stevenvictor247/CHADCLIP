@@ -23,8 +23,10 @@ def test_vods_need_permission(monkeypatch):
 
 
 def test_vods_clip_viewer_clipped_moments(monkeypatch):
+    from hq import clipbudget
     from hq.agents.chad import sources
     db.init()
+    monkeypatch.setattr(clipbudget, "room", lambda: (5, ""))   # other tests leave clips queued in the shared db
     monkeypatch.setattr(twitch, "permissions", lambda: {"jynxzi": "clipping policy"})
     monkeypatch.setattr(twitch, "user_id", lambda login: "7")
     monkeypatch.setattr(twitch, "recent_vods", lambda uid, n: [{"id": "99", "url": "https://twitch.tv/videos/99", "title": "Stream"}])
@@ -43,8 +45,10 @@ def test_vods_clip_viewer_clipped_moments(monkeypatch):
 
 
 def test_scheduled_round_clips_added_streamers_and_says_what_happened(monkeypatch):
+    from hq import clipbudget
     from hq.agents.chad import sources
     db.init()
+    monkeypatch.setattr(clipbudget, "room", lambda: (5, ""))   # other tests leave clips queued in the shared db
     monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setattr(twitch, "permissions", lambda: {"jynxzi": "clipping policy", "ghost": "ok policy"})
