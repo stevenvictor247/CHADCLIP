@@ -101,6 +101,17 @@ class ClipEdit(BaseModel):
     caption: str | None = None
 
 
+def _pending_clips() -> list[dict]:
+    """Waiting clips, each with `flags`: the problems written on its card."""
+    from . import review
+    clips = db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY score DESC, id")
+    try:
+        found = review.pending_issues(clips, review._chad_settings())
+    except Exception:   # the dashboard never breaks over a flag check
+        found = {}
+    return [{**c, "flags": found.get(c["id"], [])} for c in clips]
+
+
 def _library() -> list[dict]:
     """Clips that have left the approval queue, newest first, with where each was posted."""
     clips = db.rows("SELECT * FROM clips WHERE status != 'pending_approval' ORDER BY id DESC LIMIT 100")
@@ -254,7 +265,7 @@ def state():
                   [{"name": a.name, "role": a.role, "doing": running.get(a.name), "village": a.village}
                    for a in agents.AGENTS.values()],
         "counts": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},
-        "pending": db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY score DESC, id"),
+        "pending": _pending_clips(),
         "clips": _library(),
         "tasks": db.rows("SELECT * FROM tasks ORDER BY id DESC LIMIT 20"),
         "posts": db.rows("SELECT * FROM posts ORDER BY id DESC LIMIT 20"),
@@ -442,6 +453,14 @@ def lead_said_yes(lead_id: int, body: YesIn):
 
 class HookPick(BaseModel):
     label: str
+
+
+@app.post("/api/clips/reject-flagged")
+def reject_flagged_clips(request: Request):
+    """The "Reject all flagged" button: rejects only waiting clips that have a written problem."""
+    _from_hq_page(request)
+    from . import review
+    return review.reject_flagged()
 
 
 @app.post("/api/clips/{clip_id}/hook")
