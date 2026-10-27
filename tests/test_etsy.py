@@ -147,7 +147,7 @@ def test_line_from_quill_to_dock(monkeypatch, tmp_path):
 def test_dock_can_never_publish_or_order(monkeypatch):
     from hq.etsy import printify
     monkeypatch.setenv("HQ_PRINTIFY_TOKEN", "tok")
-    src = (Path(printify.__file__)).read_text() + (Path(printify.__file__).parent / "work.py").read_text()
+    src = (Path(printify.__file__)).read_text(encoding="utf-8") + (Path(printify.__file__).parent / "work.py").read_text(encoding="utf-8")
     assert "publish.json" not in src and "send_to_production" not in src
     monkeypatch.setattr(printify.requests, "request", lambda *a, **k: (_ for _ in ()).throw(AssertionError("sent")))
     for path in ("/shops/1/products/2/publish.json", "/shops/1/orders/3/send_to_production.json", "/shops/1/orders.json"):
