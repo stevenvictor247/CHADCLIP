@@ -62,6 +62,7 @@ GROUPS = [
     ("tally", "💰", "Tally (money)", "Which Claude model Tally uses.", ("HQ_MODEL_TALLY",), ()),
     ("sweep", "🧹", "Sweep (janitor and quality control)", "Daily report time, clean-up and warning limits.", ("HQ_MODEL_SWEEP",), ("HQ_SWEEP_",)),
     ("muse", "💡", "Muse (Creative Director)", "How often Muse brainstorms, what it may spend, and how bold it is.", (), ("HQ_MUSE", "HQ_MODEL_MUSE")),
+    ("recruiter", "🧲", "Recruiter (finds new agents)", "How many agent proposals a day, what Recruiter may spend, and how picky it is.", (), ("HQ_RECRUITER", "HQ_MODEL_RECRUITER")),
     ("football", "🏈", "Warrior Village (football)", "Football folders, budget, reminders and the Thursday print.",
      ("HQ_MODEL_CAPTAIN", "HQ_DEPTH_HOUR", "HQ_SCOUTING_HOUR"), ("HQ_FOOTBALL_", "HQ_PRINT_", "HQ_PRINTER")),
     ("etsy", "🛍️", "Etsy Village (shirts)", "Printify connection, shirt pace, review, budget and the optional image key.",

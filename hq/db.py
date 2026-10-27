@@ -415,6 +415,9 @@ def init():
         for col in ("build_status", "build_url", "build_note", "build_at"):
             if col not in have:
                 c.execute(f"ALTER TABLE ideas ADD COLUMN {col} TEXT")
+        for col, kind in (("source", "TEXT"), ("rating", "INTEGER"), ("gap", "TEXT")):   # the Recruiter's proposals
+            if col not in have:
+                c.execute(f"ALTER TABLE ideas ADD COLUMN {col} {kind}")
 
 
 def rows(sql: str, *args) -> list[dict]:

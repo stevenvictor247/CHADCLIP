@@ -48,6 +48,7 @@ DEFAULT_MODELS = {
     "report": "claude-sonnet-5-5",  # the daily report: summarising facts HQ already gathered
     "sweep": "claude-sonnet-5-5",   # Sweep's one coach's note a day: spotting the pattern behind its findings
     "muse": "claude-sonnet-5-5",    # the Creative Director's weekly ideas: judgement and fresh thinking, about $0.20 a round
+    "recruiter": "claude-sonnet-5-5",  # finds gaps in HQ and proposes new agents: judgement, about $0.08 a round
     "scout_search": "claude-sonnet-5-5",  # Scout's daily web search for new campaigns: searching and judging what's real
     "recap": "claude-haiku-5-5",
     "etta": "claude-sonnet-5-5",    # runs the Etsy village: the weekly shop report and what to make more of

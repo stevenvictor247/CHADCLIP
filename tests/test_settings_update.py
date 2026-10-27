@@ -192,7 +192,7 @@ def test_settings_are_grouped_by_agent(monkeypatch, tmp_path):
     hq = _fresh(monkeypatch, tmp_path)
     d = hq.settings.describe()
     groups = {g["id"]: [f["key"] for f in g["fields"]] for g in d["groups"]}
-    assert list(groups) == ["general", "boss", "chad", "pitch", "scout", "tally", "sweep", "muse", "football", "etsy"]
+    assert list(groups) == ["general", "boss", "chad", "pitch", "scout", "tally", "sweep", "muse", "recruiter", "football", "etsy"]
     # every setting on the page lives in exactly one group
     everything = [f["key"] for s in d["sections"] for f in s["fields"]]
     assert sorted(k for ks in groups.values() for k in ks) == sorted(everything)
