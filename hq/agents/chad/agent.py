@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from ... import db, hooks, ledger
+from ... import clipbudget, db, hooks, ledger
 from ...config import CLIPS_DIR, CONFIG_DIR
 from ..base import Agent
 from . import editor, moments, sources, twitch
@@ -44,6 +44,8 @@ class Chad(Agent):
         source, a joined campaign, or a Twitch streamer with permission (and the Twitch keys to look them up)."""
         if params:
             return None
+        if clipbudget.room()[0] <= 0:
+            return True   # backlog still posting or today's clips made: don't even queue a round
         if any(sources.is_permitted(c) and c.get("sources") for c in sources.load_creators()):
             return None   # there is someone to check; if they keep having nothing new, the round backs off
         if os.getenv("TWITCH_CLIENT_ID") and os.getenv("TWITCH_CLIENT_SECRET") and any(twitch.permissions().values()):
@@ -53,6 +55,9 @@ class Chad(Agent):
     def run(self, task: dict) -> str:
         params = json.loads(task.get("params") or "{}")
         cfg = settings()
+        left, why = clipbudget.room()
+        if left <= 0:
+            return f"Paused clip-making: {why}"
         count = int(params.get("clips") or cfg.get("clips_per_video", 3))
 
         if params.get("vods"):
@@ -92,6 +97,8 @@ class Chad(Agent):
                 continue
             for src in creator.get("sources", []):
                 for v in sources.new_videos(src, int(creator.get("max_videos_per_run", 1))):
+                    if clipbudget.room()[0] <= 0:
+                        break
                     db.log("Chad", f"Clipping \"{v['title']}\" from {creator['name']}")
                     video = sources.download(v["url"])
                     made = self.clip_video(task["id"], video["path"], video["title"], video["url"], creator, count, cfg)
@@ -122,6 +129,8 @@ class Chad(Agent):
                 if not clips:
                     summary.append(f"{login}: no new clips in the last 7 days")
                 for c in clips:
+                    if clipbudget.room()[0] <= 0:
+                        break
                     creator = {"name": c["streamer"], "credit": f"{c['streamer']} on Twitch",
                                "notes": "Funny moments, big reactions, chaos."}
                     video = sources.download(c["url"])
@@ -143,6 +152,8 @@ class Chad(Agent):
             creator = {"name": s["name"], "credit": f"{s['name']} on Twitch",
                        "notes": "Funny moments, big reactions, chaos."}
             for c in twitch.top_clips(s["id"], days, per_streamer):
+                if clipbudget.room()[0] <= 0:
+                    break
                 video = sources.download(c["url"])
                 made += self.clip_whole(task_id, video, c["title"], c["views"], creator, cfg)
                 lines.append(f"{s['name']}: \"{c['title']}\" ({c['views']:,} views)")
@@ -170,6 +181,8 @@ class Chad(Agent):
         made, lines = 0, []
         for vod in vods:
             for m in twitch.vod_hot_moments(uid, vod["id"], per_vod):
+                if clipbudget.room()[0] <= 0:
+                    break
                 key = f"vod:{vod['id']}:{int(m['offset'])}"
                 if key in sources._seen():
                     continue
@@ -223,7 +236,10 @@ class Chad(Agent):
                               float(cfg.get("min_clip_seconds", 15)), float(cfg.get("max_clip_seconds", 59)))
         slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40] or "clip"
         words = transcript["words"] if transcript else None
+        made = 0
         for i, m in enumerate(picked, 1):
+            if clipbudget.room()[0] <= 0:
+                break
             out = CLIPS_DIR / f"{task_id}-{slug}-{i}.mp4"
             editor.render(path, m["start"], m["end"], out, words, cfg.get("layout", "blur"),
                           cfg.get("captions", True), int(cfg.get("caption_font_size", 64)))
@@ -241,4 +257,5 @@ class Chad(Agent):
             if creator.get("campaign_id"):
                 db.execute("UPDATE clips SET campaign_id = ? WHERE id = ?", creator["campaign_id"], clip_id)
             db.log("Chad", f"Clip #{clip_id} ready for approval: {m['title']}")
-        return len(picked)
+            made += 1
+        return made
