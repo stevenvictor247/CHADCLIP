@@ -1,7 +1,7 @@
-// The stage that holds both villages (HQ Town and Warrior Village) and the parts they share: a camera that fits each
+// The stage that holds the villages (HQ Town, Warrior Village and Print Street, the Etsy village) and the parts they share: a camera that fits each
 // village to its box and lets you zoom and drag around, the forest around the villages, and the cards that open when
 // you click an agent or a building (status, recent work, approve or reject right there, talk to the Boss).
-// world.js and football-town.js use it through window.HQTown. It loads before both of them.
+// world.js, football-town.js and etsy-town.js use it through window.HQTown. It loads before all of them.
 (() => {
 "use strict";
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -10,22 +10,22 @@ const lerp = (a, b, k) => a + (b - a) * k;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const fileName = p => String(p || "").split(/[\\/]/).pop();
 const css = `
-  #towns { position:relative; z-index:1; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:100%; margin:10px 14px 0; height:70vh;
+  #towns { position:relative; z-index:1; display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:100%; margin:10px 14px 0; height:70vh;
            border-radius:var(--radius); overflow:hidden; background:#4f9a48; box-shadow:0 18px 50px rgba(0,0,0,.45), 0 0 0 1px var(--line); }
   #towns .world { margin:0; border-radius:0; height:100%; min-height:0; min-width:0; box-shadow:none; }
   #towns .world canvas { width:100%; height:100%; aspect-ratio:auto; }
   #towns .world canvas.can-pan { cursor:grab; } #towns .world canvas.dragging { cursor:grabbing !important; }
-  #towns[data-mode="hq"], #towns[data-mode="fb"] { grid-template-columns:1fr; }
-  #towns[data-mode="hq"] #fbworld, #towns[data-mode="fb"] #world {
-    position:absolute; right:14px; bottom:60px; width:min(24%, 320px); height:auto; aspect-ratio:960/416; z-index:3; border-radius:12px;
+  #towns:not([data-mode="both"]) { grid-template-columns:1fr; }
+  #towns:not([data-mode="both"]) .world:not(.main) {
+    position:absolute; right:14px; bottom:60px; width:min(22%, 280px); height:auto; aspect-ratio:960/416; z-index:3; border-radius:12px;
     cursor:pointer; box-shadow:0 10px 30px rgba(0,0,0,.5), 0 0 0 2px rgba(255,255,255,.75); transition:transform .2s var(--ease); }
-  #towns[data-mode="hq"] #fbworld:hover, #towns[data-mode="fb"] #world:hover { transform:scale(1.04); }
-  #towns[data-mode="hq"] #fbworld canvas, #towns[data-mode="fb"] #world canvas { pointer-events:none; }
-  #towns[data-mode="hq"] #fbworld > :not(canvas), #towns[data-mode="fb"] #world > :not(canvas) { display:none !important; }
-  #towns[data-mode="hq"] #fbworld::after, #towns[data-mode="fb"] #world::after { position:absolute; left:8px; bottom:6px; font-size:11px; font-weight:800;
-    color:#fff; background:rgba(20,14,30,.75); padding:2px 8px; border-radius:999px; }
-  #towns[data-mode="hq"] #fbworld::after { content:"🏈 Warrior Village ⇄"; } #towns[data-mode="fb"] #world::after { content:"🏘️ HQ Town ⇄"; }
-  #towns.solo { grid-template-columns:1fr; } #towns.solo #world, #towns.solo .stage-modes { display:none !important; }
+  #towns:not([data-mode="both"]) .world.mini2 { right:calc(24px + min(22%, 280px)); }
+  #towns:not([data-mode="both"]) .world:not(.main):hover { transform:scale(1.04); }
+  #towns:not([data-mode="both"]) .world:not(.main) canvas { pointer-events:none; }
+  #towns:not([data-mode="both"]) .world:not(.main) > :not(canvas) { display:none !important; }
+  #towns:not([data-mode="both"]) .world:not(.main)::after { content:attr(data-label) " ⇄"; position:absolute; left:8px; bottom:6px; font-size:11px;
+    font-weight:800; color:#fff; background:rgba(20,14,30,.75); padding:2px 8px; border-radius:999px; }
+  #towns.solo { grid-template-columns:1fr; } #towns.solo .world:not(.main), #towns.solo .stage-modes { display:none !important; }
   #towns .stage-modes { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); z-index:4; display:flex; gap:2px; padding:3px;
     border-radius:999px; background:rgba(20,14,30,.65); border:1px solid rgba(255,255,255,.15); backdrop-filter:blur(6px); }
   #towns .stage-modes .chip { border:0; background:transparent; padding:5px 12px; font-size:12px; white-space:nowrap; }
@@ -84,8 +84,8 @@ const css = `
   #town-card .empty { text-align:center; padding:16px 8px; color:var(--muted); } #town-card .empty .big { font-size:30px; display:block; }
   @media (max-width:960px) { #towns { margin:8px 8px 0; } }
   @media (max-width:700px) {
-    #towns[data-mode="both"] { grid-template-columns:1fr; grid-template-rows:1fr 1fr; }
-    #towns[data-mode="hq"] #fbworld, #towns[data-mode="fb"] #world { display:none; }
+    #towns[data-mode="both"] { grid-template-columns:1fr; grid-template-rows:1fr 1fr 1fr; }
+    #towns:not([data-mode="both"]) .world:not(.main) { display:none; }
     #towns .stage-modes .chip { padding:5px 10px; font-size:12px; }
     #towns .stage-modes .long { display:none; } #towns .stage-modes .short { display:inline; }
     #town-card, #town-card[data-side="left"] { left:8px; right:8px; width:auto; top:auto; bottom:8px; max-height:72%; }
@@ -384,7 +384,10 @@ const when = iso => {
 const usd = n => "$" + (+n || 0).toFixed(2);
 const PANELS = {chad: ["clips", "library"], scout: ["campaigns", "campsection"], tally: ["campaigns", "campsection"], pitch: ["pitch", "leadsection"], sweep: ["sweep", "sweep"], muse: ["ideas", "muse"],
                 boss: ["boss", "chatlog"], captain: ["football", "football"], clock: ["football", "fbweek"], ref: ["football", "fbfiles"],
-                tells: ["football", "fbfiles"], scribe: ["football", "fbnotes"]};
+                tells: ["football", "fbfiles"], scribe: ["football", "fbnotes"],
+                etta: ["etsy", "etsy"], radar: ["etsy", "etsyresearch"], quill: ["etsy", "etsyboard"], loom: ["etsy", "etsyboard"],
+                warden: ["etsy", "etsyrules"], dock: ["etsy", "etsyorders"]};
+const VILLAGE_NAME = {football: "🏈 Warrior Village", etsy: "🛍️ Print Street", business: "🏘️ HQ Town"};
 
 // An agent's card: what they're doing, what they did lately, what they cost this month, and buttons to follow them,
 // ask the Boss about them or open their part of the dashboard.
@@ -402,7 +405,7 @@ function agentCard(name, live) {
     const cost = (s.spend?.month_by_agent || []).find(r => String(r.agent).toLowerCase() === key);
     const panel = PANELS[key];
     return {
-      color: l.color, icon: l.prop, title: name, sub: esc(info.village === "football" ? "🏈 Warrior Village" : "🏘️ HQ Town"),
+      color: l.color, icon: l.prop, title: name, sub: esc(VILLAGE_NAME[info.village] || VILLAGE_NAME.business),
       html: `<p class="status">${status}</p><p class="muted">${esc(info.role)}</p>
         <h4>Lately</h4>${recent.length ? `<ul class="feed">${recent.map(r => `<li><span>${esc(when(r.created_at))}</span>${esc(r.message)}</li>`).join("")}</ul>`
           : `<p class="muted">Nothing yet.</p>`}
@@ -479,17 +482,18 @@ function approvalsCard(village) {
     const s = state || {};
     const clips = village === "business" ? s.pending || [] : [];
     const items = (s.approvals || []).filter(a => (a.village || "business") === village);
-    const fb = village === "football";
+    const fb = village === "football", shop = village === "etsy";
     const n = clips.length + items.length;
     return {
-      color: fb ? "#FFCC33" : "#3b82f6", icon: "📬", title: fb ? "Coaches' Mailroom" : "Approvals",
+      color: fb ? "#FFCC33" : shop ? "#f472b6" : "#3b82f6", icon: shop ? "🪟" : "📬",
+      title: fb ? "Coaches' Mailroom" : shop ? "Publish Window" : "Approvals",
       sub: n ? `${n} waiting for your OK` : "Nothing waiting",
-      html: (n ? "" : `<div class="empty"><span class="big">${fb ? "🏈" : "🌤️"}</span>All caught up.</div>`) +
+      html: (n ? "" : `<div class="empty"><span class="big">${fb ? "🏈" : shop ? "👕" : "🌤️"}</span>All caught up.</div>`) +
         clips.map(c => `<div class="item"><video src="/clips/${esc(fileName(c.path))}" controls preload="metadata" playsinline></video>
           <b>${esc(c.title)}</b><small class="muted">#${c.id} · ${esc(c.creator)} · ★ ${esc(c.score ?? "?")}</small>
           ${c.boss_note ? `<small class="note">🧐 Boss: ${esc(c.boss_note)}</small>` : ""}
           <div class="row"><button data-act="clip-yes" data-id="${c.id}">👍 Approve</button><button class="bad" data-act="clip-no" data-id="${c.id}">Reject</button></div></div>`).join("") +
-        items.map(a => `<div class="item"><b>${esc(a.title)}</b><small class="muted">from ${esc(a.agent)}</small>
+        items.map(a => `<div class="item">${a.kind === "etsy_design" ? `<img src="/api/approvals/${a.id}/file" alt="" style="width:100%;border-radius:8px">` : ""}<b>${esc(a.title)}</b><small class="muted">from ${esc(a.agent)}</small>
           <pre>${esc(String(a.preview || "").slice(0, 900))}${String(a.preview || "").length > 900 ? "…" : ""}</pre>
           <div class="row">${(a.payload || {}).draft ? `<button class="ghost" onclick="window.open('/api/approvals/${a.id}/file', '_blank')">👁 Preview</button>` : ""}<button data-act="yes" data-id="${a.id}">${esc(a.yes_label || "Approve")}</button><button class="ghost" data-act="no" data-id="${a.id}">${esc(a.no_label || "No")}</button></div></div>`).join(""),
       buttons: [{act: "open", label: "Open Approvals ↗", kind: "ghost"}],
@@ -508,27 +512,41 @@ function approvalsCard(village) {
 function infoCard(key, build) { openCard(key, build); }
 
 // ---------- the stage ----------
-// Both villages fill the screen under the money strip: side by side (they meet at the footbridge), or one big with the
-// other as a small live window you can click to swap. Phones show one village at a time.
+// The villages fill the screen under the money strip: all side by side, or one big with the others as small live
+// windows you can click to swap. Phones show one village at a time. The Warrior Village and Etsy tabs show just theirs.
 const stage = document.getElementById("towns");
-const MODES = {both: ["◫", "Both", "Both"], hq: ["🏘️", "HQ Town", "HQ"], fb: ["🏈", "Warrior Village", "Warriors"]};
+const MODES = {both: ["◫", "All", "All"], hq: ["🏘️", "HQ Town", "HQ"], fb: ["🏈", "Warrior Village", "Warriors"], etsy: ["🛍️", "Print Street", "Etsy"]};
+const WORLD_OF = {hq: "world", fb: "fbworld", etsy: "etsyworld"};
+const SOLO = {football: "fb", etsy: "etsy"};   // tab -> the one village it shows
 let mode = "both";
 try { mode = localStorage.getItem("hq-stage") || (innerWidth < 700 ? "hq" : "both"); } catch (e) {}
 if (!MODES[mode]) mode = "both";
+function place(m) {   // which world is big and which are the small windows
+  let n = 0;
+  for (const [k, id] of Object.entries(WORLD_OF)) {
+    const w = document.getElementById(id);
+    if (!w) continue;
+    const main = m === "both" || k === m;
+    w.classList.toggle("main", main);
+    w.classList.toggle("mini1", !main && ++n === 1);
+    w.classList.toggle("mini2", !main && n === 2);
+  }
+  stage.dataset.mode = m;
+}
 function setMode(m, remember = true) {
   if (!stage || !MODES[m]) return;
   mode = m;
   if (stage.classList.contains("solo")) return;
-  stage.dataset.mode = m;
+  place(m);
   stage.querySelectorAll(".stage-modes button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === m));
   if (remember) { try { localStorage.setItem("hq-stage", m); } catch (e) {} }
 }
 function fitStage() {
   if (!stage || stage.offsetParent === null) return;
   const top = stage.getBoundingClientRect().top + window.scrollY;
-  const football = document.body.dataset.tab === "football";
+  const own = !!SOLO[document.body.dataset.tab];
   let h = innerHeight - top - 12;
-  if (football) h = Math.min(h, innerHeight * .55);   // leave room for the football panel under it
+  if (own) h = Math.min(h, innerHeight * .55);   // leave room for the village's panel under it
   h = Math.max(innerWidth < 700 ? innerHeight * .62 : 360, h);
   stage.style.height = Math.round(h) + "px";
 }
@@ -541,12 +559,14 @@ if (stage) {
     `${icon} <span class="long">${label}</span><span class="short">${short}</span></button>`).join("");
   stage.appendChild(bar);
   bar.addEventListener("click", e => { const b = e.target.closest("button[data-mode]"); if (b) setMode(b.dataset.mode); });
-  // In one-village mode the other village is a small window: clicking it swaps them.
+  // In one-village mode the others are small windows: clicking one swaps it in.
   stage.addEventListener("click", e => {
     const w = e.target.closest(".world");
-    if (!w || e.target.closest(".world-zoom, .world-hud")) return;
-    const small = (mode === "hq" && w.id === "fbworld") || (mode === "fb" && w.id === "world");
-    if (small) { e.stopPropagation(); e.preventDefault(); setMode(mode === "hq" ? "fb" : "hq"); }
+    if (!w || e.target.closest(".world-zoom, .world-hud") || mode === "both" || stage.classList.contains("solo")) return;
+    if (!w.classList.contains("main")) {
+      e.stopPropagation(); e.preventDefault();
+      setMode(Object.keys(WORLD_OF).find(k => WORLD_OF[k] === w.id) || "hq");
+    }
   }, true);
   // + / − / reset buttons on each village
   for (const w of stage.querySelectorAll(".world")) {
@@ -554,11 +574,11 @@ if (stage) {
       `<button class="chip" data-z="out" title="Zoom out" aria-label="Zoom out">－</button><button class="chip" data-z="fit" title="Show the whole village" aria-label="Show the whole village">⤢</button></div>`);
   }
   setMode(mode, false);
-  // The Warrior Village tab shows just that village, above the football panel.
+  // A village's own tab shows just that village, above its panel.
   const solo = () => {
-    const on = document.body.dataset.tab === "football";
-    stage.classList.toggle("solo", on);
-    if (on) { stage.dataset.mode = "fb"; } else setMode(mode, false);
+    const own = SOLO[document.body.dataset.tab];
+    stage.classList.toggle("solo", !!own);
+    if (own) place(own); else setMode(mode, false);
     fitStage();
   };
   new MutationObserver(solo).observe(document.body, {attributes: true, attributeFilter: ["data-tab"]});

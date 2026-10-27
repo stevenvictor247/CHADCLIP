@@ -301,6 +301,55 @@ CREATE TABLE IF NOT EXISTS clip_packs (
     created_at TEXT NOT NULL,
     decided_at TEXT
 );
+CREATE TABLE IF NOT EXISTS etsy_designs (
+    id INTEGER PRIMARY KEY,
+    brief_id INTEGER,
+    theme TEXT NOT NULL,                         -- e.g. Coffee lovers
+    slogan TEXT NOT NULL,                        -- the big words on the shirt
+    subline TEXT,                                -- small words under them, optional
+    style TEXT NOT NULL DEFAULT 'bold',          -- Loom's look: bold, retro, script, marker, badge
+    art_prompt TEXT,                             -- a picture to add above the words (needs the image key), optional
+    title TEXT NOT NULL,                         -- Etsy listing title
+    tags TEXT NOT NULL DEFAULT '[]',             -- JSON list, 13 Etsy tags
+    description TEXT NOT NULL DEFAULT '',
+    price_cents INTEGER NOT NULL DEFAULT 2499,
+    stage TEXT NOT NULL DEFAULT 'written',       -- written, drawn, review, approved, building, ready, live, retired, held, rejected
+    warden TEXT NOT NULL DEFAULT '{}',           -- JSON: Warden's problems and warnings
+    files TEXT NOT NULL DEFAULT '{}',            -- JSON: print files and the preview, by name
+    used_ai_art INTEGER NOT NULL DEFAULT 0,
+    printify_product_id TEXT,
+    etsy_listing_id TEXT,                        -- set once Steven publishes it and Printify reports it live
+    photo_added INTEGER NOT NULL DEFAULT 0,      -- Steven ticked "real photo added" (Etsy's one-real-photo rule)
+    sales INTEGER NOT NULL DEFAULT 0,
+    approval_id INTEGER,
+    note TEXT,                                   -- the last thing that happened to it, in plain words
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS etsy_briefs (
+    id INTEGER PRIMARY KEY,
+    themes TEXT NOT NULL,                        -- JSON list of {theme, audience, why, angles, keywords, until}
+    source TEXT NOT NULL DEFAULT 'radar',        -- radar (web search), calendar (free fallback), steven
+    note TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS etsy_notes (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'research',       -- research (something Steven pasted), stats (an Etsy file), report (Etta)
+    text TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,             -- Radar has read it
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS etsy_orders (
+    id TEXT PRIMARY KEY,                         -- Printify order id
+    status TEXT NOT NULL,
+    total_cents INTEGER,
+    cost_cents INTEGER,
+    items TEXT NOT NULL DEFAULT '[]',            -- JSON list of {title, quantity}
+    told INTEGER NOT NULL DEFAULT 0,             -- Steven has been sent the "press Send to production" alert
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,

@@ -7,7 +7,7 @@ import threading
 import time
 import traceback
 
-from . import agents, db, football, ledger, llm, muse, review, tally
+from . import agents, db, etsy, football, ledger, llm, muse, review, tally
 from .config import BOSS_MODEL, VISION_PATH
 
 SYSTEM = """You are the Boss, the head of an AI agent team that runs parts of Steven's online business.
@@ -34,6 +34,11 @@ How you work:
   assign_task (plain-words instructions), or straight to the one agent when it's obvious (Clock to tick off or move
   checklist items, Ref to check a sheet, Tells for a scouting report). get_status includes the football week.
   Never invent football stats or tendencies, and nothing football goes to a coach without Steven.
+- Etsy: the Etsy village (Print Street) sells shirt designs on Etsy, printed and shipped by Printify. Etta runs it;
+  Radar finds themes, Quill writes shirts, Loom draws them, Warden checks Etsy's rules, Dock builds them in Printify
+  and watches orders. It runs itself on a schedule inside its own budget. To ask for shirts on a theme now,
+  assign_task Quill with {"theme": "...", "count": 3}. get_status shows the board. Steven alone publishes listings,
+  sends orders to production and answers buyers: never offer to do those.
 - Muse is the Creative Director. You already send Muse on a weekly ideas round on your own (no need to assign it).
   When Steven wants ideas now (new businesses, new agents, add-ons, ways to make more money), assign_task Muse, with
   {"focus": "his topic in his words"} if he named one. get_status shows the ideas
@@ -136,6 +141,7 @@ def get_status() -> dict:
         "claude_spend": ledger.summary(),
         "views": tally.summary(),
         "football": football.status(),
+        "etsy": etsy.status(),
         "ideas": muse.summary(),
     }
 

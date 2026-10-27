@@ -115,6 +115,7 @@ KNOWN = [
     ("Thursday printing of the opponent folder", BUILT),
     ("Depth: Monday opponent personnel sheet with auto-fetch", BUILT),
     ("Muse: Creative Director that ranks new ideas", BUILT),
+    ("Etsy village: shirt designs on Etsy through Printify, with Etta, Radar, Quill, Loom, Warden and Dock | print on demand shirts | Etsy shop", BUILT),
     # the earlier agent ideas page
     ("Penny: views and stats for every clip | clip performance dashboard | clip stats dashboard", WAITING),
     ("Medic: keeps HQ healthy while you're away | HQ health monitor", WAITING),
@@ -124,7 +125,7 @@ KNOWN = [
     ("Remy: reminders and to-dos by text", WAITING), ("Loot: free game alerts", WAITING),
     ("Gus: meal plans and shopping list", WAITING), ("Hawk: price watch alerts", WAITING),
     ("Sorty: inbox sorting and draft replies", WAITING), ("Keeper: receipts, returns and warranties", WAITING),
-    ("Mainstreet: websites for local businesses", WAITING), ("Inky: print-on-demand designs and Etsy listings", WAITING),
+    ("Mainstreet: websites for local businesses", WAITING), ("Inky: print-on-demand designs and Etsy listings", BUILT),
     ("Echo: weekly newsletter writer | weekly newsletter", WAITING), ("Coach: daily habit check-ins", WAITING),
     ("Paper: explains letters, bills and forms from a photo", WAITING),
     ("Stars: Google review replies for local businesses", WAITING), ("Flip: resale deal finder", WAITING),

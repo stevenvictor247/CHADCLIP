@@ -192,7 +192,7 @@ def test_settings_are_grouped_by_agent(monkeypatch, tmp_path):
     hq = _fresh(monkeypatch, tmp_path)
     d = hq.settings.describe()
     groups = {g["id"]: [f["key"] for f in g["fields"]] for g in d["groups"]}
-    assert list(groups) == ["general", "boss", "chad", "pitch", "scout", "tally", "sweep", "muse", "football"]
+    assert list(groups) == ["general", "boss", "chad", "pitch", "scout", "tally", "sweep", "muse", "football", "etsy"]
     # every setting on the page lives in exactly one group
     everything = [f["key"] for s in d["sections"] for f in s["fields"]]
     assert sorted(k for ks in groups.values() for k in ks) == sorted(everything)
@@ -202,6 +202,7 @@ def test_settings_are_grouped_by_agent(monkeypatch, tmp_path):
     assert posts["label"] == "Posts per day (each account)" and "Chad" in posts["help"]
     assert {"HQ_BUILD_URL", "HQ_BUILD_TOKEN", "TELEGRAM_BOT_TOKEN"} <= set(groups["boss"])
     assert {"HQ_PRINT_DIR", "HQ_PRINTER", "HQ_FOOTBALL_DIR"} <= set(groups["football"])
+    assert {"HQ_PRINTIFY_TOKEN", "HQ_ETSY_DESIGNS_PER_DAY", "HQ_OPENAI_API_KEY", "HQ_MODEL_QUILL"} <= set(groups["etsy"])
     assert {"HQ_SWEEP_KEEP_DAYS", "HQ_SWEEP_STUCK_HOURS", "HQ_SWEEP_LOOP_CALLS"} <= set(groups["sweep"])
     assert "HQ_BACKUP_COPY_DIR" in groups["general"] and "HQ_MODEL_SCOUT" in groups["scout"]
 
