@@ -13,13 +13,19 @@ SYSTEM = """You are Scout, who vets paid clipping campaigns for Steven, a beginn
 into TikToks, YouTube Shorts and Instagram Reels from his own clipping accounts.
 
 You are given the text of a campaign (rules, pay, requirements). Pull out the facts exactly as written. Never guess a
-number that isn't there: use null. Then rate the campaign from 0 to 10 for Steven:
-- pay per 1,000 views (under $0.50 is poor, $1 to $3 is good),
-- how much budget is left,
-- how easy the rules are (required tags, minimum views, face-on-camera or original footage demands),
-- whether source videos are provided,
-- anything that looks like a scam or unpaid-work trap (asking for money up front, login details, vague payouts).
-Write the verdict in two plain sentences a beginner understands."""
+number that isn't there: use null. Then score the campaign from 0 to 10 for Steven. Only a campaign that is clearly
+worth his time scores 8 or more; be strict. Weigh these seven things:
+- payout rate per 1,000 views (under $0.50 is poor, $1 to $3 is good),
+- clear rules (required tags, minimum views, face-on-camera or original footage demands; vague rules score low),
+- a reliable payer (a named creator, agency or brand with a stated payout process; vague or unproven payouts and
+  anything that asks for money or login details up front is a scam risk and caps the score at 4),
+- fit with Chad: the campaign itself is the permission to clip, so it must say clipping that creator's content is
+  allowed and ideally provide source videos,
+- effort: how hard a good clip is to make,
+- competition: how many clippers likely share the budget,
+- deadline and budget left (a nearly spent or soon-ending campaign scores low).
+Give score_reasons: one short plain line per thing above, each starting with its name and a verdict, e.g.
+"Payout: $2 per 1,000 views, good". Write the verdict in two plain sentences a beginner understands."""
 
 SCHEMA = {
     "type": "object",
@@ -38,10 +44,13 @@ SCHEMA = {
         "content_sources": {"type": "array", "items": {"type": "string"}, "description": "Video links provided for clipping"},
         "red_flags": {"type": "array", "items": {"type": "string"}},
         "score": {"type": "number", "description": "0 to 10 for Steven"},
+        "score_reasons": {"type": "array", "items": {"type": "string"},
+                          "description": "One short line each for payout, rules, payer, fit, effort, competition, deadline"},
         "verdict": {"type": "string"},
     },
     "required": ["name", "creator", "platforms", "rate_per_1k", "budget_left_pct", "min_views", "max_payout",
-                 "required_tags", "credit", "rules", "clip_style", "content_sources", "red_flags", "score", "verdict"],
+                 "required_tags", "credit", "rules", "clip_style", "content_sources", "red_flags", "score", "score_reasons",
+                 "verdict"],
     "additionalProperties": False,
 }
 
@@ -72,6 +81,7 @@ def describe(c: dict) -> str:
     """A short message about a campaign for the phone or the Boss."""
     pay = f"${c['rate_per_1k']:g} per 1,000 views" if c.get("rate_per_1k") is not None else "pay not stated"
     lines = [f"Campaign #{c['id']}: {c['name']} ({c.get('score') or '?'}/10)", pay, c.get("verdict") or ""]
+    lines += [f"• {r}" for r in c.get("score_reasons") or []]
     if c["flags"]:
         lines.append("Watch out: " + "; ".join(c["flags"]))
     return "\n".join(x for x in lines if x)
@@ -152,7 +162,7 @@ class Scout(Agent):
         if not llm.HAS_LLM:
             return "Scout needs ANTHROPIC_API_KEY set to rate campaigns."
         cap = int(os.getenv("SCOUT_MAX_PER_RUN", "10") or 10)
-        min_score = float(os.getenv("SCOUT_MIN_SCORE", "6") or 6)
+        min_score = campaigns.min_score()
         found, notes = [], []
 
         def rate(text, url, source):

@@ -4,6 +4,7 @@ A campaign you join becomes a creator Chad is allowed to clip: the campaign is t
 """
 
 import json
+import os
 
 from . import db
 
@@ -13,7 +14,7 @@ def _j(value) -> str:
 
 
 def _load(row: dict) -> dict:
-    for k in ("platforms", "required_tags", "content_sources", "flags"):
+    for k in ("platforms", "required_tags", "content_sources", "flags", "score_reasons"):
         row[k] = json.loads(row.get(k) or "[]")
     return row
 
@@ -46,16 +47,51 @@ def flags_for(c: dict) -> list[str]:
     return out
 
 
+DEFAULT_MIN_SCORE = 8.0
+
+
+def min_score() -> float:
+    """The lowest score (0 to 10) a campaign needs before Steven is shown it. Settings: SCOUT_MIN_SCORE."""
+    try:
+        return float(os.getenv("SCOUT_MIN_SCORE") or DEFAULT_MIN_SCORE)
+    except ValueError:
+        return DEFAULT_MIN_SCORE
+
+
+def capped_score(data: dict, flags: list[str]) -> float | None:
+    """Claude's score, held down by plain rules so enthusiasm alone can't pass a weak campaign."""
+    score = data.get("score")
+    if score is None:
+        return None
+    score = max(0.0, min(10.0, float(score)))
+    if data.get("red_flags"):
+        score = min(score, 5.0)
+    if data.get("rate_per_1k") is None:
+        score = min(score, 6.0)   # no stated pay: can't be one of the best
+    if data.get("budget_left_pct") is not None and data["budget_left_pct"] < 20:
+        score = min(score, 4.0)
+    return score
+
+
+def worth_showing(c: dict) -> bool:
+    """Campaigns Scout finds on its own show only at or above the bar (they stay stored, so they aren't rated twice). Ones
+    Steven pasted himself, and ones he joined, always show."""
+    if c.get("source") in ("manual", "inbox", None) or c.get("status") == "joined":
+        return True
+    return (c.get("score") or 0) >= min_score()
+
+
 def propose(data: dict, url: str | None = None, sources: list | None = None, source: str = "manual") -> int:
     c = {**data, "content_sources": list(sources or data.get("content_sources") or [])}
     flags = list(data.get("red_flags") or []) + flags_for(c)
+    c["score"] = capped_score(c, flags)
     return db.execute(
         "INSERT INTO campaigns (name, creator, url, platforms, rate_per_1k, budget_left_pct, min_views, max_payout, "
-        "required_tags, credit, rules, clip_style, content_sources, flags, score, verdict, created_at, source) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "required_tags, credit, rules, clip_style, content_sources, flags, score, verdict, created_at, source, score_reasons) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         c["name"], c.get("creator"), url, _j(c.get("platforms")), c.get("rate_per_1k"), c.get("budget_left_pct"),
         c.get("min_views"), c.get("max_payout"), _j(c.get("required_tags")), c.get("credit"), c.get("rules"),
-        c.get("clip_style"), _j(c["content_sources"]), _j(flags), c.get("score"), c.get("verdict"), db.now(), source)
+        c.get("clip_style"), _j(c["content_sources"]), _j(flags), c.get("score"), c.get("verdict"), db.now(), source, _j(c.get("score_reasons")))
 
 
 def decide(campaign_id: int, decision: str) -> str:
@@ -128,6 +164,8 @@ def summary() -> list[dict]:
     """Every campaign with its totals, for the dashboard."""
     out = []
     for c in all_campaigns():
+        if not worth_showing(c):
+            continue
         subs = db.rows("SELECT status, views, earned_usd FROM submissions WHERE campaign_id = ?", c["id"])
         c["totals"] = {
             "submissions": len(subs),

@@ -11,7 +11,8 @@ DATA = {
     "name": "Kai Cenat Funny Moments", "creator": "Kai Cenat", "platforms": ["tiktok", "instagram"],
     "rate_per_1k": 1.5, "budget_left_pct": 70, "min_views": 1000, "max_payout": 200,
     "required_tags": ["#kaicenat", "@clipfarm"], "credit": "@KaiCenat", "rules": "Tag the campaign. No reuploads.",
-    "clip_style": "Funny reactions", "content_sources": [], "red_flags": [], "score": 7.5, "verdict": "Fair pay. Easy rules.",
+    "clip_style": "Funny reactions", "content_sources": [], "red_flags": [], "score": 8.5, "verdict": "Fair pay. Easy rules.",
+    "score_reasons": ["Payout: $1.5 per 1,000 views, fair", "Rules: clear"],
 }
 
 
@@ -373,3 +374,48 @@ def test_web_searches_are_billed_in_the_ledger():
 def test_search_answer_without_json_means_no_candidates():
     assert scout_pkg.Scout._candidates_in("I found nothing useful.") == []
     assert scout_pkg.Scout._candidates_in('{"candidates": "oops"}') == []
+
+
+# ---- the 8/10 bar ----------------------------------------------------------------------------------------
+
+def test_default_bar_is_eight_and_can_be_changed(monkeypatch):
+    monkeypatch.delenv("SCOUT_MIN_SCORE", raising=False)
+    assert campaigns.min_score() == 8
+    monkeypatch.setenv("SCOUT_MIN_SCORE", "9")
+    assert campaigns.min_score() == 9
+    monkeypatch.setenv("SCOUT_MIN_SCORE", "junk")
+    assert campaigns.min_score() == 8
+
+
+def test_plain_rules_hold_the_score_down():
+    assert campaigns.capped_score(dict(DATA, score=9.5, red_flags=["asks for a deposit"]), []) == 5
+    assert campaigns.capped_score(dict(DATA, score=9.5, rate_per_1k=None), []) == 6
+    assert campaigns.capped_score(dict(DATA, score=9.5, budget_left_pct=10), []) == 4
+    assert campaigns.capped_score(dict(DATA, score=9.5), []) == 9.5
+
+
+def test_only_eight_plus_found_campaigns_are_shown_and_asked_about(monkeypatch):
+    pages = {"https://bar.example/feed": '<a href="/c/1">one</a><a href="/c/2">two</a>',
+             "https://bar.example/c/1": "<p>great</p>", "https://bar.example/c/2": "<p>meh</p>"}
+    asked = _discover(monkeypatch, lambda u: pages[u])
+    monkeypatch.delenv("SCOUT_MIN_SCORE", raising=False)
+    monkeypatch.setenv("SCOUT_FEED_URLS", "https://bar.example/feed")
+    scores = iter([8.5, 7.5])
+    monkeypatch.setattr(llm, "ask_json", lambda *a, **k: dict(DATA, score=next(scores), name="c"))
+    scout_pkg.Scout().run({"params": '{"discover": true}'})
+    mine = lambda rows: [c for c in rows if (c["url"] or "").startswith("https://bar.example/c/")]
+    shown = mine(campaigns.summary())
+    assert [c["score"] for c in shown] == [8.5] and len(mine(campaigns.all_campaigns())) == 2
+    assert asked == [shown[0]["id"]]
+    assert shown[0]["score_reasons"][0].startswith("Payout")
+    monkeypatch.setenv("SCOUT_MIN_SCORE", "7")   # lowering the bar in Settings reveals the other one
+    assert len(mine(campaigns.summary())) == 2
+
+
+def test_campaigns_steven_pasted_always_show(monkeypatch):
+    monkeypatch.setattr(llm, "HAS_LLM", True)
+    monkeypatch.setattr(llm, "ask_json", lambda *a, **k: dict(DATA, score=3))
+    monkeypatch.setattr(relay, "ask", lambda *a, **k: None)
+    before = len(campaigns.summary())
+    scout_pkg.Scout().run({"params": json.dumps({"text": "rules"})})
+    assert len(campaigns.summary()) == before + 1

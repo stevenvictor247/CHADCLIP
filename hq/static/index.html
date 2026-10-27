@@ -614,6 +614,7 @@ function renderCampaigns(list) {
     return `<div class="camp"><h3>${esc(c.name)} <span class="tag">${esc(c.status)}</span>${c.source && c.source !== "manual" ? `<span class="tag">found: ${esc(c.source)}</span>` : ""}${c.score != null ? `<span class="tag">${c.score}/10</span>` : ""}</h3>
       <div class="meta">${esc(pay)} · ${esc((c.platforms || []).join(", ") || "any platform")}</div>
       <div class="meta">${esc(c.verdict || "")}</div>
+      ${(c.score_reasons || []).length ? `<ul class="meta">${c.score_reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
       ${(c.flags || []).length ? `<div class="warn">⚠ ${esc(c.flags.join("; "))}</div>` : ""}${earned}${buttons}</div>`;
   }).join("");
 }
