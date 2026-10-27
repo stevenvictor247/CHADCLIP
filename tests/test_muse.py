@@ -301,7 +301,7 @@ def test_village_and_tab_are_wired():
     assert html.index('src="/muse-panel.js"') < html.index('src="/hq-tabs.js"') and 'id="muse"' in html
     assert 'Muse: {color:' in html and "beret:" in html
     assert 'label: "Writers\' Room"' in world and 'style: "writers"' in world and 'key === "muse" ? S.ideas' in world and "ideasCard()" in world
-    assert '{id: "ideas", icon: "💡", label: "Ideas", has: ["muse"]}' in tabs
+    assert '{id: "ideas", icon: "💡", label: "Ideas", appr: "ideas", has: ["muse"]}' in tabs
 
 
 def test_the_boss_sends_muse_weekly_through_the_half_price_queue(monkeypatch, tmp_path):
