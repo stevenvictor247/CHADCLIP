@@ -265,3 +265,13 @@ only go up; the pay you typed in is never changed), works out what the campaigns
 and writes a short note of the clips that did best, which Chad reads when he picks moments. It never calls Claude, so
 it costs nothing. YouTube is counted through the same sign-in you make under **Connect YouTube** in ⚙️ Settings.
 TikTok inbox uploads have no video id until you post them in the app, so TikTok views come later.
+
+## Podcast clip packs
+
+Packs turns one podcast episode into a $49 pack: 5 captioned vertical clips (Chad's editor) plus Recap's three titles,
+description, chapters and 5 post ideas. Ask the Boss for a pack, or queue a Packs task with
+`{"client": "podcast name", "owner": "emailed me ep 12 and said yes to clips, 26 Oct", "file": "path/to/episode.mp4"}`.
+Packs refuses without that permission note, a video of 10+ minutes and Whisper, checks all of that in code before any
+Claude spend, and never makes the same episode twice. The finished folder (`data/packs/`) waits in Approvals; approving
+it shows you the message to send, including a request for a testimonial. Packs never sends, posts or takes payment:
+create the $49 Stripe payment link yourself and send it with the files.
