@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from . import approvals, db, ledger, llm
+from . import approvals, build_progress, db, ledger, llm
 from .config import DAILY_BUDGET, DATA_DIR, PRICES, UNKNOWN_PRICE, VISION_PATH, model_for
 
 MUSE_DIR = DATA_DIR / "muse"
@@ -862,6 +862,7 @@ def start_build(idea_id: int) -> str:
     if not build_ready():
         return "Build it isn't connected to Claude yet: add HQ_BUILD_TOKEN and HQ_BUILD_URL in Settings, or copy the build brief."
     text = (f"Idea #{i['id']}: {i['title']}\nSteven pressed Build it in Agent HQ on {datetime.now():%A %d %B %Y %H:%M}."
+            f"\nPut \"Idea #{i['id']}\" in the title of your pull request: Agent HQ finds your PR by it to show Steven's progress bar."
             f"\n\nBUILD BRIEF (written by Muse)\n{brief(i)}")[:60000]
     try:
         out = _fire(text)
@@ -931,7 +932,7 @@ def latest() -> dict:
     state = _state()
     running = bool(db.rows("SELECT 1 FROM tasks WHERE agent = 'Muse' AND status IN ('queued', 'running') LIMIT 1"))
     return {
-        "ideas": ideas(),
+        "ideas": build_progress.add_to(ideas()),
         "last_round": state.get("last_round"),
         "next": _next_round_text(state),
         "running": running,
