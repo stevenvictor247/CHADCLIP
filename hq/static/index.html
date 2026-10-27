@@ -627,7 +627,7 @@ function apprGroup(a) {
   const v = a.village || "business";
   if (v === "football" || v === "etsy") return v;
   if (["pitch", "followup", "sample"].includes(a.kind)) return "pitch";
-  if (a.kind === "muse_idea") return "ideas";
+  if (a.kind === "muse_idea" || a.kind === "recruit_idea") return "ideas";
   if (["clip_pack", "recap", "rally"].includes(a.kind)) return "clips";
   return "other";
 }
