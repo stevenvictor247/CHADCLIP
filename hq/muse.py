@@ -115,6 +115,7 @@ KNOWN = [
     ("Thursday printing of the opponent folder", BUILT),
     ("Depth: Monday opponent personnel sheet with auto-fetch", BUILT),
     ("Muse: Creative Director that ranks new ideas", BUILT),
+    ("Recruiter: finds gaps in HQ and proposes new agents with a 1 to 10 rating | agent recruiter | hiring agent", BUILT),
     ("Etsy village: shirt designs on Etsy through Printify, with Etta, Radar, Quill, Loom, Warden and Dock | print on demand shirts | Etsy shop", BUILT),
     # the earlier agent ideas page
     ("Penny: views and stats for every clip | clip performance dashboard | clip stats dashboard", WAITING),
@@ -485,7 +486,8 @@ def round_cost_estimate(weekly: bool = False) -> float:
 
 
 def open_ideas() -> int:
-    return db.rows("SELECT COUNT(*) n FROM ideas WHERE status = 'proposed'")[0]["n"]
+    """Ideas waiting for Steven's answer. The Recruiter's proposals have their own cap, so they never hold Muse back."""
+    return db.rows("SELECT COUNT(*) n FROM ideas WHERE status = 'proposed' AND COALESCE(source, 'muse') != 'recruiter'")[0]["n"]
 
 
 def _days_since_round(state: dict | None = None) -> float | None:

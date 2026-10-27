@@ -246,7 +246,7 @@ let SKY = sky();
 function makeAgent(info) {
   const key = info.name.toLowerCase();
   const l = look(info.name);
-  let home = key === "boss" ? B.hq : key === "chad" ? B.studio : key === "muse" ? S.ideas : null;
+  let home = key === "boss" ? B.hq : key === "chad" ? B.studio : key === "muse" ? S.ideas : key === "recruiter" ? B.hq : null;
   if (!home) {
     const plot = PLOTS.find(p => !p.agent) || PLOTS[PLOTS.length - 1];
     plot.agent = plot.agent || info.name;
@@ -285,7 +285,8 @@ function feel(a, face, secs = 3) { a.face = face; a.faceUntil = performance.now(
 function wake(a) { if (a.sleeping) { a.sleeping = false; a.x = a.home.front.x; a.y = a.home.front.y - 6; } }
 // Where each agent goes when they have a job. Anyone not listed works at their own cottage.
 const WORK = {boss: () => ({x: B.hq.front.x - 26, y: B.hq.front.y}), chad: () => B.studio.front, sweep: () => S.bank.front,
-              pitch: () => S.pitch.front, scout: () => S.scout.front, tally: () => ({x: S.scout.front.x - 36, y: S.scout.front.y})};
+              pitch: () => S.pitch.front, scout: () => S.scout.front, tally: () => ({x: S.scout.front.x - 36, y: S.scout.front.y}),
+              recruiter: () => ({x: NOTICE.front.x + 30, y: NOTICE.front.y})};   // reads the town notice board for gaps to fill
 const workSpot = a => WORK[a.key]?.() || a.home.front;
 
 const CHATTER = ["Nice day for a shoot ☀️", "☕ coffee break", "Anything trending?", "🎵 la la la", "Stretching 🙆", "Vibes are good ✨", "Who moved my director's chair?", "Quiet on set! 🤫", "That's a wrap! 🎬"];
@@ -339,6 +340,13 @@ function think(a, now) {
       burst(l.x, l.y - 6, 5, "spark", ["#fff8c4", "#9bd1ff"], {min: 15, max: 40, g: 20, life: .8});
       const i = LITTER.indexOf(l); if (i >= 0) LITTER.splice(i, 1);
       say(a, pick(SWEEP_SAY), 3);
+    }});
+    return;
+  }
+  if (a.key === "recruiter" && Math.random() < .3) {   // the hiring manager pins a "Now hiring" note on the notice board
+    a.actions.push({at: {x: NOTICE.front.x + rnd(-40, 40), y: NOTICE.front.y + rnd(-2, 4)}, wait: rnd(3, 6), do: () => {
+      a.facing = -1; say(a, pick(["Now hiring! 🧲", "Who's missing? 🤔", "Found a gap 🔍", "We need a new hire 📋"]), 3);
+      addParticle({x: a.x, y: a.y - 40, vy: -18, life: 1.6, kind: "emoji", text: "🧲", size: 14});
     }});
     return;
   }
