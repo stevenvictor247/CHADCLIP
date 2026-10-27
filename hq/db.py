@@ -405,6 +405,8 @@ def init():
                 c.execute(f"ALTER TABLE posts ADD COLUMN {col} {kind}")
         if "source" not in {r["name"] for r in c.execute("PRAGMA table_info(campaigns)")}:
             c.execute("ALTER TABLE campaigns ADD COLUMN source TEXT")  # inbox, feed or manual
+        if "score_reasons" not in {r["name"] for r in c.execute("PRAGMA table_info(campaigns)")}:
+            c.execute("ALTER TABLE campaigns ADD COLUMN score_reasons TEXT")  # JSON list: why it got its score
         have = {r["name"] for r in c.execute("PRAGMA table_info(leads)")}
         for col, kind in (("score", "INTEGER"), ("score_why", "TEXT")):   # Pitch's 1 to 10 lead score
             if col not in have:

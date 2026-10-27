@@ -138,7 +138,7 @@ your Anthropic organization (Console, Settings, Privacy).
 
 Every 6 hours Scout reads its **inbox** (the box on the dashboard's Campaigns section: paste links or page text) and any
 public feeds you list in `SCOUT_FEED_URLS` (Settings page), rates what is new with the cheap model, and puts the good ones
-(`SCOUT_MIN_SCORE`, default 6) on the dashboard and your phone for a Join decision. It never joins or signs up for you,
+(score out of 10 with the reasons shown; `SCOUT_MIN_SCORE`, default 8, on the Settings page) on the dashboard and your phone for a Join decision. It never joins or signs up for you,
 skips campaigns that are more than 80% spent, and stops when `HQ_DAILY_BUDGET` is reached.
 
 What it will not do: Whop's terms forbid automated access, and Discord forbids it for personal accounts, so Scout never
