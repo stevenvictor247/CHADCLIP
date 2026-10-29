@@ -47,7 +47,12 @@ def hq_url():
 def browser():
     with sync_api.sync_playwright() as p:
         exe = os.environ.get("HQ_UI_CHROMIUM") or None   # point at an already-installed Chromium instead of Playwright's own
-        b = p.chromium.launch(executable_path=exe, args=["--no-sandbox", "--use-gl=swiftshader", "--enable-unsafe-swiftshader"])
+        try:
+            b = p.chromium.launch(executable_path=exe, args=["--no-sandbox", "--use-gl=swiftshader", "--enable-unsafe-swiftshader"])
+        except sync_api.Error as e:
+            if "Executable doesn't exist" in str(e):
+                pytest.skip("No Chromium installed for Playwright (run: python -m playwright install chromium)")
+            raise
         yield b
         b.close()
 
