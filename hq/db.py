@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS leads (
     contact TEXT,
     notes TEXT,
     pitch TEXT,
-    status TEXT NOT NULL DEFAULT 'new',          -- new, drafted, sending, pitched, replied, client, dead, dropped, do_not_contact
+    status TEXT NOT NULL DEFAULT 'new',          -- new, drafted, sending, pitched, replied, client, won, dead, dropped, do_not_contact
     followups INTEGER NOT NULL DEFAULT 0,
     followup_at TEXT,
     created_at TEXT NOT NULL,
@@ -173,6 +173,17 @@ CREATE TABLE IF NOT EXISTS pitch_sent (
     email TEXT NOT NULL,
     subject TEXT,
     sent_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS quotes (
+    id INTEGER PRIMARY KEY,
+    lead_id INTEGER NOT NULL,
+    tier TEXT NOT NULL,                          -- starter, weekly, monthly
+    price_usd REAL NOT NULL,
+    link TEXT NOT NULL,                          -- the Stripe payment link, entered by hand in config/closer.yaml
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending (waiting for your OK), sending, sent, dropped
+    created_at TEXT NOT NULL,
+    sent_at TEXT
 );
 CREATE TABLE IF NOT EXISTS followup_sent (
     lead_id INTEGER NOT NULL,

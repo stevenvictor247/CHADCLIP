@@ -275,3 +275,11 @@ Packs refuses without that permission note, a video of 10+ minutes and Whisper, 
 Claude spend, and never makes the same episode twice. The finished folder (`data/packs/`) waits in Approvals; approving
 it shows you the message to send, including a request for a testimonial. Packs never sends, posts or takes payment:
 create the $49 Stripe payment link yourself and send it with the files.
+
+## Closer (turning replies into paying clients)
+
+When a streamer replies to a Pitch, mark the lead **replied** (Pitch's `mark`). Closer drafts a short quote from the
+three templates in `config/closer.yaml` (first-week trial, weekly, monthly) and puts it in Waiting for your OK. Make one
+Stripe payment link per tier and paste them into that file; Closer won't draft a tier with no link. Claude is only used
+to write a one or two line reply to what they said (and only if you pass their reply); the quote itself is a template.
+Once they pay, ask Closer `{"won": <lead id>}`; the money strip at the top shows **Won clients**.
