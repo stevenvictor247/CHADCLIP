@@ -26,6 +26,7 @@
     #hq-money-panel .mrow .amt { font-variant-numeric:tabular-nums; min-width:80px; font-weight:700; }
     #hq-money-panel .mrow .x { margin-left:auto; background:transparent; color:var(--muted); border:1px solid var(--line); padding:2px 8px; }
     #hq-money-panel .merr { color:var(--bad); }
+    #hq-money-panel .u-legend { color:var(--text); font-size:13px; } #hq-money-panel .u-legend .u-marker { border-radius:50%; }
     @media (max-width:960px) { #hq-money, #hq-money-panel { padding-left:14px; padding-right:14px; } #hq-money .mright { margin-left:0; } }`;
   document.head.insertAdjacentHTML("beforeend", `<style>${css}</style>`);
 
@@ -46,6 +47,7 @@
       <div class="mright">
         <button class="mbtn" data-panel="expense">➖ Add expense</button>
         <button class="mbtn" data-panel="income">➕ Add income</button>
+        <button class="mbtn" data-panel="chart">📈 Chart</button>
         <button class="mbtn" data-panel="history">🧾 History</button>
       </div>
     </div>
@@ -79,9 +81,43 @@
     bar.querySelector(".net").className = "mtile net " + (p.net > 0 ? "up" : p.net < 0 ? "down" : "");
   }
 
+  // uPlot (vendor/uPlot.iife.min.js) is only fetched the first time the chart is opened.
+  let plotLib = null, plot = null;
+  const loadPlot = () => plotLib || (plotLib = new Promise((ok, no) => {
+    document.head.insertAdjacentHTML("beforeend", '<link rel="stylesheet" href="/vendor/uPlot.min.css">');
+    const s = document.createElement("script");
+    s.src = "/vendor/uPlot.iife.min.js"; s.onload = () => ok(window.uPlot); s.onerror = () => { plotLib = null; no(); };
+    document.head.appendChild(s);
+  }));
+  async function drawChart() {
+    box.innerHTML = `<div class="muted" style="margin-bottom:6px">Last 30 days: what you spent (Claude costs plus logged expenses) and what you made (campaign earnings plus logged income).</div>
+      <div id="m-chart" style="min-height:220px"></div>`;
+    const host = document.getElementById("m-chart");
+    try {
+      const [uPlot, d] = await Promise.all([loadPlot(), fetch("/api/money/daily?days=30").then(r => r.json())]);
+      if (panel !== "chart") return;
+      const xs = d.days.map(x => Date.parse(x + "T12:00:00") / 1000);
+      const axis = {stroke: "#a99fc4", grid: {stroke: "rgba(255,255,255,.07)", width: 1}, ticks: {stroke: "rgba(255,255,255,.12)", width: 1}};
+      plot?.destroy();
+      plot = new uPlot({
+        width: Math.max(260, host.clientWidth), height: 220,
+        cursor: {drag: {x: false, y: false}},
+        scales: {x: {time: true}, y: {range: (u, lo, hi) => [0, Math.max(hi * 1.15, 1)]}},
+        axes: [axis, {...axis, size: 56, values: (u, v) => v.map(n => "$" + n.toLocaleString(undefined, {maximumFractionDigits: 2}))}],
+        series: [{},
+          {label: "Spent", stroke: "#fca5a5", width: 2, points: {show: false}, fill: "rgba(252,165,165,.12)", value: (u, v) => v == null ? "—" : usd(v)},
+          {label: "Made", stroke: "#4ade80", width: 2, points: {show: false}, fill: "rgba(74,222,128,.12)", value: (u, v) => v == null ? "—" : usd(v)}],
+      }, [xs, d.spent, d.made], host);
+    } catch (e) {
+      host.innerHTML = `<div class="merr">Couldn't draw the chart. Is HQ running?</div>`;
+    }
+  }
+  window.addEventListener("resize", () => { if (plot && panel === "chart") plot.setSize({width: Math.max(260, plot.root.parentElement.clientWidth), height: 220}); });
+
   function drawPanel(error) {
     if (!panel) { box.className = ""; box.innerHTML = ""; return; }
     box.className = "open";
+    if (panel === "chart") return drawChart();
     if (panel === "history") {
       const rows = (data?.entries || []).map(e => `<div class="mrow"><span>${esc(e.day)}</span>
         <span class="amt" style="color:${e.kind === "income" ? "var(--good)" : "#fca5a5"}">${e.kind === "income" ? "+" : "−"}${usd(e.amount_usd)}</span>
@@ -127,7 +163,7 @@
     if (!money) return;
     data = money;
     draw();
-    if (panel === "history") drawPanel();   // keep forms untouched while typing
+    if (panel === "history") drawPanel();   // keep forms untouched while typing (the chart too: it is redrawn only when opened)
   }
   window.HQMoney = {update};
   draw();
