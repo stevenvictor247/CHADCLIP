@@ -1,0 +1,27 @@
+# Closer turns a "yes, tell me more" reply to a Pitch email into a short quote with a payment link.
+# Closer only DRAFTS. Every quote waits in Approvals for your OK before anything is emailed.
+#
+# Make one Stripe payment link per tier (Stripe dashboard > Payment links), paste each below. Closer will not draft
+# a quote for a tier whose link is empty. Never put anything else secret in this file.
+
+default_tier: starter
+
+tiers:
+  starter:
+    label: "First-week trial"
+    price_usd: 25
+    period: "one week"
+    includes: "5 captioned vertical clips from your best moments, posted to TikTok, YouTube Shorts and Instagram Reels"
+    payment_link: ""            # https://buy.stripe.com/...
+  weekly:
+    label: "Weekly clips"
+    price_usd: 60
+    period: "per week"
+    includes: "10 captioned vertical clips a week, posted to TikTok, YouTube Shorts and Instagram Reels"
+    payment_link: ""
+  monthly:
+    label: "Monthly clips"
+    price_usd: 199
+    period: "per month"
+    includes: "40 captioned vertical clips a month, posted to TikTok, YouTube Shorts and Instagram Reels, one flat fee"
+    payment_link: ""

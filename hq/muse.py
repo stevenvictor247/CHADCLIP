@@ -92,6 +92,7 @@ KNOWN = [
     ("Chad: clips streamers into TikToks, Shorts and Reels", BUILT),
     ("Scout: finds and rates paid clipping campaigns, suggests streamers to clip", BUILT),
     ("Pitch: finds creators who would pay for clipping, drafts pitches, one-tap Gmail send and follow-ups", BUILT),
+    ("Closer: turns pitch replies into quotes with a Stripe payment link, you approve each one; Won clients count", BUILT),
     ("Relay: Telegram bot for Boss chat, alerts and approval buttons", BUILT),
     ("Ledger: Claude cost per agent, cheaper model per agent, daily budget", BUILT),
     ("Tally: view counts on posted clips, campaign pay estimate, what worked goes back to Chad", BUILT),

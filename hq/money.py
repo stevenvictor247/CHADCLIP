@@ -78,4 +78,5 @@ def summary() -> dict:
                          "claude": round(claude, 2), "expenses": round(expenses, 2),
                          "campaigns": round(campaigns, 2), "income": round(income, 2)}
     entries = db.rows("SELECT id, kind, amount_usd, note, day FROM money_entries ORDER BY day DESC, id DESC LIMIT 30")
-    return {"periods": periods, "entries": entries}
+    won = db.rows("SELECT COUNT(*) n FROM leads WHERE status = 'won'")[0]["n"]
+    return {"periods": periods, "entries": entries, "won_clients": won}

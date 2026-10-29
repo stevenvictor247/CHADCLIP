@@ -51,7 +51,7 @@ SCHEMA = {
 }
 
 MAX_PROFILE_CHECKS = 150  # most Twitch profiles one find run looks at
-STATUSES = ("new", "drafted", "pitched", "replied", "client", "dead", "dropped", "do_not_contact")
+STATUSES = ("new", "drafted", "pitched", "replied", "client", "won", "dead", "dropped", "do_not_contact")
 
 
 def settings() -> dict:
@@ -215,7 +215,7 @@ class Pitch(Agent):
             params_help='{"find": 5} to find and draft pitches for new Twitch streamers (needs config/pitch.yaml filled in); '
                         '{"lead": {"name": "...", "platform": "youtube", "handle": "...", "contact": "email or link", '
                         '"notes": "what you know about them"}} to draft a pitch for someone you found; {"followups": true}; '
-                        '{"mark": {"lead_id": 1, "status": "replied|client|dead|do_not_contact", "note": "..."}}; '
+                        '{"mark": {"lead_id": 1, "status": "replied|client|won|dead|do_not_contact", "note": "..."}}; '
                         '{"sample": 1} to cut a private sample clip for a drafted lead you marked as good (you approve it before its link goes in the pitch); {"do_not_contact": "email@example.com"}; {"recheck": true} to look for emails for pitches already waiting for your OK; {"report": true}.',
             schedule=self._schedule(),
         )
