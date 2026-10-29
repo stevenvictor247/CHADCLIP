@@ -9,6 +9,7 @@ from .muse import Muse
 from .pitch import Pitch
 from .packs import Packs
 from .rally import Rally
+from .queue import Queue
 from .recap import Recap
 from .recruiter import Recruiter
 from .scout import Scout
@@ -16,7 +17,7 @@ from .sweep import Sweep
 from .tally import Tally
 from .trim import Trim
 
-AGENTS = {a.name.lower(): a for a in [Chad(), Scout(), Pitch(), Closer(), Recap(), Packs(), Tally(), Gate(), Trim(), Sweep(), Muse(), Recruiter(), Captain(), Clock(), Ref(), Tells(), Scribe(), Depth(), Rally(),
+AGENTS = {a.name.lower(): a for a in [Chad(), Scout(), Pitch(), Queue(), Closer(), Recap(), Packs(), Tally(), Gate(), Trim(), Sweep(), Muse(), Recruiter(), Captain(), Clock(), Ref(), Tells(), Scribe(), Depth(), Rally(),
                                      Etta(), Radar(), Quill(), Loom(), Warden(), Dock()]}
 
 

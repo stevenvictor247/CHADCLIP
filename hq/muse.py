@@ -118,6 +118,7 @@ KNOWN = [
     ("Depth: Monday opponent personnel sheet with auto-fetch", BUILT),
     ("Muse: Creative Director that ranks new ideas", BUILT),
     ("Recruiter: finds gaps in HQ and proposes new agents with a 1 to 10 rating | agent recruiter | hiring agent", BUILT),
+    ("Queue: daily pitch quota and send list for Pitch, best fit first | agent queue | send list | pitch quota", BUILT),
     ("Etsy village: shirt designs on Etsy through Printify, with Etta, Radar, Quill, Loom, Warden and Dock | print on demand shirts | Etsy shop", BUILT),
     # the earlier agent ideas page
     ("Penny: views and stats for every clip | clip performance dashboard | clip stats dashboard", WAITING),

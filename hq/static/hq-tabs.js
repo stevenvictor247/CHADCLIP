@@ -9,7 +9,7 @@
      empty: "Nothing is waiting for your OK."},
     {id: "boss", icon: "👑", label: "Boss", has: ["chatlog"]},
     {id: "campaigns", icon: "🎯", label: "Campaigns", has: ["campsection"]},
-    {id: "pitch", icon: "✉️", label: "Pitch", appr: "pitch", has: ["creatorsection", "leadsection"],
+    {id: "pitch", icon: "✉️", label: "Pitch", appr: "pitch", has: ["queue", "creatorsection", "leadsection"],
      empty: "No leads or creators to clip yet. Pitch and Scout put them here when they find some."},
     {id: "clips", icon: "🎞️", label: "Clips", appr: "clips", has: ["allowedsection", "library"]},
     {id: "football", icon: "🏈", label: "Warrior Village", appr: "football", has: ["towns", "football"]},
@@ -100,7 +100,7 @@
     let last = null;
     for (const id of t.has) {
       const el = document.getElementById(id);
-      const sec = el && (el.matches("section, #towns, #football, #etsy, #sweep, #muse") ? el : el.closest("section"));
+      const sec = el && (el.matches("section, #towns, #football, #etsy, #queue, #sweep, #muse") ? el : el.closest("section"));
       if (sec) { sec.dataset.tab = sec.dataset.tab && sec.dataset.tab !== t.id ? sec.dataset.tab + " " + t.id : t.id; last = sec; }
     }
     if (t.empty && last) {
