@@ -159,6 +159,7 @@ def _on_request(text: str, unlock: str = "", link: str = ""):
 REASONS = {
     "chad": _chad, "scout": _scout, "pitch": _pitch, "tally": _tally, "muse": _muse, "rally": _rally,
     "etta": _etta, "radar": _radar, "quill": _quill, "loom": _loom, "warden": _warden, "dock": _dock,
+    "gate": _on_request("Scores waiting clips against your past approvals; holds none until it has 10 decided clips.", "", "/#pending"),
     "recap": _on_request("Works when you give it a long video or podcast transcript.", "Ask the Boss, or use the Recap box.", "/#boss"),
     "packs": _on_request("Works when a podcaster gives you an episode.", "Ask the Boss to make a clip pack.", "/#boss"),
     "captain": _on_request("Answers football questions and hands out football work when you ask.", "", "/#football"),

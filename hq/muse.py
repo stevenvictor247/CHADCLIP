@@ -95,6 +95,7 @@ KNOWN = [
     ("Relay: Telegram bot for Boss chat, alerts and approval buttons", BUILT),
     ("Ledger: Claude cost per agent, cheaper model per agent, daily budget", BUILT),
     ("Tally: view counts on posted clips, campaign pay estimate, what worked goes back to Chad", BUILT),
+    ("Gate: scores waiting clips from your past approvals, holds likely rejects, sorts the best to the top", BUILT),
     ("Sweep: janitor, cost watcher and quality control with a daily How to improve HQ report", BUILT),
     ("Money strip: spent, made and net at the top of HQ", BUILT),
     ("Profit page: money in minus money out", BUILT),
