@@ -40,6 +40,7 @@
       <div class="mtile spent" title=""><b id="m-spent">$0.00</b><span id="m-spent-l">Spent</span></div>
       <div class="mtile made" title=""><b id="m-made">$0.00</b><span id="m-made-l">Made</span></div>
       <div class="mtile net"><b id="m-net">$0.00</b><span id="m-net-l">Net</span></div>
+      <div class="mtile won" title="Streamers who replied to a pitch and paid (marked won by Closer)"><b id="m-won">0</b><span>Won clients</span></div>
       <div class="mperiod">${Object.entries({today: "Today", month: "Month", all: "All time"})
         .map(([k, v]) => `<button data-p="${k}">${v}</button>`).join("")}</div>
       <div class="mright">
@@ -64,6 +65,7 @@
   function draw() {
     bar.querySelectorAll(".mperiod button").forEach(b => b.classList.toggle("on", b.dataset.p === period));
     if (!data) return;
+    document.getElementById("m-won").textContent = data.won_clients || 0;
     const p = data.periods[period], when = LABELS[period];
     document.getElementById("m-spent").textContent = usd(p.spent);
     document.getElementById("m-made").textContent = usd(p.made);
