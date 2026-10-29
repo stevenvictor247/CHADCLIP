@@ -111,7 +111,7 @@ def handle_decision(payload: dict, decision: str) -> str:
                 if a["kind"] == "pitch" and a["payload"].get("lead_id") == lid:
                     c.execute("UPDATE approvals SET preview = ? WHERE id = ?",
                               (a["preview"].rstrip("\n") + f"\n\n[Sample link added: {url}]", a["id"]))
-    return f"Sample approved and the private link is in the pitch draft. Send the pitch when you're ready."
+    return "Sample approved and the private link is in the pitch draft. Send the pitch when you're ready."
 
 
 def mark_replied(lead_id: int) -> None:

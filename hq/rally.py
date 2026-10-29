@@ -5,7 +5,6 @@ after (every number must come from the facts, no school marks or game film). Ral
 Approvals, and approving it only hands Steven the text and card to post himself.
 """
 
-import json
 import re
 import textwrap
 from datetime import date, datetime, timedelta, timezone

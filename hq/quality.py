@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import db, ledger
-from .config import DAILY_BUDGET, DATA_DIR, FOOTBALL_DAILY_BUDGET
+from .config import DAILY_BUDGET, FOOTBALL_DAILY_BUDGET
 
 AREAS = {"organization": "Organization", "efficiency": "Efficiency", "quality": "Quality", "money": "Money"}
 WEIGHT = {"high": 12, "medium": 6, "low": 2}          # points off the 100-point health score

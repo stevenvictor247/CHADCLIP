@@ -1,4 +1,3 @@
-from unittest import mock
 
 from hq import db
 from hq.agents.chad import agent as chad_agent, twitch

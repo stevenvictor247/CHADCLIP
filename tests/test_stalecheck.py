@@ -1,6 +1,5 @@
 """Stale-check: old, duplicate, orphaned or bad-caption queued clips are held and put on one Approvals card."""
 
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
