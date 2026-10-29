@@ -187,6 +187,7 @@ def test_scout_scheduled_rounds_are_free_when_nothing_is_due(monkeypatch):
 def test_pitch_recheck_round_is_free_when_every_card_has_an_email(monkeypatch):
     from hq import agents, approvals
     pitch = agents.get("Pitch")
+    monkeypatch.setattr("hq.agents.pitch.agent.settings", lambda: {"paused": False})
     monkeypatch.setattr(approvals, "pending", lambda: [{"kind": "pitch", "payload": {"email": True}}])
     assert pitch.nothing_to_do("x", {"recheck": True}) is True
     monkeypatch.setattr(approvals, "pending", lambda: [{"kind": "pitch", "payload": {"email": False}}])

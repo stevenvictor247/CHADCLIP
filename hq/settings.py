@@ -109,6 +109,7 @@ def accounts() -> list[dict]:
 
 # The fields of config/pitch.yaml shown on the Settings page: (key, label, kind, help). kind: text, number, yesno.
 PITCH_FIELDS = [
+    ("paused", "Pause Pitch emails", "yesno", "On = Pitch finds, drafts and sends no emails (Approvals can't send either). Existing leads and drafts are kept."),
     ("sender_name", "Your name", "text", "How you sign each message, e.g. Steven. Pitch writes nothing until this is filled in."),
     ("about_me", "About you", "text", "One honest line, e.g. I run clipping accounts for Twitch streamers. Leave blank if unsure."),
     ("what_you_offer", "What you offer", "text", "One sentence about what the streamer gets."),
@@ -139,7 +140,7 @@ def pitch_describe() -> list[dict]:
     data = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
     out = []
     for key, label, kind, help_ in PITCH_FIELDS:
-        v = data.get(key)
+        v = data.get(key, True if key == "paused" else None)
         out.append({"key": key, "label": label, "kind": kind, "help": help_,
                     "value": ("true" if v else "false") if kind == "yesno" else ("" if v is None else str(v))})
     return out
