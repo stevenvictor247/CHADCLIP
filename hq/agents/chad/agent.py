@@ -275,10 +275,11 @@ class Chad(Agent):
                 caption += f"\n\nCredit: {creator['credit']}"
             clip_id = db.execute(
                 "INSERT INTO clips (task_id, creator, source_url, source_title, start_s, end_s, path, title, caption, "
-                "hashtags, score, reason, captioned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "hashtags, score, reason, captioned, created_at, virality, hook_line) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 task_id, creator.get("name"), url, title, m["start"], m["end"], str(out), m["title"], caption,
                 json.dumps(_with_required_tags(m["hashtags"], creator)), m.get("score"), m.get("reason"),
-                int(captioned), db.now(),
+                int(captioned), db.now(), m.get("virality"), m.get("hook_line") or None,
             )
             self.add_hooks(clip_id, m.get("hooks"), m["title"])
             if creator.get("campaign_id"):

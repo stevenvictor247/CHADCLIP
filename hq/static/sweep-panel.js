@@ -116,6 +116,17 @@
       ${(imp.broken_checks || []).length ? `<div class="swerr">Some checks couldn't run: ${imp.broken_checks.map(esc).join("; ")}</div>` : ""}`;
   }
 
+  function budgetsHtml(d) {
+    const b = d.budgets || {};
+    const rows = (b.agents || []).map(a => `<div class="swline ${a.state === "paused" ? "high" : a.state === "alert" ? "med" : ""}"><b>${esc(a.agent)}</b>
+      <span class="muted">${usd(a.spent)} of ${usd(a.cap)} today (${a.pct}%)${a.state === "paused" ? " · paused until tomorrow" : a.state === "alert" ? " · over 80%" : ""}</span></div>`).join("");
+    const rec = (b.receipts || []).slice(0, 8).map(r => `<div class="swline"><span title="${esc(r.summary || "")}">${r.status === "done" ? "✓" : "✗"} #${r.task_id} ${esc(r.agent)}
+      · ${usd(r.cost_usd)} · ${esc(r.stop_reason)}</span></div>`).join("");
+    return `<section><h2>💸 Agent budgets and run receipts <span class="muted">set in Settings under General</span></h2>
+      <div class="swgrid"><div><h3>Daily limits</h3>${rows || `<div class="swline muted">No per-agent limits set. Add some like Chad=2, Scout=0.5 in Settings.</div>`}</div>
+      <div><h3>Latest runs</h3>${rec || `<div class="swline muted">No finished runs yet.</div>`}</div></div></section>`;
+  }
+
   function render(d) {
     const key = JSON.stringify(d) + busy + err;
     if (key === shown) return;
@@ -155,7 +166,7 @@
               `<div class="swtrash"><span title="${esc(t.why)}">${esc(t.name)} · ${size(t.bytes)}</span><button class="ghost" data-restore="${t.id}">Put back</button></div>`).join("") : ""}
           </div>
         </div>
-      </section>`;
+      </section>` + budgetsHtml(d);
     }
     root.querySelectorAll("details[data-area]").forEach(el => el.addEventListener("toggle", () => {
       el.open ? openAreas.add(el.dataset.area) : openAreas.delete(el.dataset.area);

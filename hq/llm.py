@@ -4,7 +4,7 @@ import json
 
 import anthropic
 
-from . import ledger
+from . import budgets, ledger
 from .config import HAS_LLM
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -39,6 +39,7 @@ def create(model: str, system: str, messages: list, tools: list | None = None,
     `cache=True` lets the API reuse the unchanged start of the prompt (tools, system and earlier turns) at a tenth
     of the price. Only worth it when the same start is sent again soon, as in the Boss's chat: a one-off call would
     pay 25% extra to write a cache nobody reads."""
+    budgets.check(agent)   # an agent over its own daily budget is stopped before the call, not after
     kwargs = dict(
         model=model,
         max_tokens=max_tokens,

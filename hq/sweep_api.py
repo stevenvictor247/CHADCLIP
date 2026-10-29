@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from . import db, quality, sweep
+from . import budgets, db, quality, sweep
 
 router = APIRouter()
 STATIC = Path(__file__).parent / "static"
@@ -23,7 +23,7 @@ def sweep_panel_js():
 
 @router.get("/api/sweep")
 def sweep_state():
-    return sweep.latest()
+    return {**sweep.latest(), "budgets": budgets.snapshot()}
 
 
 @router.post("/api/sweep/run")

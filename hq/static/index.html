@@ -533,10 +533,11 @@ function clipCard(c, i) {
   return `
       <div class="clip" data-id="${c.id}"${(c.flags || []).length ? ' data-flagged="1"' : ""} style="animation-delay:${i * 60}ms">
         <video src="/clips/${esc(fileName(c.path))}" controls preload="metadata"></video>
-        <div class="muted">#${c.id} · ${esc(c.creator)} · <span class="score">★ ${c.score ?? "?"}</span>${c.gate_score != null ? ` · <span title="${esc(c.gate_why || "")}">Gate ${c.gate_score}</span>` : ""}</div>
+        <div class="muted">#${c.id} · ${esc(c.creator)} · <span class="score">★ ${c.score ?? "?"}</span>${c.virality != null ? ` · <span class="score" title="Chad's 0-100 guess at how well this holds viewers and gets shared">🔥 ${Math.round(c.virality)}/100</span>` : ""}${c.gate_score != null ? ` · <span title="${esc(c.gate_why || "")}">Gate ${c.gate_score}</span>` : ""}</div>
         <input class="title" value="${esc(c.title)}">
         ${hookPicker(c)}
         <textarea class="caption">${esc(c.caption)}</textarea>
+        ${c.hook_line ? `<div class="muted">🪝 Hook: ${esc(c.hook_line)}</div>` : ""}
         <div class="muted">${esc(c.reason)}</div>
         ${(c.flags || []).length ? `<div class="bossnote">⚠️ ${c.flags.map(esc).join("; ")}</div>` : ""}
         ${c.boss_note ? `<div class="bossnote">🧐 Boss: ${esc(c.boss_note)}</div>` : ""}

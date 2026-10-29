@@ -50,7 +50,7 @@ def _sections() -> list[dict]:
 # (id, icon, title, blurb, exact keys, key prefixes). A key matching no group lands in General.
 GROUPS = [
     ("general", "⚙️", "General and budget", "Your Claude key, the daily spending limit, Pause All, password and backups.",
-     ("ANTHROPIC_API_KEY", "HQ_DAILY_BUDGET", "HQ_PAUSED", "HQ_PASSWORD", "HQ_BACKUP_COPY_DIR", "HQ_MODEL_REPORT"), ()),
+     ("ANTHROPIC_API_KEY", "HQ_DAILY_BUDGET", "HQ_AGENT_BUDGETS", "HQ_PAUSED", "HQ_PASSWORD", "HQ_BACKUP_COPY_DIR", "HQ_MODEL_REPORT"), ()),
     ("boss", "🎩", "Boss", "The Boss's brain, daily report, phone chat (Telegram) and the Build it button.",
      ("HQ_MODEL_BOSS", "HQ_BOSS_MODEL", "HQ_REPORT_HOUR", "HQ_BUILD_TOKEN", "HQ_BUILD_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_ID"), ()),
     ("chad", "🎬", "Chad (clips and posting)", "How many posts a day, approval, practice mode, and your TikTok, Instagram, YouTube and Twitch accounts.",
@@ -75,6 +75,7 @@ LABELS = {
     "HQ_MAX_CLIPS_PER_DAY": "New clips per day (Chad, 4 or more)",
     "HQ_POST_GAP_MINUTES": "Minutes between posts",
     "HQ_DAILY_BUDGET": "Daily Claude spending limit ($)",
+    "HQ_AGENT_BUDGETS": "Daily limit for each agent ($), like Chad=2, Scout=0.5",
     "HQ_REQUIRE_APPROVAL": "Wait for my approval before posting",
     "HQ_PAUSED": "Pause All",
     "HQ_REPORT_HOUR": "Daily report hour",

@@ -220,6 +220,17 @@ CREATE TABLE IF NOT EXISTS llm_usage (
     cost_usd REAL NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS run_receipts (
+    id INTEGER PRIMARY KEY,
+    task_id INTEGER,
+    agent TEXT NOT NULL,
+    status TEXT NOT NULL,                        -- done or failed
+    stop_reason TEXT NOT NULL,                   -- finished, error or budget
+    cost_usd REAL NOT NULL DEFAULT 0,            -- the agent's Claude spending while the task ran
+    summary TEXT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS money_entries (
     id INTEGER PRIMARY KEY,
     kind TEXT NOT NULL,                          -- expense or income
@@ -409,7 +420,8 @@ def init():
                           ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT"),
                           ("approved_at", "TEXT"), ("stale_state", "TEXT"),   # queue age; stale_state: flagged or kept
                           ("trim_score", "REAL"), ("decided_at", "TEXT"), ("gate_score", "REAL"), ("gate_why", "TEXT"),
-                          ("gate_held", "INTEGER")):   # Gate: when Steven decided, its 0-100 call, and whether it held the clip
+                          ("gate_held", "INTEGER"),
+                          ("virality", "REAL"), ("hook_line", "TEXT")):   # Chad's 0-100 virality call and the line that grabs   # Gate: when Steven decided, its 0-100 call, and whether it held the clip
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
         have = {r["name"] for r in c.execute("PRAGMA table_info(posts)")}
