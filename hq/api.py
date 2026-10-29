@@ -234,6 +234,24 @@ def football_town():
     return FileResponse(STATIC / "football-town.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
 
+VENDOR = STATIC / "vendor"
+VENDOR_FILES = {"lucide.min.js", "motion.min.js", "uPlot.iife.min.js", "uPlot.min.css", "pixi.min.js"}
+
+
+@app.get("/vendor/{name}")
+def vendor(name: str):
+    """Third-party browser libraries shipped with HQ (Lucide, Motion, uPlot, PixiJS), so nothing loads from the internet."""
+    if name not in VENDOR_FILES:
+        raise HTTPException(404, "No such file")
+    return FileResponse(VENDOR / name, media_type="text/css" if name.endswith(".css") else "text/javascript",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/hq-polish.js")
+def hq_polish():
+    return FileResponse(STATIC / "hq-polish.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/football-panel.js")
 def football_panel():
     return FileResponse(STATIC / "football-panel.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
@@ -354,6 +372,11 @@ def add_money(body: MoneyIn, request: Request):
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"id": entry_id, "money": money.summary()}
+
+
+@app.get("/api/money/daily")
+def money_daily(days: int = 30):
+    return money.daily(days)
 
 
 @app.delete("/api/money/{entry_id}")

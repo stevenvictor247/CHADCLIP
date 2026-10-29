@@ -53,7 +53,7 @@ def test_town_kit_is_served(monkeypatch, tmp_path):
 def test_each_approval_type_has_a_dropdown_option():
     js = (STATIC / "hq-tabs.js").read_text(encoding="utf-8")
     html = (STATIC / "index.html").read_text(encoding="utf-8")
-    groups = set(re.findall(r'\{id: "(\w+)", icon: "[^"]+", label: "[^"]+"\},', js.split("const GROUPS")[1].split("];")[0]))
+    groups = set(re.findall(r'\{id: "(\w+)", icon: "[^"]+", lu: "[^"]+", label: "[^"]+"\},', js.split("const GROUPS")[1].split("];")[0]))
     assert {"all", "clips", "pitch", "etsy", "football", "ideas", "other"} <= groups
     tab_groups = set(re.findall(r'appr: "(\w+)"', js))
     assert {"clips", "pitch", "etsy", "football", "ideas"} <= tab_groups and tab_groups <= groups

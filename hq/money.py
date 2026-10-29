@@ -5,7 +5,7 @@ Made = campaign earnings recorded on submissions + income Steven logs (Whop, Ets
 HQ can't see bank accounts, so income is only what is logged here or recorded on a campaign.
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from . import db
 
@@ -80,3 +80,24 @@ def summary() -> dict:
     entries = db.rows("SELECT id, kind, amount_usd, note, day FROM money_entries ORDER BY day DESC, id DESC LIMIT 30")
     won = db.rows("SELECT COUNT(*) n FROM leads WHERE status = 'won'")[0]["n"]
     return {"periods": periods, "entries": entries, "won_clients": won}
+
+
+def daily(days: int = 30) -> dict:
+    """Spent and made for each of the last `days` local days (oldest first), for the money chart."""
+    days = max(1, min(int(days), 365))
+    today = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    labels = [(today - timedelta(days=days - 1 - i)) for i in range(days)]
+    spent = {d.date().isoformat(): 0.0 for d in labels}
+    made = dict(spent)
+    local = lambda ts: datetime.fromisoformat(ts).astimezone().date().isoformat()
+    for r in db.rows("SELECT created_at, cost_usd FROM llm_usage WHERE created_at >= ?", _utc(labels[0])):
+        if (d := local(r["created_at"])) in spent:
+            spent[d] += r["cost_usd"] or 0
+    for r in db.rows("SELECT updated_at, earned_usd FROM submissions WHERE status != 'unpaid' AND updated_at >= ?", _utc(labels[0])):
+        if (d := local(r["updated_at"])) in made:
+            made[d] += r["earned_usd"] or 0
+    for r in db.rows("SELECT kind, amount_usd, day FROM money_entries WHERE day >= ?", labels[0].date().isoformat()):
+        book = spent if r["kind"] == "expense" else made
+        if r["day"] in book:
+            book[r["day"]] += r["amount_usd"]
+    return {"days": list(spent), "spent": [round(v, 2) for v in spent.values()], "made": [round(v, 2) for v in made.values()]}

@@ -41,8 +41,26 @@ jobs:
       - name: Test
         run: python -m pytest -q
 
+  # Opens the real dashboard in Chromium (Playwright) and clicks through it.
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install ffmpeg
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+      - name: Install
+        run: |
+          python -m pip install -r requirements.txt playwright
+          python -m playwright install --with-deps chromium
+      - name: UI tests
+        run: python -m pytest tests/ui -q
+
   mark-tested:
-    needs: tests
+    needs: [tests, ui]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

@@ -4,32 +4,36 @@
   // Each tab lists the ids of things inside the sections it shows. A section is found from any element inside it.
   // A section can be on more than one tab (the villages show on Home and, just Warrior Village, on its own tab).
   const TABS = [
-    {id: "home", icon: "🏠", label: "Home", has: ["towns", "setup", "agents"]},
-    {id: "approvals", icon: "✅", label: "Approvals", has: ["apprsection", "pending"],
+    {id: "home", icon: "🏠", lu: "house", label: "Home", has: ["towns", "setup", "agents"]},
+    {id: "approvals", icon: "✅", lu: "circle-check-big", label: "Approvals", has: ["apprsection", "pending"],
      empty: "Nothing is waiting for your OK."},
-    {id: "boss", icon: "👑", label: "Boss", has: ["chatlog"]},
-    {id: "campaigns", icon: "🎯", label: "Campaigns", has: ["campsection"]},
-    {id: "pitch", icon: "✉️", label: "Pitch", appr: "pitch", has: ["creatorsection", "leadsection"],
+    {id: "boss", icon: "👑", lu: "crown", label: "Boss", has: ["chatlog"]},
+    {id: "campaigns", icon: "🎯", lu: "target", label: "Campaigns", has: ["campsection"]},
+    {id: "pitch", icon: "✉️", lu: "mail", label: "Pitch", appr: "pitch", has: ["creatorsection", "leadsection"],
      empty: "No leads or creators to clip yet. Pitch and Scout put them here when they find some."},
-    {id: "clips", icon: "🎞️", label: "Clips", appr: "clips", has: ["allowedsection", "library"]},
-    {id: "football", icon: "🏈", label: "Warrior Village", appr: "football", has: ["towns", "football"]},
-    {id: "etsy", icon: "🛍️", label: "Etsy Village", appr: "etsy", has: ["towns", "etsy"]},
-    {id: "sweep", icon: "🧹", label: "Sweep", appr: "other", has: ["sweep"]},
-    {id: "ideas", icon: "💡", label: "Ideas", appr: "ideas", has: ["muse"]},
-    {id: "activity", icon: "📜", label: "Activity", has: ["activity"]},
+    {id: "clips", icon: "🎞️", lu: "clapperboard", label: "Clips", appr: "clips", has: ["allowedsection", "library"]},
+    {id: "football", icon: "🏈", lu: "trophy", label: "Warrior Village", appr: "football", has: ["towns", "football"]},
+    {id: "etsy", icon: "🛍️", lu: "shopping-bag", label: "Etsy Village", appr: "etsy", has: ["towns", "etsy"]},
+    {id: "sweep", icon: "🧹", lu: "brush", label: "Sweep", appr: "other", has: ["sweep"]},
+    {id: "ideas", icon: "💡", lu: "lightbulb", label: "Ideas", appr: "ideas", has: ["muse"]},
+    {id: "activity", icon: "📜", lu: "scroll-text", label: "Activity", has: ["activity"]},
   ];
   // Approvals are split by type. Each tab with an `appr` group gets an "Approvals" drop-down option showing only that type;
   // the Approvals tab shows them all, with a chip row to narrow it. index.html's renderApprovals does the sorting (window.hqApprCounts).
   const GROUPS = [
-    {id: "all", icon: "✅", label: "All approvals"},
-    {id: "clips", icon: "🎞️", label: "Clips"},
-    {id: "pitch", icon: "✉️", label: "Emails"},
-    {id: "etsy", icon: "🛍️", label: "Etsy"},
-    {id: "football", icon: "🏈", label: "Football"},
-    {id: "ideas", icon: "💡", label: "Ideas"},
-    {id: "other", icon: "🧹", label: "Other"},
+    {id: "all", icon: "✅", lu: "circle-check-big", label: "All approvals"},
+    {id: "clips", icon: "🎞️", lu: "clapperboard", label: "Clips"},
+    {id: "pitch", icon: "✉️", lu: "mail", label: "Emails"},
+    {id: "etsy", icon: "🛍️", lu: "shopping-bag", label: "Etsy"},
+    {id: "football", icon: "🏈", lu: "trophy", label: "Football"},
+    {id: "ideas", icon: "💡", lu: "lightbulb", label: "Ideas"},
+    {id: "other", icon: "🧹", lu: "brush", label: "Other"},
   ];
+  // Icons are Lucide line icons (vendor/lucide.min.js); if that file didn't load, the emoji shows instead.
+  const ic = x => window.lucide ? `<i data-lucide="${x.lu}" aria-hidden="true"></i>` : x.icon;
   const css = `
+    #hq-tabs svg.lucide, .ddmenu svg.lucide, #apprgroups svg.lucide { width:16px; height:16px; stroke-width:2.2; flex:none; vertical-align:-3px; }
+    .empty .big svg.lucide { width:34px; height:34px; stroke-width:1.8; }
     #hq-tabs { position:sticky; top:0; z-index:6; display:flex; gap:6px; align-items:center; padding:8px 22px; overflow-x:auto;
                scrollbar-width:none; background:rgba(18,15,26,.88); border-bottom:1px solid var(--line); backdrop-filter:blur(10px); }
     #hq-tabs::-webkit-scrollbar { display:none; }
@@ -85,14 +89,14 @@
   nav.setAttribute("aria-label", "HQ sections");
   const key = i => i < 9 ? i + 1 : i === 9 ? 0 : null;   // number keys 1-9, then 0 for the tenth tab
   const tabBtn = (t, i) => `<button role="tab" data-go="${t.id}" title="${t.label}${key(i) === null ? "" : ` (press ${key(i)})`}">` +
-    `<span>${t.icon}</span><span>${t.label}</span><span class="badge" id="tab-badge-${t.id}"></span></button>`;
+    `<span>${ic(t)}</span><span>${t.label}</span><span class="badge" id="tab-badge-${t.id}"></span></button>`;
   const menuItems = t => t.id === "approvals"
-    ? GROUPS.map(g => `<button role="menuitem" data-go="approvals" data-group="${g.id}"><span>${g.icon}</span><span>${g.label}</span><span class="badge" data-gcount="${g.id}"></span></button>`).join("")
-    : `<button role="menuitem" data-go="${t.id}"><span>${t.icon}</span><span>${t.label}</span></button>` +
-      `<button role="menuitem" data-go="${t.id}" data-sub="approvals"><span>✅</span><span>Approvals</span><span class="badge" data-gcount="${t.appr}"></span></button>`;
+    ? GROUPS.map(g => `<button role="menuitem" data-go="approvals" data-group="${g.id}"><span>${ic(g)}</span><span>${g.label}</span><span class="badge" data-gcount="${g.id}"></span></button>`).join("")
+    : `<button role="menuitem" data-go="${t.id}"><span>${ic(t)}</span><span>${t.label}</span></button>` +
+      `<button role="menuitem" data-go="${t.id}" data-sub="approvals"><span>${ic(GROUPS[0])}</span><span>Approvals</span><span class="badge" data-gcount="${t.appr}"></span></button>`;
   nav.innerHTML = TABS.map((t, i) => t.appr || t.id === "approvals"
       ? `<div class="dd">${tabBtn(t, i)}<div class="ddmenu" role="menu">${menuItems(t)}</div></div>` : tabBtn(t, i)).join("") +
-    `<a href="/settings" title="API keys, accounts and options">⚙️ Settings</a>`;
+    `<a href="/settings" title="API keys, accounts and options">${window.lucide ? '<i data-lucide="settings" aria-hidden="true"></i>' : "⚙️"} Settings</a>`;
   document.body.insertAdjacentElement("afterbegin", nav);   // first thing on the page, so it stays pinned while the rest scrolls
 
   // Tag every section with its tab. A tab whose sections are all hidden (nothing to show yet) gets a friendly note instead.
@@ -105,7 +109,7 @@
     }
     if (t.empty && last) {
       last.insertAdjacentHTML("afterend", `<section data-tab="${t.id}" class="tab-empty" id="tab-empty-${t.id}">` +
-        `<div class="empty"><span class="big">${t.icon}</span>${t.empty}</div></section>`);
+        `<div class="empty"><span class="big">${ic(t)}</span>${t.empty}</div></section>`);
     }
   }
   // The approval cards (everything waiting + clips waiting) also live under every tab that has an Approvals option.
@@ -116,7 +120,7 @@
   }
   const apprSec = document.getElementById("apprsection");
   if (apprSec) apprSec.insertAdjacentHTML("afterbegin", `<div id="apprtitle"></div><div id="apprgroups">` +
-    GROUPS.map(g => `<button data-group="${g.id}"><span>${g.icon}</span> ${g.label.replace("All approvals", "All")}<span class="badge" data-gcount="${g.id}"></span></button>`).join("") + `</div>`);
+    GROUPS.map(g => `<button data-group="${g.id}"><span>${ic(g)}</span> ${g.label.replace("All approvals", "All")}<span class="badge" data-gcount="${g.id}"></span></button>`).join("") + `</div>`);
   document.body.classList.add("tabbed");
 
   const shown = el => el && el.style.display !== "none";
@@ -239,5 +243,6 @@
   let fromHash = valid(start), sub = startSub.sub;
   if (!fromHash) { try { const p = parse(localStorage.getItem("hq-tab") || ""); start = p.id; sub = p.sub; } catch (e) { start = null; } }
   show(start || "home", fromHash, sub);
+  if (window.lucide) lucide.createIcons();   // swaps every <i data-lucide> placed above for its SVG
   setInterval(refresh, 1000);
 })();
