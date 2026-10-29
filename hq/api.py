@@ -105,8 +105,11 @@ class ClipEdit(BaseModel):
 
 def _pending_clips() -> list[dict]:
     """Waiting clips, each with `flags`: the problems written on its card."""
-    from . import review
-    clips = db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY score DESC, id")
+    from . import gate, review
+    try:
+        clips = gate.score_pending()   # best first by Gate's score
+    except Exception:   # the dashboard never breaks over a score
+        clips = db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY score DESC, id")
     try:
         found = review.pending_issues(clips, review._chad_settings())
     except Exception:   # the dashboard never breaks over a flag check
@@ -126,6 +129,14 @@ def _library() -> list[dict]:
 def _ideas_summary() -> dict:
     from . import muse
     return muse.summary()
+
+
+def _gate_summary() -> dict:
+    from . import gate
+    try:
+        return gate.summary()
+    except Exception:
+        return {}
 
 
 def _tally_summary() -> dict:
@@ -271,6 +282,7 @@ def state():
         "football": football.state(),
         "etsy": etsy.state(),
         "tally": _tally_summary(),
+        "gate": _gate_summary(),
         "ideas": _ideas_summary(),
         "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at, score, score_why "
                          "FROM leads WHERE score IS NULL OR score >= 4 ORDER BY score IS NULL, score DESC, id DESC LIMIT 50"),

@@ -407,8 +407,9 @@ def init():
         have = {r["name"] for r in c.execute("PRAGMA table_info(clips)")}
         for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER"),
                           ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT"),
-                          ("approved_at", "TEXT"), ("stale_state", "TEXT"),
-                          ("trim_score", "REAL")):   # queue age; stale_state: flagged or kept
+                          ("approved_at", "TEXT"), ("stale_state", "TEXT"),   # queue age; stale_state: flagged or kept
+                          ("trim_score", "REAL"), ("decided_at", "TEXT"), ("gate_score", "REAL"), ("gate_why", "TEXT"),
+                          ("gate_held", "INTEGER")):   # Gate: when Steven decided, its 0-100 call, and whether it held the clip
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
         have = {r["name"] for r in c.execute("PRAGMA table_info(posts)")}
@@ -462,5 +463,6 @@ def update_task(task_id: int, status: str, result: str | None = None):
 
 
 def set_clip_status(clip_id: int, status: str):
-    execute("UPDATE clips SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN ? ELSE approved_at END WHERE id = ?",
-            status, status, now(), clip_id)
+    execute("UPDATE clips SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN ? ELSE approved_at END, "
+            "decided_at = CASE WHEN ? IN ('approved', 'rejected') THEN ? ELSE decided_at END WHERE id = ?",
+            status, status, now(), status, now(), clip_id)

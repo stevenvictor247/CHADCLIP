@@ -55,14 +55,15 @@ def test_ledger_records_and_budget_stops_scheduled_work(monkeypatch):
     from hq import worker
     state = {}
     from hq.config import ETSY_AGENTS
-    free = "('Sweep', 'Tally', 'Trim', " + ", ".join(f"'{a}'" for a in ETSY_AGENTS) + ")"
+    free = "('Sweep', 'Tally', 'Gate', 'Trim', " + ", ".join(f"'{a}'" for a in ETSY_AGENTS) + ")"
     queued = db.rows(f"SELECT COUNT(*) n FROM tasks WHERE agent NOT IN {free}")[0]["n"]
     worker.queue_scheduled(state)
-    # Sweep, Tally and Trim cost no Claude money, so they keep working; everyone else waits.
+    # Sweep, Tally, Gate and Trim cost no Claude money, so they keep working; everyone else waits.
     # The Etsy village has its own budget, so the business one running out doesn't stop it.
     assert db.rows(f"SELECT COUNT(*) n FROM tasks WHERE agent NOT IN {free}")[0]["n"] == queued
     business = {k for k in state if k.split(":")[1] not in ETSY_AGENTS}
-    assert business == {"sched:Sweep:Tidy up and check what Claude is costing.", "sched:Tally:Count views on posted clips.", "sched:Trim:Rank the clip queue."}
+    assert business == {"sched:Sweep:Tidy up and check what Claude is costing.", "sched:Tally:Count views on posted clips.",
+                        "sched:Trim:Rank the clip queue.", "sched:Gate:Score the waiting clips."}
 
 
 def test_create_records_usage_and_skips_fallback_for_haiku(monkeypatch):
