@@ -2,7 +2,6 @@
 calls (mocked: never published, never sent to production), the free schedule checks and the dashboard routes."""
 
 import importlib
-import json
 from pathlib import Path
 from types import SimpleNamespace
 

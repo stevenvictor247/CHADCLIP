@@ -197,7 +197,6 @@ def test_inbox_api_and_settings_field():
 
 # ---- finding creators -----------------------------------------------------------------------------------
 
-from hq import config as hq_config  # noqa: E402
 from hq import creators  # noqa: E402
 
 STREAMERS = [{"login": "bigsam", "name": "BigSam", "id": "1", "viewers": 90000},

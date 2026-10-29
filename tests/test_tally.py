@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from hq import campaigns, db, tally
+from hq import db, tally
 from hq.agents import AGENTS
 
 

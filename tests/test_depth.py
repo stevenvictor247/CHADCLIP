@@ -1,6 +1,5 @@
 """Depth: the Monday opponent personnel sheet. Every player here is made up."""
 
-import io
 import json
 from datetime import datetime
 from pathlib import Path
@@ -9,7 +8,7 @@ import openpyxl
 import pytest
 from fastapi.testclient import TestClient
 
-from hq import approvals, db, relay
+from hq import db, relay
 from hq.agents.football import depth as agent
 from hq.agents.football.depth import Depth
 from hq.football import depth, printing, season

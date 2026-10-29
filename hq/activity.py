@@ -51,7 +51,7 @@ def _chad():
 
 
 def _scout():
-    from . import campaigns, discovery
+    from . import discovery
     if not HAS_LLM:
         return "No Claude key.", "Add ANTHROPIC_API_KEY in Settings.", "/settings"
     waiting = _n("SELECT COUNT(*) n FROM campaigns WHERE status = 'proposed'")

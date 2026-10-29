@@ -82,7 +82,7 @@ def read(path: Path) -> dict:
         raise DepthError("I couldn't find the header row. It needs at least POS and NAME columns.")
     players = []
     for r in rows[head + 1:]:
-        get = lambda k: next((r[j] for j in cols[k] if j < len(r) and r[j] not in (None, "")), None)
+        get = lambda k, r=r: next((r[j] for j in cols[k] if j < len(r) and r[j] not in (None, "")), None)
         name = str(get("name") or "").strip()
         pos = POSITIONS.get(_up(get("pos")))
         if not name or not pos:
