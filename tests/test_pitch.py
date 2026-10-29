@@ -6,7 +6,7 @@ from hq import agents, approvals, db, llm, relay
 from hq.agents.pitch import agent as pitch_mod
 from hq.agents.pitch.agent import Pitch
 
-CFG = {"sender_name": "Steven", "what_you_offer": "Clips.", "price": "$250 a month", "opt_out_line": "Say no and I stop.",
+CFG = {"paused": False, "sender_name": "Steven", "what_you_offer": "Clips.", "price": "$250 a month", "opt_out_line": "Say no and I stop.",
        "free_sample": True, "followup_days": 4, "max_followups": 2, "min_viewers": 50, "max_viewers": 2000}
 DRAFT = {"subject": "Clips for your stream", "message": "Hi Sam, great run on that boss fight.\nSay no and I stop.\nSteven",
          "why_this_lead": "Active, mid-size, no clip channel."}
@@ -435,3 +435,13 @@ def test_package_offer_line_goes_into_the_draft_facts(monkeypatch):
     monkeypatch.setattr(llm, "ask_json", lambda m, s, facts, *a, **k: seen.append(facts) or dict(DRAFT))
     run({"lead": {"name": "Sam", "platform": "youtube", "handle": "sam"}})
     assert "12 finished vertical clips a month for $79, with 2 revisions" in seen[0]
+
+
+def test_paused_pitch_drafts_and_sends_nothing(monkeypatch):
+    monkeypatch.setattr(pitch_mod, "settings", lambda: {**CFG, "paused": True})
+    assert run({"lead": {"name": "Sam", "platform": "youtube", "handle": "sam"}}) == pitch_mod.PAUSED_MSG
+    assert run({"find": 5}) == pitch_mod.PAUSED_MSG
+    assert db.rows("SELECT COUNT(*) n FROM leads")[0]["n"] == 0
+    p = Pitch()
+    assert all(p.nothing_to_do(i, par) for _, i, par in p.schedule)
+    assert "paused" in pitch_mod._email_blocker({**CFG, "paused": True})

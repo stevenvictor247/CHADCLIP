@@ -78,7 +78,16 @@ def _claim(lead_id: int) -> bool:
                          (db.now(), lead_id)).rowcount == 1
 
 
+PAUSED_MSG = "Pitch emails are paused (Settings > Pitch > Pause Pitch emails). Nothing was drafted or sent."
+
+
+def paused(cfg: dict | None = None) -> bool:
+    return bool((settings() if cfg is None else cfg).get("paused", True))   # paused until Steven turns it off
+
+
 def _email_blocker(cfg: dict) -> str | None:
+    if paused(cfg):
+        return "Pitch emails are paused. Turn off Pause Pitch emails in Settings to send."
     if not str(cfg.get("sender_name") or "").strip():
         return "fill in your name on the Settings page (Pitch section)."
     if not str(cfg.get("postal_address") or "").strip():
@@ -235,6 +244,8 @@ class Pitch(Agent):
 
     def nothing_to_do(self, instructions: str, params: dict) -> bool | None:
         """Follow-up rounds are a plain database look: when no pitched lead is due, no task is queued at all."""
+        if paused() and params != {"sample_cleanup": True}:
+            return True   # paused: no scheduled round queues anything but old-file cleanup
         if params.get("followups") and set(params) == {"followups"}:
             return not db.rows("SELECT 1 FROM leads WHERE status = 'pitched' AND followup_at IS NOT NULL "
                                "AND followup_at <= ? LIMIT 1", _iso())
@@ -246,6 +257,8 @@ class Pitch(Agent):
 
     def run(self, task: dict) -> str:
         params = json.loads(task.get("params") or "{}")
+        if paused() and not (params.keys() & {"mark", "do_not_contact", "sample_cleanup"}):
+            return PAUSED_MSG   # keeps leads and drafts as they are; only bookkeeping still runs
         if params.get("find"):
             return self.find(int(params["find"]))
         if params.get("sample"):
