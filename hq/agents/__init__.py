@@ -13,8 +13,9 @@ from .recruiter import Recruiter
 from .scout import Scout
 from .sweep import Sweep
 from .tally import Tally
+from .trim import Trim
 
-AGENTS = {a.name.lower(): a for a in [Chad(), Scout(), Pitch(), Recap(), Packs(), Tally(), Gate(), Sweep(), Muse(), Recruiter(), Captain(), Clock(), Ref(), Tells(), Scribe(), Depth(), Rally(),
+AGENTS = {a.name.lower(): a for a in [Chad(), Scout(), Pitch(), Recap(), Packs(), Tally(), Gate(), Trim(), Sweep(), Muse(), Recruiter(), Captain(), Clock(), Ref(), Tells(), Scribe(), Depth(), Rally(),
                                      Etta(), Radar(), Quill(), Loom(), Warden(), Dock()]}
 
 

@@ -397,7 +397,7 @@ def init():
         for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER"),
                           ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT"),
                           ("approved_at", "TEXT"), ("stale_state", "TEXT"),   # queue age; stale_state: flagged or kept
-                          ("decided_at", "TEXT"), ("gate_score", "REAL"), ("gate_why", "TEXT"),
+                          ("trim_score", "REAL"), ("decided_at", "TEXT"), ("gate_score", "REAL"), ("gate_why", "TEXT"),
                           ("gate_held", "INTEGER")):   # Gate: when Steven decided, its 0-100 call, and whether it held the clip
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")

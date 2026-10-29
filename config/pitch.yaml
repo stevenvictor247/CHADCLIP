@@ -10,6 +10,13 @@ what_you_offer: "Short vertical clips of your best moments, with captions, poste
 price: ""                       # e.g. "$250 a month for 10 clips". Blank means Pitch won't mention a price.
 portfolio_url: ""               # link to your clipping account or best clips, if you have one
 second_offer: ""              # optional cheaper offer Pitch adds, e.g. "Recap: a YouTube title, description, chapters and 5 post ideas for each long video, $49 a month for 4. For podcasters: \"Clip pack: 5 captioned vertical clips plus titles and post ideas from one episode, $49 once\""
+# Monthly clip package (the paid offer). Pitch adds the offer line to drafts when this is on.
+monthly_package: true
+package_clips: 12
+package_price: 79
+package_revisions: 2
+payment_link: ""                # paste the Stripe payment link here (make it in test mode first); only https://buy.stripe.com links are used
+
 free_sample: true               # offer to make one clip for them free
 opt_out_line: "If this isn't for you, just say so and I won't message again."
 
