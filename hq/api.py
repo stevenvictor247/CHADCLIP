@@ -11,11 +11,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import activity, agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
-from . import etsy, etsy_api, muse_api, recruiter_api, sweep_api
+from . import etsy, etsy_api, muse_api, recruiter_api, sweep_api, trim_api
 from .config import CLIPS_DIR, FOOTBALL_DATA, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
 app = FastAPI(title="Agent HQ")
 app.include_router(sweep_api.router)
+app.include_router(trim_api.router)
 app.include_router(muse_api.router)
 app.include_router(recruiter_api.router)
 app.include_router(etsy_api.router)
