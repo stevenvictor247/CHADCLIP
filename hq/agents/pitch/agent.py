@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import yaml
 
 from ... import approvals, db, llm, relay
+from ... import offer
 from ...config import CONFIG_DIR, model_for
 from ..base import Agent
 from ..chad import twitch
@@ -154,6 +155,8 @@ def they_said_yes(lead_id: int, how: str = "") -> str:
     creators.record_permission(lead["handle"], how)
     set_status(lead_id, "client", f"Said yes: {how}")
     db.log("Steven", f"Permission recorded for {lead['name']}: {how}")
+    if offer.enabled(settings()):
+        offer.create_client_folder(lead["handle"], settings())
     return f"Saved. Chad can now clip {lead['name']}."
 
 
@@ -329,6 +332,7 @@ class Pitch(Agent):
             f"About Steven: {cfg.get('about_me')}" if cfg.get("about_me") else "Say nothing about Steven's background.",
             f"Portfolio link to include: {cfg.get('portfolio_url')}" if cfg.get("portfolio_url") else "No portfolio link.",
             f"Second, cheaper offer: mention it in one sentence after the first: {cfg.get('second_offer')}" if cfg.get("second_offer") else None,
+            f"Main offer, state it plainly and mention no other price: {offer.offer_line(cfg)}" if offer.enabled(cfg) else None,
             "Offer one free sample clip." if cfg.get("free_sample") else "Do not offer a free sample.",
             f"Opt-out line: {cfg.get('opt_out_line')}", f"Sign as: {cfg.get('sender_name')}"] if x)
         draft = llm.ask_json(model_for("pitch"), SYSTEM, facts, SCHEMA, effort="low", agent="Pitch")

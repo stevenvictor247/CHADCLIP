@@ -427,3 +427,11 @@ def test_follower_api_failure_falls_back_to_viewers(monkeypatch):
     monkeypatch.setattr(twitch_mod, "recent_vods", lambda *a, **k: [{}] * 6)
     pts, why = lead_score.lookup("x", "1", "", "", viewers=200)
     assert pts >= 4 and "4,000 followers" in why
+
+
+def test_package_offer_line_goes_into_the_draft_facts(monkeypatch):
+    seen = []
+    monkeypatch.setattr(pitch_mod, "settings", lambda: {**CFG, "monthly_package": True})
+    monkeypatch.setattr(llm, "ask_json", lambda m, s, facts, *a, **k: seen.append(facts) or dict(DRAFT))
+    run({"lead": {"name": "Sam", "platform": "youtube", "handle": "sam"}})
+    assert "12 finished vertical clips a month for $79, with 2 revisions" in seen[0]

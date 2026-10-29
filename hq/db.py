@@ -407,7 +407,8 @@ def init():
         have = {r["name"] for r in c.execute("PRAGMA table_info(clips)")}
         for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER"),
                           ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT"),
-                          ("approved_at", "TEXT"), ("stale_state", "TEXT")):   # queue age; stale_state: flagged or kept
+                          ("approved_at", "TEXT"), ("stale_state", "TEXT"),
+                          ("trim_score", "REAL")):   # queue age; stale_state: flagged or kept
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
         have = {r["name"] for r in c.execute("PRAGMA table_info(posts)")}

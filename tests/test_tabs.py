@@ -74,3 +74,19 @@ def test_approval_kinds_all_land_in_a_group():
     known = set(re.findall(r'"(\w+)"', fn))
     assert {"pitch", "followup", "sample", "muse_idea", "clip_pack", "recap", "rally"} <= known
     assert kinds, "expected to find approvals.request calls"
+
+
+def test_approve_all_buttons_confirm_skip_problems_and_use_the_normal_endpoints():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    for el in ('id="approveall"', 'id="approveallclips"'):
+        assert el in html
+    for name in ("approveAll", "approveAllClips"):
+        body = html[html.index(f"async function {name}()"):]
+        body = body[:body.index("\nasync function ", 10)]
+        assert "confirm(" in body and "skipped" in body       # asks first, and says how many it left out
+    # one call per item through the existing endpoints, so the posting checks still run
+    assert "/api/approvals/${a.id}/approve" in html and "/api/clips/${id}/approve" in html
+    assert "approve-all" not in html
+    # flagged clips and pitches with no email are the ones left out
+    assert 'data-flagged="1"' in html and "!c.dataset.flagged" in html
+    assert 'a.kind === "pitch" && !(a.payload || {}).email' in html
