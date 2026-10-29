@@ -255,6 +255,7 @@
   <div>
     <section id="apprsection" style="display:none">
       <h2>Waiting for your OK <span class="count" id="apprcount"></span>
+        <button id="approveall" style="display:none;float:right;font-size:13px" onclick="approveAll()"></button>
         <select id="apprfilter" aria-label="Which village"><option value="">Both villages</option><option value="business">🏘️ HQ Town</option><option value="football">🏈 Warrior Village</option><option value="etsy">🛍️ Print Street</option></select></h2>
       <div id="approvals"></div>
     </section>
@@ -291,7 +292,8 @@
     </section>
     <section>
       <h2>Clips waiting for approval <span class="count" id="pendingcount" style="display:none"></span>
-        <button class="bad" id="rejectflagged" style="display:none;float:right;font-size:13px" onclick="rejectFlagged()"></button></h2>
+        <button class="bad" id="rejectflagged" style="display:none;float:right;font-size:13px" onclick="rejectFlagged()"></button>
+        <button id="approveallclips" style="display:none;float:right;font-size:13px;margin-right:6px" onclick="approveAllClips()"></button></h2>
       <div class="clips" id="pending"></div>
     </section>
     <section>
@@ -516,8 +518,11 @@ async function refresh() {
     const nFlagged = s.pending.filter(c => (c.flags || []).length).length;
     $("rejectflagged").style.display = nFlagged ? "" : "none";
     $("rejectflagged").textContent = `Reject all ${nFlagged} flagged`;
+    const nOkClips = s.pending.filter(c => !(c.flags || []).length && (c.caption || "").trim()).length;
+    $("approveallclips").style.display = s.pending.length ? "" : "none";
+    $("approveallclips").textContent = `Approve all ${nOkClips}`;
     $("pending").innerHTML = s.pending.length ? s.pending.map((c, i) => `
-      <div class="clip" data-id="${c.id}" style="animation-delay:${i * 60}ms">
+      <div class="clip" data-id="${c.id}"${(c.flags || []).length ? ' data-flagged="1"' : ""} style="animation-delay:${i * 60}ms">
         <video src="/clips/${esc(fileName(c.path))}" controls preload="metadata"></video>
         <div class="muted">#${c.id} · ${esc(c.creator)} · <span class="score">★ ${c.score ?? "?"}</span></div>
         <input class="title" value="${esc(c.title)}">
@@ -620,7 +625,12 @@ function renderCampaigns(list) {
       ${(c.flags || []).length ? `<div class="warn">⚠ ${esc(c.flags.join("; "))}</div>` : ""}${earned}${buttons}</div>`;
   }).join("");
 }
-let shownApprovals = null, allApprovals = [];
+let shownApprovals = null, allApprovals = [], shownApprList = [];
+// Why an item is left out of "Approve all": it needs a closer look first. Returns "" when it's fine to approve.
+function approvalProblem(a) {
+  if (a.kind === "pitch" && !(a.payload || {}).email) return "no email address yet";
+  return "";
+}
 const VILLAGE = {business: "🏘️ HQ Town", football: "🏈 Warrior Village", etsy: "🛍️ Print Street"};
 // Which type an approval is: shown under Approvals in the top bar's drop-downs (see GROUPS in hq-tabs.js).
 function apprGroup(a) {
@@ -647,6 +657,10 @@ function renderApprovals(list) {
   list = list.filter(a => (!want || (a.village || "business") === want) && (group === "all" || group === "clips" || apprGroup(a) === group));
   if (group === "clips") list = [];
   $("apprcount").textContent = list.length;
+  shownApprList = list;
+  const nOk = list.filter(a => !approvalProblem(a)).length;
+  $("approveall").style.display = list.length ? "" : "none";
+  $("approveall").textContent = `Approve all ${nOk}`;
   const key = want + group + JSON.stringify(list);
   if (key === shownApprovals) return;
   shownApprovals = key;
@@ -678,6 +692,42 @@ async function sendTallyReport() {
 async function recheckEmails() {
   const r = await (await fetch("/api/pitch/recheck", {method: "POST", headers: {"X-HQ": "1"}})).json();
   toast(esc(r.message));
+}
+// Approve everything shown in this section, one at a time through the normal approve endpoint (so every posting
+// check still runs). Items with a problem are skipped and counted.
+async function approveAll() {
+  const ok = shownApprList.filter(a => !approvalProblem(a)), skipped = shownApprList.length - ok.length;
+  if (!ok.length) return toast(`Nothing to approve: ${skipped} need a closer look first.`);
+  if (!confirm(`Approve all ${ok.length} waiting here?` + (skipped ? ` ${skipped} with a problem will be skipped.` : ""))) return;
+  $("approveall").disabled = true;
+  let done = 0, failed = 0;
+  for (const a of ok) {
+    try { (await fetch(`/api/approvals/${a.id}/approve`, {method: "POST", headers: {"X-HQ": "1"}})).ok ? done++ : failed++; } catch (e) { failed++; }
+  }
+  $("approveall").disabled = false;
+  toast(`Approved ${done}.` + (skipped ? ` Skipped ${skipped} with a problem.` : "") + (failed ? ` ${failed} didn't go through.` : ""));
+  shownApprovals = null; refresh();
+}
+// Same for the clips waiting: flagged clips and clips with no caption are skipped.
+async function approveAllClips() {
+  const cards = [...document.querySelectorAll("#pending .clip")];
+  const ok = cards.filter(c => !c.dataset.flagged && c.querySelector(".caption").value.trim());
+  const skipped = cards.length - ok.length;
+  if (!ok.length) return toast(`Nothing to approve: ${skipped} need a closer look first.`);
+  if (!confirm(`Approve all ${ok.length} clips waiting here?` + (skipped ? ` ${skipped} flagged or missing a caption will be skipped.` : ""))) return;
+  $("approveallclips").disabled = true;
+  let done = 0, failed = 0;
+  for (const c of ok) {
+    const id = c.dataset.id;
+    try {
+      await fetch(`/api/clips/${id}`, {method: "PATCH", headers: {"Content-Type": "application/json", "X-HQ": "1"},
+        body: JSON.stringify({title: c.querySelector(".title").value, caption: c.querySelector(".caption").value})});
+      (await fetch(`/api/clips/${id}/approve`, {method: "POST", headers: {"X-HQ": "1"}})).ok ? done++ : failed++;
+    } catch (e) { failed++; }
+  }
+  $("approveallclips").disabled = false;
+  toast(`Approved ${done} clips.` + (skipped ? ` Skipped ${skipped} flagged or missing a caption.` : "") + (failed ? ` ${failed} didn't go through.` : ""));
+  shownPending = null; refresh();
 }
 async function decideApproval(id, decision) {
   const r = await (await fetch(`/api/approvals/${id}/${decision}`, {method: "POST", headers: {"X-HQ": "1"}})).json();
