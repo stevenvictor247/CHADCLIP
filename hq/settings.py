@@ -129,6 +129,8 @@ PITCH_FIELDS = [
     ("max_viewers", "Biggest streamer (viewers)", "number", "Live viewers, highest to look for."),
     ("language", "Streamer language", "text", "Two-letter code, e.g. en."),
     ("auto_find", "Find streamers every day", "yesno", "Off by default. Pitch still only drafts; you approve and send everything."),
+    ("queue_goal", "Daily pitch goal (Queue)", "number", "How many new streamers Queue aims for each day. Queue only counts and orders; it never sends."),
+    ("queue_alert_hour", "Queue text-me hour (0 to 23)", "number", "After this hour Queue texts you once if fewer than the goal are ready. Silent while Pitch is paused."),
     ("followup_days", "Follow-up reminder (days)", "number", "Days after you send a pitch before Pitch reminds you."),
     ("max_followups", "Most follow-ups", "number", "After this many reminders with no reply, the lead is marked dead."),
 ]

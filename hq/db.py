@@ -174,6 +174,10 @@ CREATE TABLE IF NOT EXISTS pitch_sent (
     subject TEXT,
     sent_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS queue_sent (
+    lead_id INTEGER PRIMARY KEY,                 -- pitches Steven marked sent by hand from Queue's list
+    sent_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS quotes (
     id INTEGER PRIMARY KEY,
     lead_id INTEGER NOT NULL,
