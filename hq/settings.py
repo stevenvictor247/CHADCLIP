@@ -55,7 +55,7 @@ GROUPS = [
      ("HQ_MODEL_BOSS", "HQ_BOSS_MODEL", "HQ_REPORT_HOUR", "HQ_BUILD_TOKEN", "HQ_BUILD_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_ID"), ()),
     ("chad", "🎬", "Chad (clips and posting)", "How many posts a day, approval, practice mode, and your TikTok, Instagram, YouTube and Twitch accounts.",
      ("HQ_MODEL_CHAD", "HQ_MAX_POSTS_PER_DAY", "HQ_MAX_CLIPS_PER_DAY", "HQ_POST_GAP_MINUTES", "HQ_REQUIRE_APPROVAL", "HQ_PRACTICE_POSTING", "HQ_WHISPER_MODEL",
-      "HQ_PUBLIC_BASE_URL"), ("IG_", "TIKTOK_", "TWITCH_")),
+      "HQ_PUBLIC_BASE_URL"), ("IG_", "TIKTOK_", "TWITCH_", "POSTIZ_")),
     ("pitch", "✉️", "Pitch (finding clients)", "Your Gmail for sending, and the pitch wording and limits.",
      ("HQ_MODEL_PITCH",), ("PITCH_",)),
     ("scout", "🔭", "Scout (finding campaigns)", "Where Scout looks and how picky it is.", ("HQ_MODEL_SCOUT",), ("SCOUT_",)),

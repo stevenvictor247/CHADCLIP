@@ -9,11 +9,11 @@ import yaml
 from .... import db
 from ....config import CONFIG_DIR
 from ..sources import find_creator
-from . import instagram, practice, tiktok, youtube
+from . import instagram, postiz, practice, tiktok, youtube
 
-PLATFORMS = {"tiktok": tiktok, "youtube": youtube, "instagram": instagram, "practice": practice}
+PLATFORMS = {"tiktok": tiktok, "youtube": youtube, "instagram": instagram, "postiz": postiz, "practice": practice}
 # TikTok first: it's the top priority.
-ORDER = ["tiktok", "youtube", "instagram"]
+ORDER = ["tiktok", "youtube", "instagram", "postiz"]
 
 
 def load_accounts() -> list[dict]:

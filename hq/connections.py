@@ -192,6 +192,32 @@ def youtube(account: dict, values=None) -> dict:
     return _ok("YouTube sign-in works.")
 
 
+def postiz(values=None, account: dict | None = None) -> dict:
+    """Asks your Postiz for its connected channels (read only) and lists their ids, which accounts.yaml needs."""
+    url, key = _v("POSTIZ_URL", values).rstrip("/"), _v("POSTIZ_API_KEY", values)
+    if not url or not key:
+        return _bad("Needs both the Postiz address (like http://localhost:5000) and the API key from Postiz settings.")
+    api = url if url.endswith("/api/public/v1") else url + "/api/public/v1"
+    try:
+        r = requests.get(f"{api}/integrations", headers={"Authorization": key}, timeout=TIMEOUT)
+    except requests.RequestException:
+        return _offline("Postiz")
+    if r.status_code in (401, 403):
+        return _bad("Postiz says the API key is wrong. Copy it again from Postiz, Settings, Developers.")
+    if r.status_code != 200:
+        return _bad(f"Postiz answered {r.status_code}. Check the address.")
+    chans = [c for c in (r.json() or []) if isinstance(c, dict)]
+    if not chans:
+        return _bad("Postiz works but has no channels yet. In Postiz press Add Channel and connect TikTok.")
+    names = "; ".join(f"{c.get('name')} ({c.get('identifier')}) id {c.get('id')}" for c in chans)
+    if account:
+        mine = [c for c in chans if c.get("id") == account.get("integration_id")]
+        if not mine:
+            return _bad(f"{account['name']}: its integration_id isn't a Postiz channel. Yours are: {names}")
+        return _ok(f"Postiz works and {account['name']} is linked to {mine[0].get('name')}.")
+    return _ok(f"Postiz works. Channels: {names}")
+
+
 def practice(account: dict, values=None) -> dict:
     return _ok("Practice account: clips are saved to data/practice-posts instead of being uploaded.")
 
@@ -237,10 +263,12 @@ def openai_images(values=None) -> dict:
 KEY_TESTS = {"ANTHROPIC_API_KEY": "claude", "TELEGRAM_BOT_TOKEN": "telegram", "TELEGRAM_OWNER_ID": "telegram",
              "TWITCH_CLIENT_ID": "twitch", "TWITCH_CLIENT_SECRET": "twitch",
              "PITCH_EMAIL_ADDRESS": "pitch_email", "PITCH_EMAIL_APP_PASSWORD": "pitch_email",
-             "HQ_PRINTIFY_TOKEN": "printify", "HQ_OPENAI_API_KEY": "openai_images"}
+             "HQ_PRINTIFY_TOKEN": "printify", "HQ_OPENAI_API_KEY": "openai_images",
+             "POSTIZ_URL": "postiz", "POSTIZ_API_KEY": "postiz"}
 SERVICE_TESTS = {"claude": claude, "telegram": telegram, "twitch": twitch, "pitch_email": pitch_email,
-                 "printify": printify, "openai_images": openai_images}
-ACCOUNT_TESTS = {"tiktok": tiktok, "instagram": instagram, "youtube": youtube, "practice": practice}
+                 "printify": printify, "openai_images": openai_images, "postiz": postiz}
+ACCOUNT_TESTS = {"tiktok": tiktok, "instagram": instagram, "youtube": youtube, "practice": practice,
+                 "postiz": lambda account, values=None: postiz(values, account)}
 
 
 def _accounts() -> list[dict]:
