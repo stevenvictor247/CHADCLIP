@@ -62,7 +62,8 @@ def test_ledger_records_and_budget_stops_scheduled_work(monkeypatch):
     # The Etsy village has its own budget, so the business one running out doesn't stop it.
     assert db.rows(f"SELECT COUNT(*) n FROM tasks WHERE agent NOT IN {free}")[0]["n"] == queued
     business = {k for k in state if k.split(":")[1] not in ETSY_AGENTS}
-    assert business == {"sched:Sweep:Tidy up and check what Claude is costing.", "sched:Tally:Count views on posted clips."}
+    assert business == {"sched:Sweep:Tidy up and check what Claude is costing.", "sched:Tally:Count views on posted clips."} | \
+        {k for k in state if k.startswith("sched:Queue:")}   # Queue is free too
 
 
 def test_create_records_usage_and_skips_fallback_for_haiku(monkeypatch):

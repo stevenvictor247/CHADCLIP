@@ -57,7 +57,7 @@ GROUPS = [
      ("HQ_MODEL_CHAD", "HQ_MAX_POSTS_PER_DAY", "HQ_MAX_CLIPS_PER_DAY", "HQ_POST_GAP_MINUTES", "HQ_REQUIRE_APPROVAL", "HQ_PRACTICE_POSTING", "HQ_WHISPER_MODEL",
       "HQ_PUBLIC_BASE_URL"), ("IG_", "TIKTOK_", "TWITCH_")),
     ("pitch", "✉️", "Pitch (finding clients)", "Your Gmail for sending, and the pitch wording and limits.",
-     ("HQ_MODEL_PITCH",), ("PITCH_",)),
+     ("HQ_MODEL_PITCH", "HQ_QUEUE_GOAL", "HQ_QUEUE_ALERT_HOUR"), ("PITCH_",)),
     ("scout", "🔭", "Scout (finding campaigns)", "Where Scout looks and how picky it is.", ("HQ_MODEL_SCOUT",), ("SCOUT_",)),
     ("tally", "💰", "Tally (money)", "Which Claude model Tally uses.", ("HQ_MODEL_TALLY",), ()),
     ("sweep", "🧹", "Sweep (janitor and quality control)", "Daily report time, clean-up and warning limits.", ("HQ_MODEL_SWEEP",), ("HQ_SWEEP_",)),

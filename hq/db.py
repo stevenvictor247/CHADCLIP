@@ -168,6 +168,10 @@ CREATE TABLE IF NOT EXISTS do_not_contact (
     reason TEXT,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS queue_sent (
+    lead_id INTEGER PRIMARY KEY,                 -- pitches Steven sent by hand and marked sent on the Today's 10 screen
+    sent_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS pitch_sent (
     lead_id INTEGER PRIMARY KEY,                 -- one email per lead, ever
     email TEXT NOT NULL,

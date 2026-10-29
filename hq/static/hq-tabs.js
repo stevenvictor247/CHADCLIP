@@ -9,7 +9,7 @@
      empty: "Nothing is waiting for your OK."},
     {id: "boss", icon: "👑", label: "Boss", has: ["chatlog"]},
     {id: "campaigns", icon: "🎯", label: "Campaigns", has: ["campsection"]},
-    {id: "pitch", icon: "✉️", label: "Pitch", appr: "pitch", has: ["creatorsection", "leadsection"],
+    {id: "pitch", icon: "✉️", label: "Pitch", appr: "pitch", has: ["queue", "creatorsection", "leadsection"],
      empty: "No leads or creators to clip yet. Pitch and Scout put them here when they find some."},
     {id: "clips", icon: "🎞️", label: "Clips", appr: "clips", has: ["allowedsection", "library"]},
     {id: "football", icon: "🏈", label: "Warrior Village", appr: "football", has: ["towns", "football"]},
