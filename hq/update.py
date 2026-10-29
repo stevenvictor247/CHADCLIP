@@ -83,7 +83,7 @@ def check(force: bool = False) -> dict:
                 status["count"] = int(_out("git", "rev-list", "--count", f"HEAD..{target}") or 0)
                 status["available"] = status["count"] > 0
                 if status["tested"]:  # changes on GitHub still waiting for their tests to pass
-                    status["testing"] = int(_out("git", "rev-list", "--count", f"HEAD..@{{u}}", f"^{TESTED}") or 0)
+                    status["testing"] = int(_out("git", "rev-list", "--count", "HEAD..@{u}", f"^{TESTED}") or 0)
                 if status["available"]:
                     log = _out("git", "log", "--no-merges", "--format=%s", "-n", "8", f"HEAD..{target}")
                     status["changes"] = [line for line in log.splitlines() if line]

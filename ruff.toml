@@ -1,0 +1,16 @@
+# Catches real bugs (undefined names, unused code, loop-variable traps), not style.
+target-version = "py310"
+extend-exclude = ["deploy", "postiz"]
+
+[lint]
+select = ["E9", "F", "B"]
+ignore = [
+  "B008",  # FastAPI uses Depends()/File() in defaults
+  "B904",  # raise-from is style, not a bug
+  "B905",  # zip(strict=) needs py310+ semantics review
+  "B011",  # assert False used in tests on purpose
+]
+
+[lint.per-file-ignores]
+"**/__init__.py" = ["F401"]  # agent packages re-export for registration
+"tests/*" = ["F841", "F811"]  # tests import/assign for side effects

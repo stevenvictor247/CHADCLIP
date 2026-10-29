@@ -6,7 +6,6 @@ sent 10, building 30, PR open 55, tests running 70, tests passed 85, merged 92, 
 """
 
 import json
-import os
 import re
 import time
 import urllib.request

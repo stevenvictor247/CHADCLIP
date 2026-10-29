@@ -112,7 +112,6 @@ def test_example_creator_placeholder_is_ignored(monkeypatch, tmp_path):
 
 
 def test_boss_chat_rolls_over_with_a_recap(monkeypatch):
-    import json
     from hq import boss, db
     db.init()
     db.execute("DELETE FROM boss_messages")

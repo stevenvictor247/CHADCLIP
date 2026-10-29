@@ -23,7 +23,6 @@ def settings() -> dict:
 def _with_required_tags(tags: list, creator: dict) -> list:
     """Campaign rules often demand certain hashtags; make sure every clip carries them."""
     required = [t.lstrip("#@").strip() for t in creator.get("required_tags") or [] if t.strip()]
-    have = {t.lower() for t in tags}
     return required + [t for t in tags if t.lower() not in {r.lower() for r in required}] if required else tags
 
 
