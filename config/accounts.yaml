@@ -29,3 +29,11 @@ accounts:
     enabled: false
     ig_user_id_env: IG_USER_ID_MAIN
     access_token_env: IG_ACCESS_TOKEN_MAIN
+
+  # Posting through your own Postiz service (see docs/postiz-setup.md). One entry per channel connected in Postiz.
+  - name: postiz_tiktok
+    platform: postiz
+    enabled: false
+    provider: tiktok       # tiktok, instagram or youtube
+    integration_id: ""     # the channel's id, shown by the Postiz test in Settings
+    privacy: PUBLIC_TO_EVERYONE

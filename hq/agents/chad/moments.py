@@ -1,4 +1,8 @@
-"""Choosing which parts of a video become clips."""
+"""Choosing which parts of a video become clips.
+
+The virality score, hook line and reason shown on each approval card are our own code, inspired by the idea in
+Anil-matcha/AI-Youtube-Shorts-Generator (MIT): ask the model to rate every clip and say why.
+"""
 
 from ... import hooks, llm
 from ...config import model_for
@@ -31,9 +35,15 @@ SCHEMA = {
                     "hooks": {"type": "array", "items": {"type": "string"},
                               "description": "Exactly 3 opening lines of under 12 words, one per style asked for, in that order"},
                     "score": {"type": "number", "description": "Expected performance from 0 to 10"},
+                    "virality": {"type": "number", "description": "Virality score from 0 to 100: how likely this is to "
+                                 "hold viewers and get shared. Weigh the hook in the first 2 seconds, emotion or surprise, "
+                                 "a clear payoff, and whether it makes sense with no context. Be harsh: 50 is average."},
+                    "hook_line": {"type": "string", "description": "The single line or moment in the clip that grabs "
+                                  "attention most, quoted or described in under 15 words"},
                     "reason": {"type": "string", "description": "Why this moment works, one sentence"},
                 },
-                "required": ["start", "end", "title", "caption", "hashtags", "hooks", "score", "reason"],
+                "required": ["start", "end", "title", "caption", "hashtags", "hooks", "score", "virality", "hook_line",
+                             "reason"],
                 "additionalProperties": False,
             },
         }
@@ -103,6 +113,8 @@ def _clean(moments, duration, count, min_len, max_len) -> list[dict]:
         if any(start < o["end"] and end > o["start"] for o in out):
             continue
         m["hashtags"] = [h.lstrip("#").strip() for h in m.get("hashtags", []) if h.strip()]
+        if m.get("virality") is not None:   # no virality without Claude: a made-up number would mislead
+            m["virality"] = max(0.0, min(100.0, float(m["virality"])))
         out.append({**m, "start": start, "end": end})
         if len(out) == count:
             break

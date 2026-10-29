@@ -59,7 +59,7 @@ def test_account_switch_keeps_comments(monkeypatch, tmp_path):
     text = (cfg / "accounts.yaml").read_text()
     assert "# Clipping accounts" in text
     enabled = {a["name"]: a["enabled"] for a in hq.settings.accounts()}
-    assert enabled == {"tiktok_main": False, "youtube_main": True, "instagram_main": False}
+    assert enabled == {"tiktok_main": False, "youtube_main": True, "instagram_main": False, "postiz_tiktok": False}
 
 
 def test_settings_api_needs_the_hq_page(monkeypatch, tmp_path):

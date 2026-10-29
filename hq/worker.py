@@ -8,7 +8,7 @@ import time
 import traceback
 from datetime import datetime, timedelta, timezone
 
-from . import agents, boss, db, ledger, llm
+from . import agents, boss, budgets, db, ledger, llm
 from .agents.chad.publish import publish_approved
 from .config import DATA_DIR, FOOTBALL_REMINDER_HOUR, REQUIRE_APPROVAL
 
@@ -64,7 +64,9 @@ def run_next_task(lane: str | None = None) -> bool:
     agent = agents.get(task["agent"])
     db.log(task["agent"], f"Started task #{task['id']}: {task['instructions'][:120]}")
     done = threading.Event()
+    started = db.now()
     threading.Thread(target=_heartbeat, args=(task["id"], done), daemon=True).start()
+    status, paused = "done", False
     try:
         result = agent.run(task) if agent else f"No agent called {task['agent']}"
         db.update_task(task["id"], "done", result)
@@ -72,10 +74,16 @@ def run_next_task(lane: str | None = None) -> bool:
     except Exception as e:
         traceback.print_exc()
         result = f"Task #{task['id']} failed: {e}"
+        status, paused = "failed", isinstance(e, budgets.BudgetPaused)
         db.update_task(task["id"], "failed", str(e)[:1000])
         db.log(task["agent"], result)
     finally:
         done.set()
+    try:
+        budgets.receipt(task, status, started, result, paused)
+        budgets.check_all()
+    except Exception:
+        traceback.print_exc()   # a receipt or alert must never fail a task
     if agent and agent.notify_when_done:
         from . import relay
         relay.notify(f"{agent.name}: {result}")
@@ -114,6 +122,8 @@ def queue_scheduled(state: dict):
     for agent in agents.AGENTS.values():
         if ledger.over_budget(agent.village) and not agent.free:
             continue  # that village's Claude budget is spent: nothing new starts on its own there until tomorrow
+        if budgets.is_paused(agent.name):
+            continue  # this agent used its own daily budget (HQ_AGENT_BUDGETS)
         for every_hours, instructions, params in agent.schedule:
             key = f"sched:{agent.name}:{instructions}"
             waited = now - state.get(key, 0)
