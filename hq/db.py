@@ -288,6 +288,80 @@ CREATE TABLE IF NOT EXISTS recaps (
     created_at TEXT NOT NULL,
     decided_at TEXT
 );
+CREATE TABLE IF NOT EXISTS rally_posts (
+    id INTEGER PRIMARY KEY,
+    topic TEXT NOT NULL,                         -- upset_watch, rankings, rivalry, stat_fact
+    headline TEXT NOT NULL,
+    body TEXT NOT NULL,
+    caption TEXT NOT NULL,
+    card_path TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending, approved, rejected, posted
+    views INTEGER NOT NULL DEFAULT 0,            -- typed in by Steven after he posts it
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
+CREATE TABLE IF NOT EXISTS clip_packs (
+    id INTEGER PRIMARY KEY,
+    client TEXT NOT NULL,
+    owner_note TEXT NOT NULL,                    -- how the podcaster gave permission and the episode
+    source TEXT,
+    fingerprint TEXT NOT NULL UNIQUE,            -- same episode never costs Claude or Chad twice
+    folder TEXT NOT NULL,
+    pack TEXT NOT NULL,                          -- JSON: the Recap text and each clip's file, title and caption
+    price_cents INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending, approved, rejected
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
+CREATE TABLE IF NOT EXISTS etsy_designs (
+    id INTEGER PRIMARY KEY,
+    brief_id INTEGER,
+    theme TEXT NOT NULL,                         -- e.g. Coffee lovers
+    slogan TEXT NOT NULL,                        -- the big words on the shirt
+    subline TEXT,                                -- small words under them, optional
+    style TEXT NOT NULL DEFAULT 'bold',          -- Loom's look: bold, retro, script, marker, badge
+    art_prompt TEXT,                             -- a picture to add above the words (needs the image key), optional
+    title TEXT NOT NULL,                         -- Etsy listing title
+    tags TEXT NOT NULL DEFAULT '[]',             -- JSON list, 13 Etsy tags
+    description TEXT NOT NULL DEFAULT '',
+    price_cents INTEGER NOT NULL DEFAULT 2499,
+    stage TEXT NOT NULL DEFAULT 'written',       -- written, drawn, review, approved, building, ready, live, retired, held, rejected
+    warden TEXT NOT NULL DEFAULT '{}',           -- JSON: Warden's problems and warnings
+    files TEXT NOT NULL DEFAULT '{}',            -- JSON: print files and the preview, by name
+    used_ai_art INTEGER NOT NULL DEFAULT 0,
+    printify_product_id TEXT,
+    etsy_listing_id TEXT,                        -- set once Steven publishes it and Printify reports it live
+    photo_added INTEGER NOT NULL DEFAULT 0,      -- Steven ticked "real photo added" (Etsy's one-real-photo rule)
+    sales INTEGER NOT NULL DEFAULT 0,
+    approval_id INTEGER,
+    note TEXT,                                   -- the last thing that happened to it, in plain words
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS etsy_briefs (
+    id INTEGER PRIMARY KEY,
+    themes TEXT NOT NULL,                        -- JSON list of {theme, audience, why, angles, keywords, until}
+    source TEXT NOT NULL DEFAULT 'radar',        -- radar (web search), calendar (free fallback), steven
+    note TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS etsy_notes (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'research',       -- research (something Steven pasted), stats (an Etsy file), report (Etta)
+    text TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,             -- Radar has read it
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS etsy_orders (
+    id TEXT PRIMARY KEY,                         -- Printify order id
+    status TEXT NOT NULL,
+    total_cents INTEGER,
+    cost_cents INTEGER,
+    items TEXT NOT NULL DEFAULT '[]',            -- JSON list of {title, quantity}
+    told INTEGER NOT NULL DEFAULT 0,             -- Steven has been sent the "press Send to production" alert
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS activity (
     id INTEGER PRIMARY KEY,
     agent TEXT NOT NULL,
@@ -321,7 +395,8 @@ def init():
         # Databases made before these columns existed get them added in place.
         have = {r["name"] for r in c.execute("PRAGMA table_info(clips)")}
         for col, kind in (("captioned", "INTEGER"), ("boss_note", "TEXT"), ("campaign_id", "INTEGER"),
-                          ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT")):
+                          ("hooks", "TEXT"), ("hook_label", "TEXT"), ("hook_style", "TEXT"), ("hook_text", "TEXT"),
+                          ("approved_at", "TEXT"), ("stale_state", "TEXT")):   # queue age; stale_state: flagged or kept
             if col not in have:
                 c.execute(f"ALTER TABLE clips ADD COLUMN {col} {kind}")
         have = {r["name"] for r in c.execute("PRAGMA table_info(posts)")}
@@ -330,6 +405,8 @@ def init():
                 c.execute(f"ALTER TABLE posts ADD COLUMN {col} {kind}")
         if "source" not in {r["name"] for r in c.execute("PRAGMA table_info(campaigns)")}:
             c.execute("ALTER TABLE campaigns ADD COLUMN source TEXT")  # inbox, feed or manual
+        if "score_reasons" not in {r["name"] for r in c.execute("PRAGMA table_info(campaigns)")}:
+            c.execute("ALTER TABLE campaigns ADD COLUMN score_reasons TEXT")  # JSON list: why it got its score
         have = {r["name"] for r in c.execute("PRAGMA table_info(leads)")}
         for col, kind in (("score", "INTEGER"), ("score_why", "TEXT")):   # Pitch's 1 to 10 lead score
             if col not in have:
@@ -338,6 +415,9 @@ def init():
         for col in ("build_status", "build_url", "build_note", "build_at"):
             if col not in have:
                 c.execute(f"ALTER TABLE ideas ADD COLUMN {col} TEXT")
+        for col, kind in (("source", "TEXT"), ("rating", "INTEGER"), ("gap", "TEXT")):   # the Recruiter's proposals
+            if col not in have:
+                c.execute(f"ALTER TABLE ideas ADD COLUMN {col} {kind}")
 
 
 def rows(sql: str, *args) -> list[dict]:
@@ -370,4 +450,5 @@ def update_task(task_id: int, status: str, result: str | None = None):
 
 
 def set_clip_status(clip_id: int, status: str):
-    execute("UPDATE clips SET status = ? WHERE id = ?", status, clip_id)
+    execute("UPDATE clips SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN ? ELSE approved_at END WHERE id = ?",
+            status, status, now(), clip_id)

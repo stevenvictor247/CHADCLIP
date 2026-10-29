@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from . import approvals, db, ledger, llm
+from . import approvals, build_progress, db, ledger, llm
 from .config import DAILY_BUDGET, DATA_DIR, PRICES, UNKNOWN_PRICE, VISION_PATH, model_for
 
 MUSE_DIR = DATA_DIR / "muse"
@@ -115,6 +115,8 @@ KNOWN = [
     ("Thursday printing of the opponent folder", BUILT),
     ("Depth: Monday opponent personnel sheet with auto-fetch", BUILT),
     ("Muse: Creative Director that ranks new ideas", BUILT),
+    ("Recruiter: finds gaps in HQ and proposes new agents with a 1 to 10 rating | agent recruiter | hiring agent", BUILT),
+    ("Etsy village: shirt designs on Etsy through Printify, with Etta, Radar, Quill, Loom, Warden and Dock | print on demand shirts | Etsy shop", BUILT),
     # the earlier agent ideas page
     ("Penny: views and stats for every clip | clip performance dashboard | clip stats dashboard", WAITING),
     ("Medic: keeps HQ healthy while you're away | HQ health monitor", WAITING),
@@ -124,7 +126,7 @@ KNOWN = [
     ("Remy: reminders and to-dos by text", WAITING), ("Loot: free game alerts", WAITING),
     ("Gus: meal plans and shopping list", WAITING), ("Hawk: price watch alerts", WAITING),
     ("Sorty: inbox sorting and draft replies", WAITING), ("Keeper: receipts, returns and warranties", WAITING),
-    ("Mainstreet: websites for local businesses", WAITING), ("Inky: print-on-demand designs and Etsy listings", WAITING),
+    ("Mainstreet: websites for local businesses", WAITING), ("Inky: print-on-demand designs and Etsy listings", BUILT),
     ("Echo: weekly newsletter writer | weekly newsletter", WAITING), ("Coach: daily habit check-ins", WAITING),
     ("Paper: explains letters, bills and forms from a photo", WAITING),
     ("Stars: Google review replies for local businesses", WAITING), ("Flip: resale deal finder", WAITING),
@@ -313,7 +315,7 @@ def _safe(fn, default=None):
 
 def facts() -> dict:
     """A snapshot of HQ for Muse to think about. Reads only; never calls Claude."""
-    from . import agents, campaigns, creators, money, tally
+    from . import activity, agents, campaigns, creators, money, tally
     from .config import village_of
     team = [{"name": a.name, "role": a.role, "village": village_of(a.name)} for a in agents.AGENTS.values()]
     months = _safe(lambda: money.summary().get("periods", {}), {})
@@ -333,6 +335,8 @@ def facts() -> dict:
                        "ORDER BY usd DESC", _month_start())
     return {
         "team": team,
+        "agents_idle": _safe(lambda: [{"name": r["name"], "why": r["why"], "rounds_7d": r["runs_7d"]}
+                                      for r in activity.report() if r["state"] == "waiting"], []),   # capacity to put to work
         "money": months,   # today, month and all time: made (campaigns + logged income), spent (Claude + expenses), net
         "claude_cost_this_month_by_agent": by_agent,
         "clips_by_status": clips,
@@ -482,7 +486,8 @@ def round_cost_estimate(weekly: bool = False) -> float:
 
 
 def open_ideas() -> int:
-    return db.rows("SELECT COUNT(*) n FROM ideas WHERE status = 'proposed'")[0]["n"]
+    """Ideas waiting for Steven's answer. The Recruiter's proposals have their own cap, so they never hold Muse back."""
+    return db.rows("SELECT COUNT(*) n FROM ideas WHERE status = 'proposed' AND COALESCE(source, 'muse') != 'recruiter'")[0]["n"]
 
 
 def _days_since_round(state: dict | None = None) -> float | None:
@@ -862,6 +867,7 @@ def start_build(idea_id: int) -> str:
     if not build_ready():
         return "Build it isn't connected to Claude yet: add HQ_BUILD_TOKEN and HQ_BUILD_URL in Settings, or copy the build brief."
     text = (f"Idea #{i['id']}: {i['title']}\nSteven pressed Build it in Agent HQ on {datetime.now():%A %d %B %Y %H:%M}."
+            f"\nPut \"Idea #{i['id']}\" in the title of your pull request: Agent HQ finds your PR by it to show Steven's progress bar."
             f"\n\nBUILD BRIEF (written by Muse)\n{brief(i)}")[:60000]
     try:
         out = _fire(text)
@@ -931,7 +937,7 @@ def latest() -> dict:
     state = _state()
     running = bool(db.rows("SELECT 1 FROM tasks WHERE agent = 'Muse' AND status IN ('queued', 'running') LIMIT 1"))
     return {
-        "ideas": ideas(),
+        "ideas": build_progress.add_to(ideas()),
         "last_round": state.get("last_round"),
         "next": _next_round_text(state),
         "running": running,

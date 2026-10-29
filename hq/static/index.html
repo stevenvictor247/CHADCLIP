@@ -186,8 +186,12 @@
   .world.fb .chip { border-color:rgba(255,204,51,.35); }
   .world.fb .world-ticker { border-color:#FFCC33; }
   .world.fb .world-hud, .world.fb .world-hud .world-title { justify-content:flex-start; margin-right:0; }   /* keep the scoreboard clear */
+  .world.etsy .chip { border-color:rgba(244,114,182,.35); }
+  .world.etsy .world-ticker { border-color:#f472b6; }
   @media (min-width:1100px) { .towns .world-hud .chip { font-size:11px; padding:3px 9px; } }
   .camp .tag.village-football { border-color:rgba(255,204,51,.6); color:#FFCC33; }
+  .camp .tag.village-etsy { border-color:rgba(244,114,182,.6); color:#f9a8d4; }
+  .camp .shirtpreview { display:block; width:100%; max-width:520px; border-radius:10px; margin:6px 0; }
   @media (max-width:600px) { .world-title { display:none; } .world-hud { justify-content:flex-end; } }
 
   @media (prefers-reduced-motion: reduce) {
@@ -212,17 +216,23 @@
   </div>
 </header>
 <div class="towns" id="towns">
-<section class="world" id="world">
+<section class="world" id="world" data-label="🏘️ HQ Town">
   <canvas id="worldcanvas" aria-label="HQ Town: your agents at work. Click an agent or a building."></canvas>
   <div class="world-hud"><span class="chip world-title">🏘️ HQ Town</span><button class="chip stat-chip" id="worldwaiting" title="Clips and messages waiting for your OK"></button><span class="chip stat-chip" id="worldposted" title="Approved, posted and failed clips"></span><span class="chip" id="worldclock"></span><button class="chip" id="worldmode" title="Change the time of day (both villages)">🕒 Real time</button></div>
   <div class="world-ticker" id="worldticker"></div>
   <div class="world-tip" id="worldtip"></div>
 </section>
-<section class="world fb" id="fbworld">
+<section class="world fb" id="fbworld" data-label="🏈 Warrior Village">
   <canvas id="fbcanvas" aria-label="Warrior Village: your football agents at work. Click an agent or a building."></canvas>
   <div class="world-hud"><span class="chip world-title">🏈 Warrior Village · Wayne State</span><span class="chip" id="fbcountdown"></span></div>
   <div class="world-ticker" id="fbticker"></div>
   <div class="world-tip" id="fbtip"></div>
+</section>
+<section class="world etsy" id="etsyworld" data-label="🛍️ Print Street">
+  <canvas id="etsycanvas" aria-label="Print Street: your Etsy shirt shop agents at work. Click an agent or a building."></canvas>
+  <div class="world-hud"><span class="chip world-title">🛍️ Print Street · Etsy</span><button class="chip stat-chip" id="etsywaiting" title="Shirts waiting for your OK or for you to publish"></button><span class="chip" id="etsylive" title="Shirts live on Etsy and sales"></span></div>
+  <div class="world-ticker" id="etsyticker"></div>
+  <div class="world-tip" id="etsytip"></div>
 </section>
 </div>
 <main>
@@ -245,7 +255,7 @@
   <div>
     <section id="apprsection" style="display:none">
       <h2>Waiting for your OK <span class="count" id="apprcount"></span>
-        <select id="apprfilter" aria-label="Which village"><option value="">Both villages</option><option value="business">🏘️ HQ Town</option><option value="football">🏈 Warrior Village</option></select></h2>
+        <select id="apprfilter" aria-label="Which village"><option value="">Both villages</option><option value="business">🏘️ HQ Town</option><option value="football">🏈 Warrior Village</option><option value="etsy">🛍️ Print Street</option></select></h2>
       <div id="approvals"></div>
     </section>
     <section id="campsection">
@@ -280,7 +290,8 @@
       <div class="camp" id="leads"></div>
     </section>
     <section>
-      <h2>Clips waiting for approval <span class="count" id="pendingcount" style="display:none"></span></h2>
+      <h2>Clips waiting for approval <span class="count" id="pendingcount" style="display:none"></span>
+        <button class="bad" id="rejectflagged" style="display:none;float:right;font-size:13px" onclick="rejectFlagged()"></button></h2>
       <div class="clips" id="pending"></div>
     </section>
     <section>
@@ -298,16 +309,19 @@
 <div id="sweep"></div>
 <div id="muse"></div>
 <div id="football"></div>
+<div id="etsy"></div>
 <div id="toasts"></div>
 <script src="/money-bar.js"></script>
 <script src="/town-kit.js"></script>
 <script src="/world.js"></script>
 <script src="/football-town.js"></script>
+<script src="/etsy-town.js"></script>
 <script src="/hq-bar.js"></script>
 <script src="/setup-card.js"></script>
 <script src="/sweep-panel.js"></script>
 <script src="/muse-panel.js"></script>
 <script src="/football-panel.js"></script>
+<script src="/etsy-panel.js"></script>
 <script src="/hq-tabs.js"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -326,12 +340,20 @@ const LOOKS = {
   Pitch: {color: "#a78bfa", prop: "✉️", hat: null},
   Sweep: {color: "#4f8fe8", prop: "🧹", hat: "janitor"},
   Muse: {color: "#e879f9", prop: "💡", hat: "beret"},
+  Recruiter: {color: "#fb923c", prop: "🧲", hat: null},
   // Warrior Village, in Wayne State green and gold
   Captain: {color: "#0C5449", prop: "🏈", hat: "headset"},
   Clock: {color: "#FFCC33", prop: "⏰", hat: null},
   Ref: {color: "#f1f5f9", prop: "🚩", hat: "stripes"},
   Tells: {color: "#2bb59a", prop: "📊", hat: null},
   Scribe: {color: "#f5deb3", prop: "📓", hat: null},
+  // Print Street, the Etsy village
+  Etta: {color: "#f472b6", prop: "🛍️", hat: "bow"},
+  Radar: {color: "#38bdf8", prop: "📡", hat: null},
+  Quill: {color: "#fbbf24", prop: "✒️", hat: null},
+  Loom: {color: "#a78bfa", prop: "🎨", hat: "beret"},
+  Warden: {color: "#ef4444", prop: "🛡️", hat: "cap"},
+  Dock: {color: "#22c55e", prop: "📦", hat: "cap"},
 };
 const PALETTE = ["#7cc4ff", "#4ade80", "#c084fc", "#facc15", "#fb923c", "#2dd4bf"];
 const PROPS = ["💡", "📈", "🛒", "🎨", "📦", "🔎"];
@@ -351,6 +373,7 @@ function critter({color, hat}) {
     headset: `<path d="M18 20 Q36 2 54 20 Z" fill="#0C5449" stroke="#FFCC33" stroke-width="1.5"/><rect x="44" y="17" width="18" height="4" rx="2" fill="#0C5449"/>
       <path d="M12 38 Q12 12 36 12 Q60 12 60 38" stroke="#1d1426" stroke-width="3" fill="none"/><rect x="8" y="34" width="7" height="12" rx="3" fill="#1d1426"/><rect x="57" y="34" width="7" height="12" rx="3" fill="#1d1426"/>`,
     beret: `<ellipse cx="34" cy="15" rx="18" ry="7" fill="#3b1f5c" transform="rotate(-8 34 15)"/><circle cx="36" cy="7" r="2.5" fill="#3b1f5c"/>`,
+    bow: `<path d="M36 12 L22 4 L22 20 Z M36 12 L50 4 L50 20 Z" fill="#be185d"/><circle cx="36" cy="12" r="4" fill="#9d174d"/>`,
     stripes: `<g fill="#1d1426"><rect x="21" y="53" width="3.5" height="8"/><rect x="30" y="54" width="3.5" height="10"/><rect x="39" y="54" width="3.5" height="10"/><rect x="48" y="53" width="3.5" height="8"/></g>`,
   };
   return `<svg viewBox="0 0 72 72" aria-hidden="true">
@@ -418,7 +441,7 @@ function setCount(key, value) {
 
 function renderAgents(list) {
   list = list.filter(a => (a.village || "business") === "business");   // the football team is in the Warrior Village panel
-  const key = list.map(a => a.name + "|" + (a.doing || "")).join(";");
+  const key = list.map(a => a.name + "|" + (a.doing || "") + "|" + (a.why || "")).join(";");
   if (key === shownAgents) return;   // keep the animations running smoothly
   shownAgents = key;
   $("agents").innerHTML = rooms(list);
@@ -426,13 +449,13 @@ function renderAgents(list) {
 function rooms(list) {
   return list.map(a => {
     const l = look(a.name);
-    return `<div class="room ${a.doing ? "busy" : ""}" style="--c:${l.color}" title="${esc(a.doing || a.role)}">
+    return `<div class="room ${a.doing ? "busy" : ""}" style="--c:${l.color}" title="${esc(a.doing || (a.why ? a.why + (a.unlock ? " To fix: " + a.unlock : "") : a.role))}">
       <span class="tag">${a.doing ? "working" : "idle"}</span>
       <span class="zzz">z z</span>
       <div class="critter">${critter(l)}<span class="prop">${l.prop}</span></div>
       <div class="name">${esc(a.name)}</div>
       <div class="bubble">${esc(a.doing || "")}</div>
-      <div class="role">${a.doing ? "" : esc(a.role)}</div>
+      <div class="role">${a.doing ? "" : esc(a.why || a.role)}</div>
     </div>`;
   }).join("");
 }
@@ -476,10 +499,12 @@ async function refresh() {
   try { window.HQWorld?.update(s); } catch (err) { console.error("HQ Town:", err); }   // the town never breaks the dashboard
   try { window.FootballTown?.update(s); } catch (err) { console.error("Warrior Village:", err); }
   try { window.HQFootball?.update(s); } catch (err) { console.error("Football panel:", err); }
+  try { window.EtsyTown?.update(s); } catch (err) { console.error("Print Street:", err); }
+  try { window.HQEtsy?.update(s); } catch (err) { console.error("Etsy panel:", err); }
   $("nokey").style.display = s.has_llm ? "none" : "block";
   renderChat(s.chat);
   renderLibrary(s.clips);
-  const key = JSON.stringify(s.pending.map(c => [c.id, c.boss_note || ""]));  // a new Boss note re-renders too
+  const key = JSON.stringify(s.pending.map(c => [c.id, c.boss_note || "", (c.flags || []).length]));  // a new Boss note re-renders too
   if (key !== shownPending) {   // don't re-render while someone may be editing a caption
     const before = new Set(JSON.parse(shownPending || "[]").map(([id]) => String(id)));
     const fresh = s.pending.filter(c => !before.has(String(c.id)));
@@ -487,6 +512,10 @@ async function refresh() {
     shownPending = key;
     $("pendingcount").style.display = s.pending.length ? "" : "none";
     $("pendingcount").textContent = s.pending.length;
+    renderApprovals(allApprovals);   // the Clips / All counts include clips waiting
+    const nFlagged = s.pending.filter(c => (c.flags || []).length).length;
+    $("rejectflagged").style.display = nFlagged ? "" : "none";
+    $("rejectflagged").textContent = `Reject all ${nFlagged} flagged`;
     $("pending").innerHTML = s.pending.length ? s.pending.map((c, i) => `
       <div class="clip" data-id="${c.id}" style="animation-delay:${i * 60}ms">
         <video src="/clips/${esc(fileName(c.path))}" controls preload="metadata"></video>
@@ -495,6 +524,7 @@ async function refresh() {
         ${hookPicker(c)}
         <textarea class="caption">${esc(c.caption)}</textarea>
         <div class="muted">${esc(c.reason)}</div>
+        ${(c.flags || []).length ? `<div class="bossnote">⚠️ ${c.flags.map(esc).join("; ")}</div>` : ""}
         ${c.boss_note ? `<div class="bossnote">🧐 Boss: ${esc(c.boss_note)}</div>` : ""}
         <div class="row"><button onclick="decide(${c.id}, 'approve')">Approve</button>
         <button class="bad" onclick="decide(${c.id}, 'reject')">Reject</button></div>
@@ -586,32 +616,52 @@ function renderCampaigns(list) {
     return `<div class="camp"><h3>${esc(c.name)} <span class="tag">${esc(c.status)}</span>${c.source && c.source !== "manual" ? `<span class="tag">found: ${esc(c.source)}</span>` : ""}${c.score != null ? `<span class="tag">${c.score}/10</span>` : ""}</h3>
       <div class="meta">${esc(pay)} · ${esc((c.platforms || []).join(", ") || "any platform")}</div>
       <div class="meta">${esc(c.verdict || "")}</div>
+      ${(c.score_reasons || []).length ? `<ul class="meta">${c.score_reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
       ${(c.flags || []).length ? `<div class="warn">⚠ ${esc(c.flags.join("; "))}</div>` : ""}${earned}${buttons}</div>`;
   }).join("");
 }
 let shownApprovals = null, allApprovals = [];
-const VILLAGE = {business: "🏘️ HQ Town", football: "🏈 Warrior Village"};
+const VILLAGE = {business: "🏘️ HQ Town", football: "🏈 Warrior Village", etsy: "🛍️ Print Street"};
+// Which type an approval is: shown under Approvals in the top bar's drop-downs (see GROUPS in hq-tabs.js).
+function apprGroup(a) {
+  const v = a.village || "business";
+  if (v === "football" || v === "etsy") return v;
+  if (["pitch", "followup", "sample"].includes(a.kind)) return "pitch";
+  if (a.kind === "muse_idea" || a.kind === "recruit_idea") return "ideas";
+  if (["clip_pack", "recap", "rally"].includes(a.kind)) return "clips";
+  return "other";
+}
 function renderApprovals(list) {
   allApprovals = list;
-  $("apprsection").style.display = list.length ? "" : "none";
+  const counts = {all: list.length, clips: 0, pitch: 0, etsy: 0, football: 0, ideas: 0, other: 0};
+  list.forEach(a => counts[apprGroup(a)]++);
+  const pend = +$("pendingcount").textContent || 0;
+  counts.clips += pend; counts.all += pend;
+  window.hqApprCounts = counts;
+  const sub = document.body.dataset.sub === "approvals";
+  const group = document.body.dataset.agroup || "all";
+  $("apprsection").style.display = list.length || sub || (document.body.dataset.tab === "approvals" && group !== "all") ? "" : "none";
   const villages = new Set(list.map(a => a.village || "business"));
-  $("apprfilter").style.display = villages.size > 1 || $("apprfilter").value ? "" : "none";
-  const want = $("apprfilter").value;
-  list = list.filter(a => !want || (a.village || "business") === want);
+  $("apprfilter").style.display = !sub && (villages.size > 1 || $("apprfilter").value) ? "" : "none";
+  const want = sub ? "" : $("apprfilter").value;
+  list = list.filter(a => (!want || (a.village || "business") === want) && (group === "all" || group === "clips" || apprGroup(a) === group));
+  if (group === "clips") list = [];
   $("apprcount").textContent = list.length;
-  const key = want + JSON.stringify(list);
+  const key = want + group + JSON.stringify(list);
   if (key === shownApprovals) return;
   shownApprovals = key;
   const noEmail = list.some(a => a.kind === "pitch" && !(a.payload || {}).email);
   $("approvals").innerHTML = (noEmail ? `<div class="row"><button class="ghost" onclick="recheckEmails()">Find emails for pitches that say "I'll send it"</button></div>` : "") +
-    (list.length || !want ? "" : `<div class="muted">Nothing waiting in ${esc(VILLAGE[want])}.</div>`) +
-    list.map(a => `<div class="camp"><h3>${esc(a.title)} <span class="tag">${esc(a.agent)}</span>${villages.size > 1 || a.village === "football"
+    (list.length || group === "clips" ? "" : `<div class="muted">${want ? `Nothing waiting in ${esc(VILLAGE[want])}.` : "Nothing is waiting for your OK here."}</div>`) +
+    list.map(a => `<div class="camp"><h3>${esc(a.title)} <span class="tag">${esc(a.agent)}</span>${villages.size > 1 || (a.village || "business") !== "business"
       ? `<span class="tag village-${esc(a.village || "business")}">${VILLAGE[a.village || "business"]}</span>` : ""}</h3>
+    ${a.kind === "etsy_design" ? `<img class="shirtpreview" src="/api/approvals/${a.id}/file" alt="The shirt in dark and light" loading="lazy">` : ""}
     <pre>${esc(a.preview)}</pre>
     <div class="row">${(a.payload || {}).draft ? `<button class="ghost" onclick="window.open('/api/approvals/${a.id}/file', '_blank')">👁 Preview</button>` : ""}<button onclick="decideApproval(${a.id}, 'approve')">${esc(a.yes_label)}</button>
     <button class="ghost" onclick="decideApproval(${a.id}, 'reject')">${esc(a.no_label)}</button></div></div>`).join("");
 }
 $("apprfilter").onchange = () => renderApprovals(allApprovals);
+document.addEventListener("hq-tab", () => renderApprovals(allApprovals));
 // Warrior Village's Mailroom shows its own items. Says whether anything is waiting there.
 window.hqShowApprovals = village => {
   if (!allApprovals.some(a => (a.village || "business") === village)) return false;
@@ -731,6 +781,14 @@ async function decideCampaign(id, decision) {
   const r = await (await fetch(`/api/campaigns/${id}/${decision}`, {method: "POST", headers: {"X-HQ": "1"}})).json();
   toast(r.message || "Done");
   shownCampaigns = null; refresh();
+}
+
+async function rejectFlagged() {
+  const n = $("rejectflagged").textContent.match(/\d+/)?.[0];
+  if (!confirm(`Reject all ${n} flagged clips? Clips without a problem stay in the queue.`)) return;
+  const r = await (await fetch("/api/clips/reject-flagged", {method: "POST", headers: {"X-HQ": "1"}})).json();
+  toast(`Rejected ${r.rejected.length} flagged clips. ${r.left} left to review.`);
+  shownPending = null; refresh();
 }
 
 async function decide(id, decision) {

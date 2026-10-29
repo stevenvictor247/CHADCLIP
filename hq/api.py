@@ -10,13 +10,15 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
-from . import muse_api, sweep_api
+from . import activity, agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
+from . import etsy, etsy_api, muse_api, recruiter_api, sweep_api
 from .config import CLIPS_DIR, FOOTBALL_DATA, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
 app = FastAPI(title="Agent HQ")
 app.include_router(sweep_api.router)
 app.include_router(muse_api.router)
+app.include_router(recruiter_api.router)
+app.include_router(etsy_api.router)
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
 STATIC = Path(__file__).parent / "static"
 SESSION_COOKIE = "hq_session"
@@ -98,6 +100,17 @@ class TestIn(BaseModel):
 class ClipEdit(BaseModel):
     title: str | None = None
     caption: str | None = None
+
+
+def _pending_clips() -> list[dict]:
+    """Waiting clips, each with `flags`: the problems written on its card."""
+    from . import review
+    clips = db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY score DESC, id")
+    try:
+        found = review.pending_issues(clips, review._chad_settings())
+    except Exception:   # the dashboard never breaks over a flag check
+        found = {}
+    return [{**c, "flags": found.get(c["id"], [])} for c in clips]
 
 
 def _library() -> list[dict]:
@@ -240,6 +253,10 @@ def pause(body: PauseIn):
 def state():
     from .agents.chad.publish import paused
     running = {r["agent"]: r["instructions"] for r in db.rows("SELECT agent, instructions FROM tasks WHERE status = 'running'")}
+    try:
+        act = activity.by_name()   # why an idle agent is idle; never lets a failed look break the dashboard
+    except Exception:
+        act = {}
     return {
         "has_llm": HAS_LLM,
         "paused": paused(),
@@ -251,15 +268,18 @@ def state():
         "allowed_creators": creators.allowed(),
         "approvals": [{**a, "village": village_of(a["agent"])} for a in approvals.pending()],
         "football": football.state(),
+        "etsy": etsy.state(),
         "tally": _tally_summary(),
         "ideas": _ideas_summary(),
         "leads": db.rows("SELECT id, name, platform, handle, contact, status, followups, followup_at, score, score_why "
                          "FROM leads WHERE score IS NULL OR score >= 4 ORDER BY score IS NULL, score DESC, id DESC LIMIT 50"),
         "agents": [{"name": "Boss", "role": "Directs the team and reports to you.", "doing": None, "village": "business"}] +
-                  [{"name": a.name, "role": a.role, "doing": running.get(a.name), "village": a.village}
+                  [{"name": a.name, "role": a.role, "doing": running.get(a.name), "village": a.village,
+                    "state": act.get(a.name, {}).get("state"), "why": act.get(a.name, {}).get("why"),
+                    "unlock": act.get(a.name, {}).get("unlock")}
                    for a in agents.AGENTS.values()],
         "counts": {r["status"]: r["n"] for r in db.rows("SELECT status, COUNT(*) n FROM clips GROUP BY status")},
-        "pending": db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY score DESC, id"),
+        "pending": _pending_clips(),
         "clips": _library(),
         "tasks": db.rows("SELECT * FROM tasks ORDER BY id DESC LIMIT 20"),
         "posts": db.rows("SELECT * FROM posts ORDER BY id DESC LIMIT 20"),
@@ -449,6 +469,14 @@ class HookPick(BaseModel):
     label: str
 
 
+@app.post("/api/clips/reject-flagged")
+def reject_flagged_clips(request: Request):
+    """The "Reject all flagged" button: rejects only waiting clips that have a written problem."""
+    _from_hq_page(request)
+    from . import review
+    return review.reject_flagged()
+
+
 @app.post("/api/clips/{clip_id}/hook")
 def pick_hook(clip_id: int, body: HookPick):
     """Hook Lab: Steven taps opening line A, B or C on the approval card."""
@@ -571,6 +599,12 @@ def instagram_disconnect(request: Request):
 class YouTubeIn(BaseModel):
     account: str
     text: str = ""
+
+
+@app.get("/api/activity")
+def agent_activity():
+    """Every agent: working, waiting (and why, and what unlocks it) or ready, with its rounds in the last 7 days."""
+    return activity.report()
 
 
 @app.get("/api/youtube")
@@ -779,6 +813,29 @@ def football_depth_build(request: Request, opponent: str | None = None, fetch: b
                                       created_by="Steven")}
 
 
+@app.post("/api/football/print/extras")
+def football_print_extras(request: Request, file: UploadFile = File(...)):
+    _from_hq_page(request)
+    from .football import printing
+    data = file.file.read(15 * 1024 * 1024 + 1)
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(400, "That file is over 15 MB.")
+    try:
+        name = printing.save_extra(file.filename or "sheet.pdf", data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"message": f"{name} will print every Thursday with the opponent folder.", "print": printing.state()}
+
+
+@app.post("/api/football/print/extras/{name}/remove")
+def football_print_extras_remove(name: str, request: Request):
+    _from_hq_page(request)
+    from .football import printing
+    if not printing.remove_extra(name):
+        raise HTTPException(404, "That sheet isn't on the list.")
+    return {"message": f"{name} removed from the Thursday print.", "print": printing.state()}
+
+
 @app.post("/api/football/print/pause")
 def football_print_pause(body: PauseIn, request: Request):
     _from_hq_page(request)
@@ -832,14 +889,27 @@ def football_outbox_file(name: str):
 
 @app.get("/api/approvals/{approval_id}/file")
 def approval_file(approval_id: int):
-    """Opens the draft file behind an approval (a scouting PDF, a personnel sheet) so you can look before you say yes."""
+    """Opens the draft file behind an approval (a scouting PDF, a personnel sheet, a shirt preview) so you can look
+    before you say yes."""
     rows = [a for a in approvals.pending() if a["id"] == approval_id]
     draft = (rows[0]["payload"].get("draft") if rows else None)
     path = Path(draft).resolve() if draft else None
-    if not path or path.parent != (FOOTBALL_DATA / "drafts").resolve() or not path.is_file():
+    from .etsy.work import DESIGNS_DIR
+    allowed = path and (path.parent == (FOOTBALL_DATA / "drafts").resolve() or path.parent.parent == DESIGNS_DIR.resolve())
+    if not allowed or not path.is_file():
         raise HTTPException(404, "There's no draft file to preview for that.")
     inline = path.suffix.lower() in (".pdf", ".png", ".jpg", ".jpeg", ".txt")
     return FileResponse(path, filename=path.name, content_disposition_type="inline" if inline else "attachment")
+
+
+@app.post("/api/football/outbox/{name}/print")
+def football_outbox_print(name: str, request: Request):
+    _from_hq_page(request)
+    path = (FOOTBALL_OUTBOX / Path(name).name).resolve()
+    if path.parent != FOOTBALL_OUTBOX.resolve() or not path.is_file():
+        raise HTTPException(404, "Not in the football Outbox")
+    return {"message": f"Printing {path.name}…",
+            "task_id": db.create_task("Clock", f"Print {path.name}", {"print_file": path.name}, created_by="Steven")}
 
 
 @app.post("/api/football/outbox/{name}/delete")

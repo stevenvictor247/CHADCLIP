@@ -48,3 +48,29 @@ def test_town_kit_is_served(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
     r = TestClient(hq.api.app).get("/town-kit.js")
     assert r.status_code == 200 and "HQTown" in r.text
+
+
+def test_each_approval_type_has_a_dropdown_option():
+    js = (STATIC / "hq-tabs.js").read_text(encoding="utf-8")
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    groups = set(re.findall(r'\{id: "(\w+)", icon: "[^"]+", label: "[^"]+"\},', js.split("const GROUPS")[1].split("];")[0]))
+    assert {"all", "clips", "pitch", "etsy", "football", "ideas", "other"} <= groups
+    tab_groups = set(re.findall(r'appr: "(\w+)"', js))
+    assert {"clips", "pitch", "etsy", "football", "ideas"} <= tab_groups and tab_groups <= groups
+    # the dashboard sorts approvals into those same groups and publishes the counts the menus show
+    fn = html.split("function apprGroup(a)")[1].split("function renderApprovals")[0]
+    for g in groups - {"all"}:
+        assert f'"{g}"' in fn or g == "other"
+    assert "window.hqApprCounts" in html and 'document.addEventListener("hq-tab"' in html
+
+
+def test_approval_kinds_all_land_in_a_group():
+    # every approval kind the agents create must be one apprGroup() knows or fall into "other" on purpose
+    kinds = set()
+    for f in (Path(__file__).parent.parent / "hq").rglob("*.py"):
+        kinds |= set(re.findall(r'approvals\.request\(\s*"\w+",\s*"(\w+)"', f.read_text(encoding="utf-8")))
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    fn = html.split("function apprGroup(a)")[1].split("function renderApprovals")[0]
+    known = set(re.findall(r'"(\w+)"', fn))
+    assert {"pitch", "followup", "sample", "muse_idea", "clip_pack", "recap", "rally"} <= known
+    assert kinds, "expected to find approvals.request calls"

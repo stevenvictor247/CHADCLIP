@@ -72,7 +72,8 @@ def publish_approved() -> list[str]:
     if paused():
         return ["HQ is paused: nothing posts until you press Resume."]
     report = []
-    for clip in db.rows("SELECT * FROM clips WHERE status = 'approved' ORDER BY id"):
+    for clip in db.rows("SELECT * FROM clips WHERE status = 'approved' "
+                          "AND COALESCE(stale_state, '') != 'flagged' ORDER BY id DESC"):   # newest first so clips stay fresh; flagged = held for Steven's keep/drop
         accounts = accounts_for(clip["creator"])
         if not accounts:
             report.append(f"Clip #{clip['id']}: approved, but no clipping accounts are enabled in accounts.yaml yet.")

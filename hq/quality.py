@@ -529,6 +529,8 @@ def _village_spend(start: str, end: str) -> tuple[float, float]:
                      "GROUP BY agent", start, end):
         if village_of(r["agent"]) == "football":
             football += r["usd"] or 0
+        elif village_of(r["agent"]) == "etsy":
+            pass   # the Etsy village has its own caps, so it never counts toward the business budget
         else:
             business += r["usd"] or 0
     return business, football

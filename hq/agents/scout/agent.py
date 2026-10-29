@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 
 from ... import campaigns, creators, db, discovery, ledger, llm, relay
 from ...config import model_for
@@ -12,13 +13,19 @@ SYSTEM = """You are Scout, who vets paid clipping campaigns for Steven, a beginn
 into TikToks, YouTube Shorts and Instagram Reels from his own clipping accounts.
 
 You are given the text of a campaign (rules, pay, requirements). Pull out the facts exactly as written. Never guess a
-number that isn't there: use null. Then rate the campaign from 0 to 10 for Steven:
-- pay per 1,000 views (under $0.50 is poor, $1 to $3 is good),
-- how much budget is left,
-- how easy the rules are (required tags, minimum views, face-on-camera or original footage demands),
-- whether source videos are provided,
-- anything that looks like a scam or unpaid-work trap (asking for money up front, login details, vague payouts).
-Write the verdict in two plain sentences a beginner understands."""
+number that isn't there: use null. Then score the campaign from 0 to 10 for Steven. Only a campaign that is clearly
+worth his time scores 8 or more; be strict. Weigh these seven things:
+- payout rate per 1,000 views (under $0.50 is poor, $1 to $3 is good),
+- clear rules (required tags, minimum views, face-on-camera or original footage demands; vague rules score low),
+- a reliable payer (a named creator, agency or brand with a stated payout process; vague or unproven payouts and
+  anything that asks for money or login details up front is a scam risk and caps the score at 4),
+- fit with Chad: the campaign itself is the permission to clip, so it must say clipping that creator's content is
+  allowed and ideally provide source videos,
+- effort: how hard a good clip is to make,
+- competition: how many clippers likely share the budget,
+- deadline and budget left (a nearly spent or soon-ending campaign scores low).
+Give score_reasons: one short plain line per thing above, each starting with its name and a verdict, e.g.
+"Payout: $2 per 1,000 views, good". Write the verdict in two plain sentences a beginner understands."""
 
 SCHEMA = {
     "type": "object",
@@ -37,18 +44,44 @@ SCHEMA = {
         "content_sources": {"type": "array", "items": {"type": "string"}, "description": "Video links provided for clipping"},
         "red_flags": {"type": "array", "items": {"type": "string"}},
         "score": {"type": "number", "description": "0 to 10 for Steven"},
+        "score_reasons": {"type": "array", "items": {"type": "string"},
+                          "description": "One short line each for payout, rules, payer, fit, effort, competition, deadline"},
         "verdict": {"type": "string"},
     },
     "required": ["name", "creator", "platforms", "rate_per_1k", "budget_left_pct", "min_views", "max_payout",
-                 "required_tags", "credit", "rules", "clip_style", "content_sources", "red_flags", "score", "verdict"],
+                 "required_tags", "credit", "rules", "clip_style", "content_sources", "red_flags", "score", "score_reasons",
+                 "verdict"],
     "additionalProperties": False,
 }
+
+
+SEARCH_SYSTEM = """You are Scout's researcher. You search the open web for paid clipping campaigns that Steven, a beginner, could
+clip for: a streamer, creator or brand pays people per 1,000 views of short clips posted to their own TikTok, YouTube
+Shorts or Instagram accounts.
+
+Find campaigns that are open right now and publicly described on a page anyone can read without logging in: a
+creator's or agency's own site, a public sign-up page, a news or blog roundup that links the real page. Search a few
+different ways (streamer clipping programs, "clipper" pay per view programs, brand clipping campaigns).
+
+Skip anything that asks for money, a deposit or login details up front, promises vague or guaranteed riches, or has no
+stated pay. Never invent a campaign, a link or a number. For each one give the page link exactly as found, the
+campaign name, and an excerpt copied as written from the page or search result (rules, pay per 1,000 views, budget).
+It is fine to return few or none.
+
+Finish with one JSON object and nothing after it, shaped exactly like this:
+{"candidates": [{"name": "...", "url": "...", "excerpt": "..."}]}"""
+
+SEARCH_PROMPT = "Find up to {n} open paid clipping campaigns. Return only ones you actually found, with their real page links."
+
+SEARCH_TURNS = 4   # a long search can pause; this many resumes at most
+SEARCH_USES = 6    # web searches per run, about 6 cents
 
 
 def describe(c: dict) -> str:
     """A short message about a campaign for the phone or the Boss."""
     pay = f"${c['rate_per_1k']:g} per 1,000 views" if c.get("rate_per_1k") is not None else "pay not stated"
     lines = [f"Campaign #{c['id']}: {c['name']} ({c.get('score') or '?'}/10)", pay, c.get("verdict") or ""]
+    lines += [f"• {r}" for r in c.get("score_reasons") or []]
     if c["flags"]:
         lines.append("Watch out: " + "; ".join(c["flags"]))
     return "\n".join(x for x in lines if x)
@@ -85,6 +118,8 @@ class Scout(Agent):
                 return True
             if discovery.inbox("queued"):
                 return False   # links waiting to be rated
+            if discovery.web_search_due():
+                return False   # the daily web search hasn't run yet today
             return None if discovery.feed_urls() else True   # feeds may or may not have new links: back off if empty
         return None
 
@@ -127,7 +162,7 @@ class Scout(Agent):
         if not llm.HAS_LLM:
             return "Scout needs ANTHROPIC_API_KEY set to rate campaigns."
         cap = int(os.getenv("SCOUT_MAX_PER_RUN", "10") or 10)
-        min_score = float(os.getenv("SCOUT_MIN_SCORE", "6") or 6)
+        min_score = campaigns.min_score()
         found, notes = [], []
 
         def rate(text, url, source):
@@ -175,6 +210,19 @@ class Scout(Agent):
                     break
                 discovery.mark_seen(link)
 
+        if discovery.web_search_due() and len(found) < cap and not ledger.over_budget():
+            try:
+                for cand in self._search():
+                    if discovery.seen(cand["url"]) or campaigns.by_url(cand["url"]):
+                        continue
+                    text, how = self._read_candidate(cand)
+                    if not rate(text, cand["url"], how):
+                        break
+                    discovery.mark_seen(cand["url"])
+            except Exception as e:
+                notes.append(f"web search: {str(e)[:200]}")
+            discovery.mark_web_search_done()
+
         good = sorted((c for c in found if c["status"] == "proposed" and (c["score"] or 0) >= min_score),
                       key=lambda c: -(c["score"] or 0))
         for c in good[:3]:
@@ -185,6 +233,49 @@ class Scout(Agent):
         if stuck:
             text += f" {stuck} inbox link(s) need you to paste the page text."
         return " ".join([text] + notes)
+
+    def _search(self) -> list[dict]:
+        """Ask Claude to search the web for open campaigns. Anthropic runs the searches, so no site is scraped by HQ;
+        Whop and Discord are excluded from the results. Returns candidates with a link and an excerpt."""
+        cap = int(os.getenv("SCOUT_MAX_PER_RUN", "10") or 10)
+        tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": SEARCH_USES,
+                  "blocked_domains": sorted(discovery.BLOCKED_HOSTS)}]
+        messages = [{"role": "user", "content": SEARCH_PROMPT.format(n=cap)}]
+        for _ in range(SEARCH_TURNS):
+            # No output schema: web search results always carry citations, which structured outputs can't combine with.
+            response = llm.create(model_for("scout_search"), SEARCH_SYSTEM, messages, tools=tools, effort="low",
+                                  agent="Scout")
+            if response.stop_reason != "pause_turn":
+                break
+            messages = messages + [{"role": "assistant", "content": response.content}]  # the API resumes by itself
+        out = []
+        for c in self._candidates_in(llm.text_of(response)):
+            url = (c.get("url") or "").strip()
+            if url.lower().startswith(("http://", "https://")) and not discovery.blocked_reason(url) and c.get("excerpt"):
+                out.append({**c, "url": url})
+        return out[:cap]
+
+    @staticmethod
+    def _candidates_in(text: str) -> list[dict]:
+        """The candidates object the search answer ends with. Anything before it is ignored; unreadable means none."""
+        decoder = json.JSONDecoder()
+        for start in [m.start() for m in re.finditer(r"\{\s*\"candidates\"", text)][::-1]:
+            try:
+                data, _ = decoder.raw_decode(text[start:])
+            except ValueError:
+                continue
+            found = data.get("candidates") if isinstance(data, dict) else None
+            return [c for c in found if isinstance(c, dict)] if isinstance(found, list) else []
+        return []
+
+    @staticmethod
+    def _read_candidate(cand: dict) -> tuple[str, str]:
+        """The page itself when its site allows it (robots.txt, no blocked hosts), otherwise the excerpt the search
+        found. The second kind is marked, so Steven knows the rules weren't read from the page."""
+        try:
+            return discovery.to_text(discovery.fetch(cand["url"])), "web"
+        except Exception:
+            return "From a web search result, not the full page:\n" + cand["excerpt"], "web (excerpt only)"
 
     def find_creators(self, n: int) -> str:
         """Suggest streamers who are big right now and whose clips are getting views. Free: no Claude call."""

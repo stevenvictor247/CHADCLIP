@@ -13,9 +13,15 @@ def _ass_time(t: float) -> str:
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 
+def caption_words(words: list[dict] | None, start: float, end: float) -> list[dict]:
+    """The words that fall inside the cut, with ends clamped to it."""
+    return [{**w, "end": min(w["end"], end)} for w in words or []
+            if w["start"] >= start and w["start"] < end and w["end"] <= end + 0.6 and w["text"]]
+
+
 def write_captions(words: list[dict], start: float, end: float, path: Path, font_size: int = 64):
     """Short-form style captions: 3 words at a time, bold white with a black outline, lower middle."""
-    clip_words = [w for w in words if w["start"] >= start and w["end"] <= end and w["text"]]
+    clip_words = caption_words(words, start, end)   # a word a hair past the cut still gets its caption
     header = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n"
         "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, "

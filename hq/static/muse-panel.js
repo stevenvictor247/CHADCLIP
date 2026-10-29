@@ -50,9 +50,19 @@
     #muse .mu-build { font-size:13px; margin-top:8px; padding:6px 10px; border-radius:8px; background:rgba(148,163,184,.12); }
     #muse .mu-build.ok { background:rgba(34,197,94,.14); }
     #muse .mu-build.bad { background:rgba(239,68,68,.14); }
+    #muse .mu-bar { height:8px; border-radius:99px; background:rgba(148,163,184,.25); margin:6px 0 4px; overflow:hidden; }
+    #muse .mu-bar > i { display:block; height:100%; background:#22c55e; border-radius:99px; transition:width .6s; }
+    #muse .mu-bar.bad > i { background:#ef4444; }
+    #muse .mu-steps { display:flex; justify-content:space-between; font-size:11px; opacity:.7; }
+    #muse .mu-steps .on { opacity:1; font-weight:600; }
     #muse .mu-empty { padding:18px; text-align:center; color:var(--muted); border:1px dashed var(--line); border-radius:14px; }
     #muse .mu-empty .big { display:block; font-size:34px; margin-bottom:4px; }
     #muse .mu-dropped { font-size:12px; color:var(--muted); margin-top:4px; }
+    #muse .mu-rec { margin:12px 0 4px; padding:12px 14px; border-radius:14px; background:rgba(251,146,60,.10); border:1px solid rgba(251,146,60,.35); }
+    #muse .mu-rec h3 { margin:0 0 4px; font-size:15px; }
+    #muse .mu-badge { font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; background:rgba(251,146,60,.18); color:#fdba74; }
+    #muse .mu-gap { font-size:13px; margin-top:6px; color:var(--muted); }
+    #muse .mu-gap::before { content:"Gap it fixes: "; font-weight:800; color:#fdba74; }
     @media (max-width:900px) { #muse { padding:0 14px 4px; } }
     @media (max-width:600px) { #muse .mu-idea { grid-template-columns:34px minmax(0, 1fr); gap:10px; }
                                #muse .mu-rank { width:32px; height:32px; font-size:15px; border-radius:10px; }
@@ -66,7 +76,7 @@
     const h = (Date.now() - new Date(iso).getTime()) / 3600000;
     return h < 1 ? "just now" : h < 24 ? Math.round(h) + " h ago" : Math.round(h / 24) + " day(s) ago";
   };
-  let data = null, kind = "", busy = "", err = "", askingWhy = null, openBrief = new Set(), openGroups = new Set(), shown = "";
+  let data = null, rec = null, kind = "", busy = "", err = "", askingWhy = null, openBrief = new Set(), openGroups = new Set(), shown = "";
   let focusDraft = "";
 
   async function call(url, body) {
@@ -100,7 +110,12 @@
              <button class="ghost" data-ask="${i.id}" ${busy ? "disabled" : ""}>👎 Not for me</button></div>`;
     } else if (i.status === "approved") {
       const sent = i.build_status === "started", failed = i.build_status === "failed";
-      const state = sent ? `<div class="mu-build ok">🔨 Sent to Claude ${esc(ago(i.build_at))}. Its build session shows up under Code on claude.ai.</div>`
+      const pg = i.progress, order = ["sent", "building", "pr", "tests", "merged", "live"];
+      const at = pg ? Math.max(0, order.indexOf({unknown: "building", closed: "pr", passed: "tests"}[pg.key] || pg.key)) : 0;
+      const bar = pg ? `<div class="mu-bar ${pg.bad ? "bad" : ""}"><i style="width:${pg.pct}%"></i></div>
+          <div class="mu-steps">${["Sent", "Building", "PR open", "Tests", "Merged", "Live"].map((t, n) => `<span class="${n <= at ? "on" : ""}">${t}</span>`).join("")}</div>` : "";
+      const state = sent ? `<div class="mu-build ${pg?.bad ? "bad" : "ok"}">🔨 <b>${esc(pg?.label || "Sent to Claude")}</b> · ${pg?.pct ?? 10}%. ${esc(pg?.detail || "")}
+          Sent ${esc(ago(i.build_at))}. ${pg?.pr_url ? `<a href="${esc(pg.pr_url)}" target="_blank" rel="noopener">PR #${pg.pr_number}</a>` : "Its session shows up under Code on claude.ai."}${bar}</div>`
         : failed ? `<div class="mu-build bad">Couldn't send it to Claude: ${esc(i.build_note || "")}</div>`
         : data.build_ready ? "" : `<div class="mu-build">To have Build it start the build in Claude by itself, add HQ_BUILD_TOKEN and HQ_BUILD_URL in Settings. Until then, copy the brief and paste it to Claude.</div>`;
       acts = `${state}<div class="mu-acts">${data.build_ready && !sent ? `<button data-send="${i.id}" ${busy ? "disabled" : ""}>🔨 ${failed ? "Try again" : "Send to Claude to build"}</button>` : ""}
@@ -118,7 +133,10 @@
       <div class="mu-rank">${rank}</div>
       <div>
         <div class="mu-t">${esc(i.title)}<span class="mu-kind ${esc(i.kind)}">${esc(k)}${i.name ? " · " + esc(i.name) : ""}</span>
-          <span class="mu-score" title="Expected first-year profit for each hour of work">score <b>${Number(i.score).toLocaleString()}</b></span></div>
+          ${i.source === "recruiter" ? '<span class="mu-badge">🧲 Recruiter</span>' : ""}
+          ${i.source === "recruiter" && i.rating ? `<span class="mu-score" title="1 to 10: what it should earn or save, minus what it costs, per hour of work">rating <b>${i.rating}/10</b></span>`
+            : `<span class="mu-score" title="Expected first-year profit for each hour of work">score <b>${Number(i.score).toLocaleString()}</b></span>`}</div>
+        ${i.gap ? `<div class="mu-gap">${esc(i.gap)}</div>` : ""}
         <div class="mu-pitch">${esc(i.pitch)}</div>
         ${numbers(i)}
         ${i.why_now ? `<div class="mu-why">${esc(i.why_now)}</div>` : ""}
@@ -143,7 +161,7 @@
 
   function render() {
     if (!data) return;
-    const key = JSON.stringify(data) + kind + busy + err + askingWhy + [...openBrief].join() + [...openGroups].join();
+    const key = JSON.stringify(data) + JSON.stringify(rec) + kind + busy + err + askingWhy + [...openBrief].join() + [...openGroups].join();
     if (key === shown) return;
     shown = key;
     const pick = s => data.ideas.filter(i => i.status === s && (!kind || i.kind === kind));
@@ -166,6 +184,13 @@
         Brainstorm now up to ${usd(data.round_cost)}.
         ${last ? `<br>Last round ${esc(ago(last.at))}${last.focus ? ` on "${esc(last.focus)}"` : ""}: ${last.kept} new${(last.dropped || []).length ? `, ${last.dropped.length} dropped as repeats or against the rules` : ""}.` : ""}</div>
       ${last && (last.dropped || []).length ? `<details><summary>What Muse dropped and why</summary><div class="mu-dropped">${last.dropped.map(esc).join("<br>")}</div></details>` : ""}
+      ${rec ? `<div class="mu-rec"><h3>🧲 Recruiter <span class="muted">finds gaps in HQ and proposes new agents</span></h3>
+        <div class="mu-meta">${rec.running ? "Recruiter is looking for gaps. New proposals show here in a minute or two. " : esc(rec.next) + " "}
+          <b>${rec.made_today}</b> of <b>${rec.per_day}</b> proposals today · <b>${rec.waiting}</b> waiting · this month <b>${usd(rec.spent_month)}</b> of <b>${usd(rec.monthly_budget)}</b> ·
+          a round costs up to ${usd(rec.round_cost)}.
+          ${rec.last_round ? `<br>Last round ${esc(ago(rec.last_round.at))}: ${rec.last_round.kept} proposed${(rec.last_round.dropped || []).length ? `, ${rec.last_round.dropped.length} dropped` : ""}.` : ""}</div>
+        <div class="mu-acts"><button id="mu-recruit" ${busy || rec.running || !rec.has_llm ? "disabled" : ""}>${rec.running || busy === "recruit" ? "Looking…" : "🧲 Recruit now"}</button></div>
+        <details><summary>How Recruiter rates</summary><p class="mu-small">${esc(rec.how)}</p></details></div>` : ""}
       <div class="mu-err">${esc(err)}</div>
       ${data.ideas.length ? `<div class="mu-kinds" role="group" aria-label="Show">
           <button data-kind="" aria-pressed="${!kind}">All</button>
@@ -190,6 +215,12 @@
         focusDraft = "";
         window.toast?.("💡 " + esc(r.message));
       } catch (e) { err = e.message; }
+      busy = ""; load();
+    });
+    root.querySelector("#mu-recruit")?.addEventListener("click", async () => {
+      busy = "recruit"; err = ""; render();
+      try { const r = await call("/api/recruiter/run", {}); window.toast?.("🧲 " + esc(r.message)); }
+      catch (e) { err = e.message; }
       busy = ""; load();
     });
     root.querySelectorAll("[data-kind]").forEach(b => b.addEventListener("click", () => { kind = b.dataset.kind; render(); }));
@@ -222,6 +253,7 @@
   async function load() {
     try {
       data = await (await fetch("/api/muse")).json();
+      try { rec = await (await fetch("/api/recruiter")).json(); } catch (e) { rec = null; }
       render();
     } catch (e) { /* the dashboard shows its own offline state */ }
   }

@@ -1,0 +1,7 @@
+# Rally: the Saturday college football clip account. Rally only drafts text-and-card posts from public stats;
+# nothing is posted until you approve it, and you post it yourself.
+niche: Weekly upset watch      # the account's one neutral angle; change it to retarget every draft
+season_ends: 2027-01-12        # Rally stops drafting after this date (the season ends in January)
+posts_per_round: 5
+# Public rankings feed (free, no key). Rally only reads it; if it is down, paste facts instead.
+rankings_url: https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings

@@ -1,6 +1,8 @@
 """How Scout finds campaigns without breaking anyone's rules.
 
-Two ways in, both opt-in:
+Three ways in:
+- Web search: once a day Scout asks Claude to search the open web for open campaigns (Anthropic runs the search; Whop and
+  Discord are excluded). Switch off with SCOUT_WEB_SEARCH=0.
 - The inbox: Steven pastes campaign links or page text on the dashboard. Pasted text is rated as is. A pasted link
   is only fetched when its site allows it.
 - Feeds: public pages or RSS feeds listed in SCOUT_FEED_URLS. Scout reads the campaign links on them.
@@ -99,6 +101,23 @@ def links_on(page: str, base_url: str, limit: int = 30) -> list[str]:
         if _host(u) == _host(base_url) and u.rstrip("/") != base_url.rstrip("/") and u not in out:
             out.append(u)
     return out[:limit]
+
+
+def web_search_on() -> bool:
+    return os.getenv("SCOUT_WEB_SEARCH", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def _today_key() -> str:
+    return "websearch:" + db.now()[:10]
+
+
+def web_search_due() -> bool:
+    """Scout's own web search runs once a day, and only if it's switched on."""
+    return web_search_on() and not seen(_today_key())
+
+
+def mark_web_search_done() -> None:
+    mark_seen(_today_key())
 
 
 def feed_urls() -> list[str]:

@@ -106,7 +106,7 @@ Tune it in `config/chad.yaml` (clips per video, length, how often it checks, cap
 | --- | --- |
 | TikTok | A developer app with the Content Posting API, and an access token per clipping account. Unaudited apps can only send clips to the account's inbox (`mode: inbox`), where you tap Post; direct posting needs TikTok's audit. |
 | YouTube Shorts | A Google Cloud project with YouTube Data API v3 and a Desktop-app OAuth client. Paste its file under **Connect YouTube** in ⚙️ Settings and press **Open Google sign-in**, approve, then paste back the address you land on (works from the Mac). Publish the consent screen first or Google signs you out every 7 days. New projects get roughly 6 uploads per day of quota. |
-| Instagram Reels | A Business or Creator account linked to a Facebook page and a Meta developer app. Follow **Connect Instagram** in ⚙️ Settings: paste the app's ID and secret, then a token from the Graph API Explorer, and HQ swaps it for one that doesn't expire. Clips are uploaded straight to Instagram, so no public address is needed (`HQ_PUBLIC_BASE_URL` is optional). |
+| Instagram Reels | A Business account (Creator may work too) linked to a Facebook page and a Meta developer app. Follow **Connect Instagram** in ⚙️ Settings: paste the app's ID and secret, then a token from the Graph API Explorer, and HQ swaps it for one that doesn't expire. Clips are uploaded straight to Instagram, so no public address is needed (`HQ_PUBLIC_BASE_URL` is optional). |
 
 Paste each account's secrets under ⚙️ Settings, then switch the account on there.
 
@@ -129,9 +129,16 @@ the submitting and the numbers are manual for now.
 
 ### Scout finds campaigns on its own
 
+**Web search (new).** Once a day Scout asks Claude to search the open web for campaigns that are open right now, with no
+pasting needed. Anthropic runs the searches (about 6 cents a day plus a little Claude time, counted in the Ledger), Whop and
+Discord are excluded from the results, and every find is rated like the rest. Pages are read only where `robots.txt`
+allows; otherwise the rating uses the search excerpt and the campaign is marked "web (excerpt only)". Turn it off with
+`SCOUT_WEB_SEARCH=0`; use `HQ_MODEL_SCOUT_SEARCH=claude-opus-5-5` for a deeper search. It needs web search switched on for
+your Anthropic organization (Console, Settings, Privacy).
+
 Every 6 hours Scout reads its **inbox** (the box on the dashboard's Campaigns section: paste links or page text) and any
 public feeds you list in `SCOUT_FEED_URLS` (Settings page), rates what is new with the cheap model, and puts the good ones
-(`SCOUT_MIN_SCORE`, default 6) on the dashboard and your phone for a Join decision. It never joins or signs up for you,
+(score out of 10 with the reasons shown; `SCOUT_MIN_SCORE`, default 8, on the Settings page) on the dashboard and your phone for a Join decision. It never joins or signs up for you,
 skips campaigns that are more than 80% spent, and stops when `HQ_DAILY_BUDGET` is reached.
 
 What it will not do: Whop's terms forbid automated access, and Discord forbids it for personal accounts, so Scout never
@@ -163,6 +170,17 @@ it, and then HQ sends that one message from your Gmail. Safeguards: one email pe
 (`daily_send_cap`, default 10, never above 20), your opt-out line and postal address added to every message, and a
 do-not-contact list (set a lead to `do_not_contact`, or tell the Boss `{"do_not_contact": "email"}`). If a send fails or
 is blocked, the same draft returns to Waiting for your OK. Leads without an email stay copy-and-send-yourself.
+
+## Rally (Saturday college football posts)
+
+Rally drafts short text-and-card posts for TikTok and Shorts about public college football storylines (upset watch,
+rankings, rivalry history, weekly stat facts). It reads a free public rankings feed (or facts you paste), asks the
+cheap Claude model for 5 posts, then checks them in code: any number not in the facts, or any mention of logos, film or
+highlights, is thrown out. Each post gets a plain 1080x1920 card (no school marks) and waits in Approvals. Approving
+only hands you the text and card to post yourself; Rally never posts. Once a day it checks for free whether a round is
+due (no round if posts are still waiting, one was drafted this week, or the season in `config/rally.yaml` is over).
+After you post, tell the Boss the views (`{"views": {"id": 4, "views": 1200}}`) and `{"report": true}` shows which
+topics work. Set the account's niche in `config/rally.yaml`.
 
 ## Relay (phone)
 
@@ -247,3 +265,13 @@ only go up; the pay you typed in is never changed), works out what the campaigns
 and writes a short note of the clips that did best, which Chad reads when he picks moments. It never calls Claude, so
 it costs nothing. YouTube is counted through the same sign-in you make under **Connect YouTube** in ⚙️ Settings.
 TikTok inbox uploads have no video id until you post them in the app, so TikTok views come later.
+
+## Podcast clip packs
+
+Packs turns one podcast episode into a $49 pack: 5 captioned vertical clips (Chad's editor) plus Recap's three titles,
+description, chapters and 5 post ideas. Ask the Boss for a pack, or queue a Packs task with
+`{"client": "podcast name", "owner": "emailed me ep 12 and said yes to clips, 26 Oct", "file": "path/to/episode.mp4"}`.
+Packs refuses without that permission note, a video of 10+ minutes and Whisper, checks all of that in code before any
+Claude spend, and never makes the same episode twice. The finished folder (`data/packs/`) waits in Approvals; approving
+it shows you the message to send, including a request for a testimonial. Packs never sends, posts or takes payment:
+create the $49 Stripe payment link yourself and send it with the files.

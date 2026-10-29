@@ -54,7 +54,7 @@ GROUPS = [
     ("boss", "🎩", "Boss", "The Boss's brain, daily report, phone chat (Telegram) and the Build it button.",
      ("HQ_MODEL_BOSS", "HQ_BOSS_MODEL", "HQ_REPORT_HOUR", "HQ_BUILD_TOKEN", "HQ_BUILD_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_ID"), ()),
     ("chad", "🎬", "Chad (clips and posting)", "How many posts a day, approval, practice mode, and your TikTok, Instagram, YouTube and Twitch accounts.",
-     ("HQ_MODEL_CHAD", "HQ_MAX_POSTS_PER_DAY", "HQ_POST_GAP_MINUTES", "HQ_REQUIRE_APPROVAL", "HQ_PRACTICE_POSTING", "HQ_WHISPER_MODEL",
+     ("HQ_MODEL_CHAD", "HQ_MAX_POSTS_PER_DAY", "HQ_MAX_CLIPS_PER_DAY", "HQ_POST_GAP_MINUTES", "HQ_REQUIRE_APPROVAL", "HQ_PRACTICE_POSTING", "HQ_WHISPER_MODEL",
       "HQ_PUBLIC_BASE_URL"), ("IG_", "TIKTOK_", "TWITCH_")),
     ("pitch", "✉️", "Pitch (finding clients)", "Your Gmail for sending, and the pitch wording and limits.",
      ("HQ_MODEL_PITCH",), ("PITCH_",)),
@@ -62,13 +62,17 @@ GROUPS = [
     ("tally", "💰", "Tally (money)", "Which Claude model Tally uses.", ("HQ_MODEL_TALLY",), ()),
     ("sweep", "🧹", "Sweep (janitor and quality control)", "Daily report time, clean-up and warning limits.", ("HQ_MODEL_SWEEP",), ("HQ_SWEEP_",)),
     ("muse", "💡", "Muse (Creative Director)", "How often Muse brainstorms, what it may spend, and how bold it is.", (), ("HQ_MUSE", "HQ_MODEL_MUSE")),
+    ("recruiter", "🧲", "Recruiter (finds new agents)", "How many agent proposals a day, what Recruiter may spend, and how picky it is.", (), ("HQ_RECRUITER", "HQ_MODEL_RECRUITER")),
     ("football", "🏈", "Warrior Village (football)", "Football folders, budget, reminders and the Thursday print.",
-     ("HQ_MODEL_CAPTAIN", "HQ_DEPTH_HOUR", "HQ_SCOUTING_HOUR"), ("HQ_FOOTBALL_", "HQ_PRINT")),
+     ("HQ_MODEL_CAPTAIN", "HQ_DEPTH_HOUR", "HQ_SCOUTING_HOUR"), ("HQ_FOOTBALL_", "HQ_PRINT_", "HQ_PRINTER")),
+    ("etsy", "🛍️", "Etsy Village (shirts)", "Printify connection, shirt pace, review, budget and the optional image key.",
+     ("HQ_MODEL_ETTA", "HQ_MODEL_RADAR", "HQ_MODEL_QUILL"), ("HQ_ETSY_", "HQ_PRINTIFY_", "HQ_OPENAI")),
 ]
 
 # Plain-English names for the settings people look for most. Anything not listed shows its setting name.
 LABELS = {
     "HQ_MAX_POSTS_PER_DAY": "Posts per day (each account)",
+    "HQ_MAX_CLIPS_PER_DAY": "New clips per day (Chad, 4 or more)",
     "HQ_POST_GAP_MINUTES": "Minutes between posts",
     "HQ_DAILY_BUDGET": "Daily Claude spending limit ($)",
     "HQ_REQUIRE_APPROVAL": "Wait for my approval before posting",
@@ -79,6 +83,12 @@ LABELS = {
     "HQ_PRINTER": "Printer",
     "HQ_BUILD_URL": "Build it address",
     "HQ_BUILD_TOKEN": "Build it token",
+    "HQ_PRINTIFY_TOKEN": "Printify API token",
+    "HQ_ETSY_DESIGNS_PER_DAY": "New shirt designs per day",
+    "HQ_ETSY_REVIEW_DESIGNS": "Show me new designs before they're built",
+    "HQ_ETSY_DAILY_BUDGET": "Etsy village daily Claude limit ($)",
+    "HQ_ETSY_MONTHLY_BUDGET": "Etsy village monthly limit ($)",
+    "HQ_OPENAI_API_KEY": "Image key (OpenAI, optional)",
 }
 
 

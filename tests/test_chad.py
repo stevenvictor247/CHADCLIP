@@ -200,3 +200,41 @@ def test_report_rolls_a_long_chat_over_too(monkeypatch):
     boss._save(1, "assistant", [{"type": "text", "text": "z" * (boss.AUTO_ROLL_TOKENS * 4)}])
     boss.report()
     assert boss.current_conversation() == 2 and boss.chat_tokens(2) < 5000
+
+
+def test_captions_tolerate_words_just_past_the_cut(tmp_path):
+    words = [{"start": 1.0, "end": 1.4, "text": "hello"}, {"start": 58.8, "end": 59.3, "text": "end"},
+             {"start": 70.0, "end": 70.5, "text": "later"}]
+    assert [w["text"] for w in editor.caption_words(words, 0, 59)] == ["hello", "end"]
+    assert editor.write_captions(words, 0, 59, tmp_path / "c.ass")
+    assert "END" in (tmp_path / "c.ass").read_text()
+
+
+def test_short_titles_get_a_real_post_caption():
+    from hq.agents.chad.agent import Chad as ChadAgent
+    t = {"segments": [{"start": 1, "end": 3, "text": "no way he did that"}]}
+    assert ChadAgent.post_caption("A very good title here", "Kai", t) == "A very good title here"
+    cap = ChadAgent.post_caption("lol", "Kai", t, 0, 30)
+    assert len(cap) > 5 and "no way he did that" in cap
+    assert ChadAgent.post_caption("", "Kai", None) == "Kai moment"
+
+
+def test_reject_flagged_only_rejects_clips_with_problems(monkeypatch):
+    from hq import db, review
+    db.init()
+    db.execute("DELETE FROM clips")
+    monkeypatch.setattr(review, "_chad_settings", lambda: {"captions": True})
+    ts = db.now()
+    ins = ("INSERT INTO clips (creator, source_url, start_s, end_s, path, title, caption, reason, captioned, score, status, created_at) "
+           "VALUES ('kai', ?, 0, 30, 'x.mp4', 't', ?, 'why', ?, 9, 'pending_approval', ?)")
+    bad = db.execute(ins, "http://v/1", "Good one\n\nCredit: Kai", 0, ts)
+    good = db.execute(ins, "http://v/2", "Good one\n\nCredit: Kai", 1, ts)
+    # file is missing for both, so give "good" no file problem by pointing at a real file
+    import tempfile, os
+    f = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False); f.close()
+    db.execute("UPDATE clips SET path = ?", f.name)
+    res = review.reject_flagged()
+    os.unlink(f.name)
+    assert res["rejected"] == [bad] and res["left"] == 1
+    status = {r["id"]: r["status"] for r in db.rows("SELECT id, status FROM clips")}
+    assert status == {bad: "rejected", good: "pending_approval"}

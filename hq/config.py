@@ -18,11 +18,12 @@ DATA_DIR = Path(os.getenv("HQ_DATA_DIR", ROOT / "data"))
 SOURCES_DIR = DATA_DIR / "sources"
 CLIPS_DIR = DATA_DIR / "clips"
 SAMPLES_DIR = DATA_DIR / "samples"   # private pitch samples: never posted, deleted after 14 days
+PACKS_DIR = DATA_DIR / "packs"       # finished podcast clip packs, one folder each, waiting for Steven to send
 DB_PATH = DATA_DIR / "hq.sqlite3"
 SETTINGS_PATH = DATA_DIR / "settings.json"
 VISION_PATH = CONFIG_DIR / "vision.md"
 
-for d in (DATA_DIR, SOURCES_DIR, CLIPS_DIR, SAMPLES_DIR):
+for d in (DATA_DIR, SOURCES_DIR, CLIPS_DIR, SAMPLES_DIR, PACKS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -47,7 +48,12 @@ DEFAULT_MODELS = {
     "report": "claude-sonnet-5-5",  # the daily report: summarising facts HQ already gathered
     "sweep": "claude-sonnet-5-5",   # Sweep's one coach's note a day: spotting the pattern behind its findings
     "muse": "claude-sonnet-5-5",    # the Creative Director's weekly ideas: judgement and fresh thinking, about $0.20 a round
-    "recap": "claude-haiku-5-5",    # titles and chapters from long transcripts: the cheap model keeps long VODs affordable
+    "recruiter": "claude-sonnet-5-5",  # finds gaps in HQ and proposes new agents: judgement, about $0.08 a round
+    "scout_search": "claude-sonnet-5-5",  # Scout's daily web search for new campaigns: searching and judging what's real
+    "recap": "claude-haiku-5-5",
+    "etta": "claude-sonnet-5-5",    # runs the Etsy village: the weekly shop report and what to make more of
+    "radar": "claude-sonnet-5-5",   # the weekly trend brief: web search and judging what sells
+    "quill": "claude-sonnet-5-5",   # shirt slogans, titles, tags and descriptions: wording sells shirts    # titles and chapters from long transcripts: the cheap model keeps long VODs affordable
 }
 SIMPLE_MODEL = "claude-haiku-5-5"   # every other agent: sorting, drafting, summarising
 
@@ -100,8 +106,21 @@ for d in (FOOTBALL_DATA, FOOTBALL_INBOX, FOOTBALL_OUTBOX, FOOTBALL_PRINT_DIR):
         pass
 
 
+# The Etsy village (Print Street): shirt designs sold on Etsy through Printify. Its own daily and monthly Claude caps,
+# which also cover the optional design-art images. It never reads Warrior Village files.
+ETSY_AGENTS = ("Etta", "Radar", "Quill", "Loom", "Warden", "Dock")
+ETSY_DAILY_BUDGET = float(os.getenv("HQ_ETSY_DAILY_BUDGET", "0.5") or 0)
+ETSY_MONTHLY_BUDGET = float(os.getenv("HQ_ETSY_MONTHLY_BUDGET", "15") or 0)
+ETSY_DIR = DATA_DIR / "etsy"
+for d in (ETSY_DIR, ETSY_DIR / "designs"):
+    d.mkdir(parents=True, exist_ok=True)
+
+
 def village_of(agent: str) -> str:
-    return "football" if agent.lower() in {a.lower() for a in FOOTBALL_AGENTS} else "business"
+    a = agent.lower()
+    if a in {x.lower() for x in FOOTBALL_AGENTS}:
+        return "football"
+    return "etsy" if a in {x.lower() for x in ETSY_AGENTS} else "business"
 
 
 # Without an API key the system still runs, using simple rules instead of Claude.

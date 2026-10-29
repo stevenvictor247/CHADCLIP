@@ -65,6 +65,35 @@ def _overlaps(a: dict, b: dict) -> bool:
     return a["source_url"] and a["source_url"] == b["source_url"] and a["start_s"] < b["end_s"] and b["start_s"] < a["end_s"]
 
 
+def pending_issues(pending: list[dict], cfg: dict) -> dict[int, list[str]]:
+    """{clip id: problems} for each waiting clip that has any (quality, overlaps, waiting too long)."""
+    others = db.rows("SELECT id, source_url, start_s, end_s FROM clips WHERE status IN "
+                     "('pending_approval', 'approved', 'posted')")
+    found = {}
+    for c in pending:
+        issues = clip_issues(c, cfg)
+        dupes = [o["id"] for o in others if o["id"] != c["id"] and _overlaps(c, o)]
+        if dupes:
+            issues.append("overlaps clip " + ", ".join(f"#{d}" for d in dupes) + " from the same video")
+        waited = _hours_since(c["created_at"])
+        if waited > STALE_HOURS:
+            issues.append(f"waiting for approval {waited:.0f} hours")
+        if issues:
+            found[c["id"]] = issues
+    return found
+
+
+def reject_flagged() -> dict:
+    """Reject every waiting clip that has a problem. Only ever called from Steven's button press."""
+    pending = db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY id")
+    found = pending_issues(pending, _chad_settings())
+    for cid in found:
+        db.set_clip_status(cid, "rejected")
+    if found:
+        db.log("Steven", f"Rejected {len(found)} flagged clips: " + ", ".join(f"#{c}" for c in found))
+    return {"rejected": list(found), "left": len(pending) - len(found)}
+
+
 def review_chad(hours: float = 24) -> dict:
     """What Chad did in the last `hours`, what went wrong, and which waiting clips need a closer look."""
     since = _ago(hours)
@@ -86,22 +115,14 @@ def review_chad(hours: float = 24) -> dict:
         by_creator[c["creator"] or "unknown"] = by_creator.get(c["creator"] or "unknown", 0) + 1
 
     pending = db.rows("SELECT * FROM clips WHERE status = 'pending_approval' ORDER BY id")
-    others = db.rows("SELECT id, source_url, start_s, end_s FROM clips WHERE status IN "
-                     "('pending_approval', 'approved', 'posted')")
+    found = pending_issues(pending, cfg)
     flagged, looks_good = [], []
     for c in pending:
-        issues = clip_issues(c, cfg)
-        dupes = [o["id"] for o in others if o["id"] != c["id"] and _overlaps(c, o)]
-        if dupes:
-            issues.append("overlaps clip " + ", ".join(f"#{d}" for d in dupes) + " from the same video")
-        waited = _hours_since(c["created_at"])
-        if waited > STALE_HOURS:
-            issues.append(f"waiting for approval {waited:.0f} hours")
         entry = {"clip": c["id"], "creator": c["creator"], "title": c["title"], "score": c["score"]}
         if c.get("boss_note"):
             entry["your_earlier_note"] = c["boss_note"]
-        if issues:
-            flagged.append({**entry, "issues": issues})
+        if c["id"] in found:
+            flagged.append({**entry, "issues": found[c["id"]]})
         else:
             looks_good.append(entry)
 

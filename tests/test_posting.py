@@ -43,17 +43,17 @@ def _status(cid):
 def test_daily_cap_holds_extra_clips_back(board):
     a, b, c = board.clip(), board.clip(), board.clip()
     publish.publish_approved()
-    assert [s[0] for s in board.sent] == [a, b]
-    assert _status(a) == _status(b) == "posted"
-    assert _status(c) == "approved"                    # waits for tomorrow instead of a spammy burst
+    assert [s[0] for s in board.sent] == [c, b]   # newest first, so clips stay fresh
+    assert _status(c) == _status(b) == "posted"
+    assert _status(a) == "approved"                    # waits for tomorrow instead of a spammy burst
 
 
 def test_gap_between_posts(board, monkeypatch):
     monkeypatch.setenv("HQ_POST_GAP_MINUTES", "60")
     a, b = board.clip(), board.clip()
     out = publish.publish_approved()
-    assert [s[0] for s in board.sent] == [a]
-    assert _status(b) == "approved" and any("waiting 60 minutes" in line for line in out)
+    assert [s[0] for s in board.sent] == [b]
+    assert _status(a) == "approved" and any("waiting 60 minutes" in line for line in out)
 
 
 def test_a_failed_post_is_not_retried_by_itself(board):
