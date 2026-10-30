@@ -121,6 +121,7 @@ KNOWN = [
     ("Queue: daily pitch quota and send list for Pitch, best fit first | agent queue | send list | pitch quota", BUILT),
     ("Lens: finds why posted clips get few views and writes a fix list | agent lens | fix clips nobody watches | low views", BUILT),
     ("Nudge: finds replies to Pitch emails in Gmail and flags replied, bounced and quiet leads | agent nudge | pitch replies | reply tracker", BUILT),
+    ("Rerun: second-try drafts for quiet pitched leads, two tries then dead | agent rerun | second pitch | chase quiet leads | follow up quiet leads", BUILT),
     ("Etsy village: shirt designs on Etsy through Printify, with Etta, Radar, Quill, Loom, Warden and Dock | print on demand shirts | Etsy shop", BUILT),
     # the earlier agent ideas page
     ("Penny: views and stats for every clip | clip performance dashboard | clip stats dashboard", WAITING),
