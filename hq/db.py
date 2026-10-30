@@ -178,6 +178,15 @@ CREATE TABLE IF NOT EXISTS queue_sent (
     lead_id INTEGER PRIMARY KEY,                 -- pitches Steven marked sent by hand from Queue's list
     sent_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS lens_fixes (
+    fix_key TEXT PRIMARY KEY,
+    state TEXT NOT NULL,                         -- done or ignored (Steven's tap on Lens's fix list)
+    at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS lens_alerts (
+    fix_key TEXT PRIMARY KEY,                    -- zero-reach accounts Lens already sent a Telegram note about
+    at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS nudge_seen (
     message_id TEXT PRIMARY KEY,                 -- Gmail messages Nudge has already counted
     lead_id INTEGER NOT NULL,

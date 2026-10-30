@@ -119,6 +119,7 @@ KNOWN = [
     ("Muse: Creative Director that ranks new ideas", BUILT),
     ("Recruiter: finds gaps in HQ and proposes new agents with a 1 to 10 rating | agent recruiter | hiring agent", BUILT),
     ("Queue: daily pitch quota and send list for Pitch, best fit first | agent queue | send list | pitch quota", BUILT),
+    ("Lens: finds why posted clips get few views and writes a fix list | agent lens | fix clips nobody watches | low views", BUILT),
     ("Nudge: finds replies to Pitch emails in Gmail and flags replied, bounced and quiet leads | agent nudge | pitch replies | reply tracker", BUILT),
     ("Etsy village: shirt designs on Etsy through Printify, with Etta, Radar, Quill, Loom, Warden and Dock | print on demand shirts | Etsy shop", BUILT),
     # the earlier agent ideas page
