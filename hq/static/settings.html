@@ -79,7 +79,8 @@
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-const changes = {}, accounts = {}, pitchChanges = {};
+const changes = {}, accounts = {}, pitchChanges = {}, accountEdits = {};
+let newAccount = null;
 let lastTests = {};
 
 function testRow(name) {
@@ -226,6 +227,25 @@ function saveOpen() {
   try { localStorage.setItem("hq-settings-open", JSON.stringify([...document.querySelectorAll("details.group[open]")].map(e => e.dataset.group))); } catch (e) {}
 }
 
+function postizEdit(a) {
+  const n = esc(a.name);
+  return `<div class="field" style="border-top:0;padding-top:0"><label>Name you'll recognise</label>
+    <input data-aedit="${n}" data-akey="label" data-orig="${esc(a.label)}" value="${esc(a.label)}" placeholder="like Chad Funny Clips">
+    <label>Most posts a day (blank = the general limit)</label>
+    <input data-aedit="${n}" data-akey="max_posts_per_day" data-orig="${esc(a.max_posts_per_day)}" value="${esc(a.max_posts_per_day)}" inputmode="numeric">
+    <label>Take turns with the other ${esc(a.provider)} accounts (each clip goes to just one)</label>
+    <select data-aedit="${n}" data-akey="rotate" data-orig="${a.rotate}"><option value="true" ${a.rotate ? "selected" : ""}>Yes, take turns</option><option value="false" ${a.rotate ? "" : "selected"}>No, post every clip here too</option></select></div>`;
+}
+
+function postizAdd() {
+  return `<div class="field" id="add-postiz"><label>Add another Postiz channel</label>
+    <div class="help">Connect it in Postiz first, press Test above to see its id, then paste it here. It starts switched off.</div>
+    <input data-new="name" placeholder="short name, like postiz_tiktok_2">
+    <input data-new="integration_id" placeholder="channel id from the Test result">
+    <input data-new="label" placeholder="name you'll recognise (optional)">
+    <select data-new="provider"><option value="tiktok">TikTok</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option></select></div>`;
+}
+
 function render(d) {
   lastTests = d.tests || {};
   let chadExtra = "";
@@ -235,8 +255,10 @@ function render(d) {
   if (d.accounts.length) {
     chadExtra += `<section id="accounts"><h2>Posting accounts</h2><p class="help" style="margin:0 0 6px">Turn an account on once its keys are saved above. Chad only posts to accounts that are on.</p>` +
       d.accounts.map(a => `<label class="switch"><input type="checkbox" data-account="${esc(a.name)}" ${a.enabled ? "checked" : ""}>
-        ${esc(a.name)} <span class="help" style="grid-column:auto">(${esc(a.platform)})</span></label>${a.fields.map(field).join("")}
-        <div class="field acct" id="a-${esc(a.name)}" style="border-top:0;padding-top:0">${testRow(a.test)}</div>`).join("") + `</section>`;
+        ${esc(a.label || a.name)} <span class="help" style="grid-column:auto">(${esc(a.name)} · ${esc(a.platform)}${a.provider ? " " + esc(a.provider) : ""})</span></label>${a.fields.map(field).join("")}
+        ${a.platform === "postiz" ? postizEdit(a) : ""}
+        <div class="field acct" id="a-${esc(a.name)}" style="border-top:0;padding-top:0">${testRow(a.test)}</div>`).join("") +
+      (d.accounts.some(a => a.platform === "postiz") ? postizAdd() : "") + `</section>`;
   }
   let pitchHtml = "";
   if (d.pitch && d.pitch.length) {
@@ -281,6 +303,17 @@ function render(d) {
     update();
   });
   document.querySelectorAll("[data-account]").forEach(el => el.onchange = () => { accounts[el.dataset.account] = el.checked; update(); });
+  document.querySelectorAll("[data-aedit]").forEach(el => el.addEventListener("input", () => {
+    const name = el.dataset.aedit, key = el.dataset.akey;
+    if (el.value !== el.dataset.orig) (accountEdits[name] ||= {})[key] = el.value;
+    else if (accountEdits[name]) { delete accountEdits[name][key]; if (!Object.keys(accountEdits[name]).length) delete accountEdits[name]; }
+    update();
+  }));
+  document.querySelectorAll("[data-new]").forEach(el => el.addEventListener("input", () => {
+    const vals = {}; document.querySelectorAll("[data-new]").forEach(e => vals[e.dataset.new] = e.value.trim());
+    newAccount = vals.name || vals.integration_id ? vals : null;
+    update();
+  }));
   document.querySelectorAll("[data-test]").forEach(b => b.onclick = () => runTest(b));
   if (location.hash) {
     const target = document.getElementById(location.hash.slice(1));
@@ -309,7 +342,7 @@ async function runTest(btn) {
 }
 
 function update() {
-  const n = Object.keys(changes).length + Object.keys(accounts).length + Object.keys(pitchChanges).length;
+  const n = Object.keys(changes).length + Object.keys(accounts).length + Object.keys(pitchChanges).length + Object.keys(accountEdits).length + (newAccount ? 1 : 0);
   $("save").disabled = !n;
   $("status").textContent = n ? `${n} change${n === 1 ? "" : "s"} not saved yet.` : "Nothing changed yet.";
 }
@@ -317,7 +350,7 @@ function update() {
 $("save").onclick = async () => {
   $("save").disabled = true; $("status").textContent = "Saving…";
   const r = await fetch("/api/settings", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"},
-                                          body: JSON.stringify({values: changes, accounts, pitch: pitchChanges})});
+                                          body: JSON.stringify({values: changes, accounts, pitch: pitchChanges, account_edits: accountEdits, new_account: newAccount || {}})});
   if (!r.ok) { $("status").textContent = "Couldn't save: " + ((await r.json()).detail || r.status); $("save").disabled = false; return; }
   $("status").textContent = "Saved. Restarting HQ…";
   await fetch("/api/restart", {method: "POST", headers: {"X-HQ": "1"}});

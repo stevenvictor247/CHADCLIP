@@ -37,3 +37,10 @@ accounts:
     provider: tiktok       # tiktok, instagram or youtube
     integration_id: ""     # the channel's id, shown by the Postiz test in Settings
     privacy: PUBLIC_TO_EVERYONE
+
+  # More TikTok accounts through Postiz: copy the entry above, give it its own name and integration_id (or use
+  # Settings > Posting accounts > Add another Postiz channel). Optional per-account fields:
+  #   label: "Funny clips"       a name you'll recognise in Settings
+  #   max_posts_per_day: 3       this account's own daily limit (default: HQ_MAX_POSTS_PER_DAY)
+  #   rotate: false              post EVERY clip here as well, instead of taking turns with the other accounts
+  # By default Postiz accounts of the same kind take turns: each clip goes to just one of them.

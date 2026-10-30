@@ -47,16 +47,70 @@ def _number(name: str, default: float) -> float:
         return default
 
 
+def account_cap(account: dict) -> int:
+    """Posts per day for one account: its own max_posts_per_day in accounts.yaml, else HQ_MAX_POSTS_PER_DAY. 0 = no limit."""
+    own = account.get("max_posts_per_day")
+    if own not in (None, ""):
+        try:
+            return max(0, int(own))
+        except (TypeError, ValueError):
+            pass
+    return int(_number("HQ_MAX_POSTS_PER_DAY", 4))
+
+
+def pool_key(account: dict) -> tuple | None:
+    """Postiz channels of one kind (say, several TikTok accounts) take turns: each clip goes to just one of them, so
+    identical clips don't land on every account (TikTok treats that as spam). `rotate: false` opts an account out."""
+    if account["platform"] == "postiz" and account.get("rotate", True) not in (False, "false", "no"):
+        return ("postiz", account.get("provider", "tiktok"))
+    return None
+
+
+def daily_capacity() -> int:
+    """Clips that can go out per day across all enabled accounts: a rotation pool adds up its accounts' limits,
+    since each clip uses one of them. 0 when nothing real is enabled or there's no limit."""
+    units: dict = {}
+    for a in load_accounts():
+        if not a.get("enabled") or a["platform"] == "practice":
+            continue
+        cap = account_cap(a)
+        if cap <= 0:
+            return 0
+        key = pool_key(a) or (a["platform"], a["name"])
+        units[key] = units.get(key, 0) + cap
+    return max(units.values(), default=0)
+
+
+def _recent(account: dict) -> list[dict]:
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(timespec="seconds")
+    return db.rows("SELECT created_at FROM posts WHERE platform = ? AND account = ? AND status = 'posted' "
+                   "AND created_at >= ? ORDER BY created_at DESC", account["platform"], account["name"], since)
+
+
+def pick_from_pool(pool: list[dict]) -> tuple[dict | None, str]:
+    """The pool account that should take the next clip: under its limits, the fewest posts today, then the one that
+    has waited longest. Returns (account, "") or (None, why nobody can post)."""
+    best, reasons = None, []
+    for a in pool:
+        why = wait_reason(a)
+        if why:
+            reasons.append(f"{a['name']} {why}")
+            continue
+        recent = _recent(a)
+        rank = (len(recent), recent[0]["created_at"] if recent else "", a["name"])
+        if best is None or rank < best[0]:
+            best = (rank, a)
+    return (best[1], "") if best else (None, "; ".join(reasons))
+
+
 def wait_reason(account: dict) -> str | None:
     """Posting seatbelts: why this account shouldn't post right now, or None if it can.
     Bursts of posts look like spam to TikTok, YouTube and Instagram and get new accounts limited or banned."""
     if account["platform"] == "practice":
         return None
-    cap = int(_number("HQ_MAX_POSTS_PER_DAY", 4))
+    cap = account_cap(account)
     gap = _number("HQ_POST_GAP_MINUTES", 60)
-    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(timespec="seconds")
-    recent = db.rows("SELECT created_at FROM posts WHERE platform = ? AND account = ? AND status = 'posted' "
-                     "AND created_at >= ? ORDER BY created_at DESC", account["platform"], account["name"], since)
+    recent = _recent(account)
     if cap > 0 and len(recent) >= cap:
         return f"already posted {len(recent)} today (limit {cap})"
     if recent and gap > 0:
@@ -85,10 +139,26 @@ def publish_approved() -> list[str]:
                          "ORDER BY id", clip["id"])}
         payload = {**clip, "post_text": post_text(clip), "hashtags": json.loads(clip.get("hashtags") or "[]")}
         waiting = 0
+        pools: dict = {}
+        due = []
         for account in accounts:
+            key = pool_key(account)
+            if key:
+                pools.setdefault(key, []).append(account)
+            elif (account["platform"], account["name"]) not in tried:
+                due.append(account)
+        for pool in pools.values():
+            if any((a["platform"], a["name"]) in tried for a in pool):
+                continue  # this clip already went to one account in the pool: never a second one
+            chosen, why = pick_from_pool(pool)
+            if chosen:
+                due.append(chosen)
+            else:
+                waiting += 1
+                report.append(f"Clip #{clip['id']} waits for {pool[0]['provider'] if pool[0].get('provider') else 'postiz'} "
+                              f"accounts: {why}")
+        for account in due:
             key = (account["platform"], account["name"])
-            if key in tried:
-                continue
             why = wait_reason(account)
             if why:
                 waiting += 1
