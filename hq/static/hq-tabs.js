@@ -11,7 +11,7 @@
     {id: "campaigns", icon: "🎯", lu: "target", label: "Campaigns", has: ["campsection"]},
     {id: "pitch", icon: "✉️", lu: "mail", label: "Pitch", appr: "pitch", has: ["queue", "nudge", "rerun", "creatorsection", "leadsection"],
      empty: "No leads or creators to clip yet. Pitch and Scout put them here when they find some."},
-    {id: "clips", icon: "🎞️", lu: "clapperboard", label: "Clips", appr: "clips", has: ["allowedsection", "library"]},
+    {id: "clips", icon: "🎞️", lu: "clapperboard", label: "Clips", appr: "clips", has: ["lens", "allowedsection", "library"]},
     {id: "football", icon: "🏈", lu: "trophy", label: "Warrior Village", appr: "football", has: ["towns", "football"]},
     {id: "etsy", icon: "🛍️", lu: "shopping-bag", label: "Etsy Village", appr: "etsy", has: ["towns", "etsy"]},
     {id: "sweep", icon: "🧹", lu: "brush", label: "Sweep", appr: "other", has: ["sweep"]},
@@ -104,7 +104,7 @@
     let last = null;
     for (const id of t.has) {
       const el = document.getElementById(id);
-      const sec = el && (el.matches("section, #towns, #football, #etsy, #queue, #nudge, #rerun, #sweep, #muse") ? el : el.closest("section"));
+      const sec = el && (el.matches("section, #towns, #football, #etsy, #queue, #nudge, #lens, #rerun, #sweep, #muse") ? el : el.closest("section"));
       if (sec) { sec.dataset.tab = sec.dataset.tab && sec.dataset.tab !== t.id ? sec.dataset.tab + " " + t.id : t.id; last = sec; }
     }
     if (t.empty && last) {
