@@ -421,6 +421,18 @@ def add_creator(body: AddCreatorIn):
         raise HTTPException(400, str(e))
 
 
+class RemoveCreatorIn(BaseModel):
+    login: str
+
+
+@app.post("/api/creators/remove")
+def remove_creator(body: RemoveCreatorIn):
+    try:
+        return {"message": creators.remove_allowed(body.login)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/api/creators/{pick_id}/skip")
 def skip_creator(pick_id: int):
     try:

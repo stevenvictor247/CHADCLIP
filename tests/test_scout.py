@@ -418,3 +418,14 @@ def test_campaigns_steven_pasted_always_show(monkeypatch):
     before = len(campaigns.summary())
     scout_pkg.Scout().run({"params": json.dumps({"text": "rules"})})
     assert len(campaigns.summary()) == before + 1
+
+
+def test_steven_can_remove_a_streamer(tmp_path, monkeypatch):
+    from hq import creators
+    (tmp_path / "streamers.yaml").write_text("# notes\npermissions:\n  jynxzi: \"open policy\"\n  hasanabi: \"clip program\"\n")
+    monkeypatch.setattr(creators, "CONFIG_DIR", tmp_path)
+    assert "Chad won't clip hasanabi" in creators.remove_allowed("@HasanAbi")
+    assert creators.allowed() == [{"login": "jynxzi", "how": "open policy"}]
+    assert "# notes" in (tmp_path / "streamers.yaml").read_text()
+    with pytest.raises(ValueError):
+        creators.remove_allowed("hasanabi")   # already gone

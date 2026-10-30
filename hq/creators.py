@@ -114,6 +114,27 @@ def add_allowed(raw_login: str, how: str) -> str:
     return f"Saved. Chad is checking {login}'s clips now."
 
 
+def remove_allowed(raw_login: str) -> str:
+    """Steven takes a streamer off Chad's list. Only the permission line in config/streamers.yaml goes; clips
+    already made and the history stay."""
+    login = clean_login(raw_login)
+    path = CONFIG_DIR / "streamers.yaml"
+    if not any(a["login"] == login for a in allowed()):
+        raise ValueError(f"{login} isn't on Chad's list in config/streamers.yaml (a joined campaign adds streamers too: "
+                         "leave that campaign on the Campaigns tab)")
+    original = path.read_text(encoding="utf-8")
+    kept = [ln for ln in original.splitlines(keepends=True)
+            if not re.match(rf"\s+['\"]?{re.escape(login)}['\"]?\s*:", ln, re.I)]
+    updated = "".join(kept)
+    parsed = yaml.safe_load(updated) or {}
+    left = {str(k).lower() for k in (parsed.get("permissions") or {})}
+    if updated == original or "permissions" not in parsed or login in left:
+        raise ValueError("Couldn't take them off config/streamers.yaml")
+    path.write_text(updated, encoding="utf-8")
+    db.log("Steven", f"Took {login} off Chad's clip list")
+    return f"Done. Chad won't clip {login} any more."
+
+
 CHAD_ROUND = "Check creators for new videos and clip them."
 
 

@@ -800,7 +800,7 @@ let allowedLogins = [];
 function renderAllowed(list) {
   allowedLogins = list.map(a => a.login);
   $("allowedcount").textContent = list.length || "";
-  $("allowed").innerHTML = list.length ? list.map(a => `<div class="meta"><a href="https://twitch.tv/${esc(a.login)}" target="_blank" rel="noopener">${esc(a.login)}</a> — ${esc(a.how)}</div>`).join("")
+  $("allowed").innerHTML = list.length ? list.map(a => `<div class="meta"><a href="https://twitch.tv/${esc(a.login)}" target="_blank" rel="noopener">${esc(a.login)}</a> — ${esc(a.how)} <button class="ghost" onclick="removeAllowed('${esc(a.login)}')">Remove</button></div>`).join("")
     : `<div class="meta">Nobody yet, so Chad has no one to clip.</div>`;
 }
 async function addAllowed() {
@@ -809,6 +809,14 @@ async function addAllowed() {
   const r = await res.json();
   toast(esc(r.message || r.detail || "Done"));
   if (res.ok) { $("allowedlogin").value = ""; $("allowedhow").value = ""; }
+  refresh();
+}
+async function removeAllowed(login) {
+  if (!confirm("Take " + login + " off Chad's list? Chad stops clipping them. Clips already made stay.")) return;
+  const res = await fetch("/api/creators/remove", {method: "POST", headers: {"Content-Type": "application/json", "X-HQ": "1"},
+    body: JSON.stringify({login})});
+  const r = await res.json();
+  toast(esc(r.message || r.detail || "Done"));
   refresh();
 }
 async function clipNow() {
