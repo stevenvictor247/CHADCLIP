@@ -26,6 +26,13 @@ def daily_cap() -> int:
 
 def posting_capacity() -> int:
     """Clips the posting seatbelt lets out per day (HQ_MAX_POSTS_PER_DAY; 0 means no limit, so use the clip cap)."""
+    try:
+        from .agents.chad.publish import daily_capacity
+        real = daily_capacity()  # several rotating accounts post more clips a day between them
+    except Exception:
+        real = 0
+    if real > 0:
+        return real
     cap = _int("HQ_MAX_POSTS_PER_DAY", 4)
     return cap if cap > 0 else daily_cap()
 

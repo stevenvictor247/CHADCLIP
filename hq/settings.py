@@ -205,7 +205,10 @@ def describe() -> dict:
     for a in accounts():
         keys = [v for k, v in a.items() if k.endswith("_env") and isinstance(v, str)]
         accts.append({"name": a.get("name"), "platform": a.get("platform"), "enabled": bool(a.get("enabled")),
-                      "test": f"account:{a.get('name')}",
+                      "test": f"account:{a.get('name')}", "label": str(a.get("label") or ""),
+                      "provider": a.get("provider") if a.get("platform") == "postiz" else None,
+                      "rotate": a.get("platform") == "postiz" and a.get("rotate", True) not in (False, "false", "no"),
+                      "max_posts_per_day": "" if a.get("max_posts_per_day") is None else str(a.get("max_posts_per_day")),
                       "fields": [{"key": k, "help": "", "example": "", **_value(k)} for k in keys if k not in listed]})
     last = {name: {"ok": r["ok"], "message": r["message"]} for name, r in tests.items()}
     from . import tiktok_auth
@@ -248,3 +251,87 @@ def set_account_enabled(name: str, enabled: bool):
             path.write_text("".join(lines), encoding="utf-8")
             return
     raise KeyError(name)
+
+
+ACCOUNT_FIELDS = {"label": "text", "max_posts_per_day": "number", "rotate": "yesno"}
+
+
+def _account_block(lines: list[str], name: str) -> tuple[int, int]:
+    """(first line, line after the last) of one account's entry in accounts.yaml."""
+    start = None
+    for i, line in enumerate(lines):
+        m = re.match(r"\s*-\s*name:\s*(\S+)", line)
+        if m and start is not None:
+            return start, i
+        if m and m.group(1) == name:
+            start = i
+    if start is None:
+        raise KeyError(name)
+    end = len(lines)
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1
+    return start, end
+
+
+def set_account_field(name: str, key: str, value) -> None:
+    """Set label, max_posts_per_day or rotate for one account in config/accounts.yaml, keeping the file's comments."""
+    kind = ACCOUNT_FIELDS.get(key)
+    if kind is None:
+        raise ValueError(f"{key} isn't an account setting")
+    value = str(value).strip()
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"{key} can't have more than one line")
+    clear = kind == "number" and value == ""
+    if kind == "number" and not clear:
+        if not re.fullmatch(r"\d{1,4}", value):
+            raise ValueError("Posts per day must be a whole number (0 means no limit)")
+        text = value
+    elif kind == "yesno":
+        text = "true" if value.lower() in ("true", "yes") else "false"
+    else:
+        text = json.dumps(value, ensure_ascii=False)
+    path = CONFIG_DIR / "accounts.yaml"
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    start, end = _account_block(lines, name)
+    for i in range(start, end):
+        if re.match(rf"\s*{key}:", lines[i]):
+            if clear:  # blank means "use the general limit": drop the line
+                del lines[i]
+                path.write_text("".join(lines), encoding="utf-8")
+                return
+            comment = re.search(r"\s+#.*$", lines[i].rstrip("\r\n"))
+            indent = re.match(r"\s*", lines[i]).group()
+            lines[i] = f"{indent}{key}: {text}{comment.group() if comment else ''}\n"
+            break
+    else:
+        if clear:
+            return
+        indent = re.match(r"\s*-\s*", lines[start]).group()
+        lines.insert(end, f"{' ' * len(indent)}{key}: {text}\n")
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def add_postiz_account(name: str, integration_id: str, label: str = "", provider: str = "tiktok") -> None:
+    """Add a connected Postiz channel to config/accounts.yaml, switched off until Steven turns it on."""
+    name, integration_id, label = name.strip(), integration_id.strip(), label.strip()
+    if not re.fullmatch(r"[a-z0-9_]{2,40}", name):
+        raise ValueError("Account names use only lowercase letters, numbers and underscores, like postiz_tiktok_2")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{3,100}", integration_id):
+        raise ValueError("The channel id looks wrong. Copy it from the Postiz Test result.")
+    if provider not in ("tiktok", "instagram", "youtube"):
+        raise ValueError("Provider must be tiktok, instagram or youtube")
+    if "\n" in label or "\r" in label:
+        raise ValueError("The label can't have more than one line")
+    if any(a.get("name") == name for a in accounts()) or name == "practice":
+        raise ValueError(f"There's already an account called {name}")
+    if any(a.get("integration_id") == integration_id for a in accounts()):
+        raise ValueError("That Postiz channel is already listed")
+    path = CONFIG_DIR / "accounts.yaml"
+    text = path.read_text(encoding="utf-8").rstrip("\n")
+    block = [f"  - name: {name}", "    platform: postiz", "    enabled: false"]
+    if label:
+        block.append(f"    label: {json.dumps(label, ensure_ascii=False)}")
+    block += [f"    provider: {provider}", f"    integration_id: {json.dumps(integration_id)}"]
+    if provider == "tiktok":
+        block.append("    privacy: PUBLIC_TO_EVERYONE")
+    path.write_text(text + "\n\n" + "\n".join(block) + "\n", encoding="utf-8")

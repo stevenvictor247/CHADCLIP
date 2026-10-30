@@ -89,6 +89,8 @@ class TaskIn(BaseModel):
 class SettingsIn(BaseModel):
     values: dict[str, str] = {}
     accounts: dict[str, bool] = {}
+    account_edits: dict[str, dict[str, str]] = {}
+    new_account: dict[str, str] = {}
     pitch: dict[str, str] = {}
 
 
@@ -577,12 +579,19 @@ def save_settings(body: SettingsIn, request: Request):
     _from_hq_page(request)
     try:
         changed = settings.save(body.values) + settings.save_pitch(body.pitch)
+        if body.new_account:
+            settings.add_postiz_account(body.new_account.get("name", ""), body.new_account.get("integration_id", ""),
+                                        body.new_account.get("label", ""), body.new_account.get("provider", "tiktok"))
         for name, enabled in body.accounts.items():
             settings.set_account_enabled(name, enabled)
+        for name, edits in body.account_edits.items():
+            for key, value in edits.items():
+                settings.set_account_field(name, key, value)
     except (ValueError, KeyError) as e:
         raise HTTPException(400, str(e))
-    if changed or body.accounts:
-        db.log("Steven", "Changed settings: " + ", ".join(changed + [f"{n} account" for n in body.accounts]))
+    touched = list({*body.accounts, *body.account_edits, *([body.new_account["name"]] if body.new_account else [])})
+    if changed or touched:
+        db.log("Steven", "Changed settings: " + ", ".join(changed + [f"{n} account" for n in touched]))
     return {"changed": changed}
 
 

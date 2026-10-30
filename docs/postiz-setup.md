@@ -27,4 +27,21 @@ TikTok's audit rules still apply: until TikTok approves the app, posts only reac
 4. Switch off the old `tiktok_main` entry so a clip isn't posted twice.
 5. Keep **Practice posting** on for the first clip, then turn it off.
 
+## 4. Add more TikTok accounts (optional)
+1. In Postiz press **Add Channel**, pick TikTok and sign in to the next account. Repeat for each account.
+2. In HQ **Settings > Chad**, press **Test** next to POSTIZ_API_KEY. It lists every Postiz channel with its **id**.
+3. Under **Posting accounts** use **Add another Postiz channel**: give it a short name (like `postiz_tiktok_2`),
+   paste the channel id, add a label you'll recognise, then **Save and restart HQ**. It starts switched off.
+4. Switch it on, and press its **Test** button. Set **Most posts a day** for it if it is a new account.
+   Every account keeps its own limits, so brand-new accounts can start at 1 or 2 a day.
+
+**How clips are shared out.** TikTok treats the same video on many accounts as spam, so Postiz accounts of the same
+kind take turns: each approved clip goes to just ONE of them, the account with the fewest posts today (then the one
+that has waited longest). Over a day that gives every account different clips. If every account is at its limit the
+clip waits for tomorrow. To make an account post every clip anyway, set **Take turns** to *No* for it.
+
+Clips still only post after you approve them, and the daily limit (HQ_MAX_POSTS_PER_DAY, or the account's own
+limit) and Pause All apply to each account. With two accounts at 4 a day, Chad can make up to 8 clips a day worth of
+posting, so the daily clip cap (HQ_MAX_CLIPS_PER_DAY) is what to raise if you want more.
+
 Posting limits (posts per day, minutes between posts) apply to Postiz accounts exactly like the others.
