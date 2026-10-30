@@ -140,6 +140,8 @@ def test_rejection_rate_and_the_streamer_behind_it(monkeypatch, tmp_path):
     assert "67%" in tip["title"] and "$0.80" in tip["why"]
     assert "Loud" in _tip(hq, "reject_creator_loud")["title"]
     assert "reject_creator_jynxzi" not in _ids(hq)
+    hq.db.log("Steven", "Took loud off Chad's clip list")     # removing them clears that tip
+    assert "reject_creator_loud" not in _ids(hq)
 
 
 def test_posting_failures_and_backlog(monkeypatch, tmp_path):

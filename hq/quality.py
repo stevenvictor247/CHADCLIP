@@ -216,6 +216,13 @@ def check_waiting_clips() -> list[dict]:
     return tips
 
 
+def _taken_off_list() -> set[str]:
+    """Lower-case logins Steven removed from Chad's list this week (the Remove button on the Clips tab)."""
+    rows = db.rows("SELECT message FROM activity WHERE agent = 'Steven' AND message LIKE 'Took % off Chad''s clip list' "
+                   "AND created_at >= ?", _ago(days=7))
+    return {r["message"].split()[1].lower() for r in rows}
+
+
 def check_clip_quality() -> list[dict]:
     """How many of Chad's clips Steven turns down, and whether one streamer is the cause."""
     rows = db.rows("SELECT creator, status FROM clips WHERE created_at >= ? AND status != 'pending_approval' "
@@ -229,6 +236,8 @@ def check_clip_quality() -> list[dict]:
     bad_creator = [(c, sum(1 for r in rejected if (r["creator"] or "unknown") == c), n)
                    for c, n in by_creator.items()]
     bad_creator = [(c, k, n) for c, k, n in bad_creator if k >= 3 and k / n >= 0.6]
+    removed = _taken_off_list()     # a streamer Steven took off Chad's list is dealt with: the tip goes away
+    bad_creator = [t for t in bad_creator if t[0].lower() not in removed]
     if rate >= REJECT_RATE:
         wasted = _spend(_ago(days=7), "Chad") * rate   # rough: Chad's week of Claude, in proportion
         tips.append(_tip("reject_rate", "quality", "medium",
@@ -244,7 +253,7 @@ def check_clip_quality() -> list[dict]:
                          f"You turned down {k} of {n} this week.",
                          f"Tell the Boss what's wrong with {creator}'s clips so Chad picks better ones. If they're "
                          f"never worth it, stop clipping {creator}: ask Claude in the project to take them off Chad's "
-                         "list (the Clips tab can add streamers but not remove them yet).", ("Talk to the Boss", "/#boss")))
+                         "list with Remove on the Clips tab.", ("Open Clips", "/#clips")))
     return tips
 
 
