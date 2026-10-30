@@ -178,6 +178,18 @@ CREATE TABLE IF NOT EXISTS queue_sent (
     lead_id INTEGER PRIMARY KEY,                 -- pitches Steven marked sent by hand from Queue's list
     sent_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS nudge_seen (
+    message_id TEXT PRIMARY KEY,                 -- Gmail messages Nudge has already counted
+    lead_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,                          -- replied or bounced
+    seen_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS nudge_state (
+    lead_id INTEGER PRIMARY KEY,
+    state TEXT NOT NULL,                         -- replied, bounced or quiet
+    snippet TEXT,
+    at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS quotes (
     id INTEGER PRIMARY KEY,
     lead_id INTEGER NOT NULL,

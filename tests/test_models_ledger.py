@@ -63,7 +63,7 @@ def test_ledger_records_and_budget_stops_scheduled_work(monkeypatch):
     assert db.rows(f"SELECT COUNT(*) n FROM tasks WHERE agent NOT IN {free}")[0]["n"] == queued
     business = {k for k in state if k.split(":")[1] not in ETSY_AGENTS}
     assert business == {"sched:Sweep:Tidy up and check what Claude is costing.", "sched:Tally:Count views on posted clips.",
-                        "sched:Trim:Rank the clip queue.", "sched:Queue:Check today's pitch quota.", "sched:Gate:Score the waiting clips."}
+                        "sched:Trim:Rank the clip queue.", "sched:Queue:Check today's pitch quota.", "sched:Nudge:Check Gmail for replies to pitches.", "sched:Gate:Score the waiting clips."}
 
 
 def test_create_records_usage_and_skips_fallback_for_haiku(monkeypatch):
