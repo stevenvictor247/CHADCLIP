@@ -190,6 +190,18 @@ CREATE TABLE IF NOT EXISTS nudge_state (
     snippet TEXT,
     at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS rerun_tries (
+    id INTEGER PRIMARY KEY,
+    lead_id INTEGER NOT NULL,
+    n INTEGER NOT NULL,                          -- 1 or 2: Rerun never makes a third
+    idea TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'drafted',      -- drafted, sent or skipped
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    UNIQUE (lead_id, n)
+);
 CREATE TABLE IF NOT EXISTS quotes (
     id INTEGER PRIMARY KEY,
     lead_id INTEGER NOT NULL,

@@ -5,11 +5,11 @@
   // A section can be on more than one tab (the villages show on Home and, just Warrior Village, on its own tab).
   const TABS = [
     {id: "home", icon: "🏠", lu: "house", label: "Home", has: ["towns", "setup", "agents"]},
-    {id: "approvals", icon: "✅", lu: "circle-check-big", label: "Approvals", has: ["apprsection", "pending"],
+    {id: "approvals", icon: "✅", lu: "circle-check-big", label: "Approvals", has: ["apprsection", "pending", "rerun"],
      empty: "Nothing is waiting for your OK."},
     {id: "boss", icon: "👑", lu: "crown", label: "Boss", has: ["chatlog"]},
     {id: "campaigns", icon: "🎯", lu: "target", label: "Campaigns", has: ["campsection"]},
-    {id: "pitch", icon: "✉️", lu: "mail", label: "Pitch", appr: "pitch", has: ["queue", "nudge", "creatorsection", "leadsection"],
+    {id: "pitch", icon: "✉️", lu: "mail", label: "Pitch", appr: "pitch", has: ["queue", "nudge", "rerun", "creatorsection", "leadsection"],
      empty: "No leads or creators to clip yet. Pitch and Scout put them here when they find some."},
     {id: "clips", icon: "🎞️", lu: "clapperboard", label: "Clips", appr: "clips", has: ["allowedsection", "library"]},
     {id: "football", icon: "🏈", lu: "trophy", label: "Warrior Village", appr: "football", has: ["towns", "football"]},
@@ -104,7 +104,7 @@
     let last = null;
     for (const id of t.has) {
       const el = document.getElementById(id);
-      const sec = el && (el.matches("section, #towns, #football, #etsy, #queue, #nudge, #sweep, #muse") ? el : el.closest("section"));
+      const sec = el && (el.matches("section, #towns, #football, #etsy, #queue, #nudge, #rerun, #sweep, #muse") ? el : el.closest("section"));
       if (sec) { sec.dataset.tab = sec.dataset.tab && sec.dataset.tab !== t.id ? sec.dataset.tab + " " + t.id : t.id; last = sec; }
     }
     if (t.empty && last) {
