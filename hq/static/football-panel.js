@@ -299,7 +299,7 @@
         <div>🏈 This week: <b>${esc(p.opponent || "no game")}</b>${p.opponent ? (p.week_folder ? ` (prints the documents in the "${esc(p.week_folder)}" folder)` : ` — no folder yet, press Make opponent folders`) : ""}</div>
         <div>🖨️ Printer: ${esc(p.printer)}</div></div>
       ${p.files.length ? p.files.map(f => `<div class="fbline">${f.problem ? "⚠" : "📄"} ${esc(f.name)}${f.problem ? ` <span class="muted">${esc(f.problem)}</span>` : ""}</div>`).join("") :
-        `<div class="muted">Nothing waiting. Put PDF, Word or Excel files in this week's opponent folder and Clock prints them at the next print time. Files stay in the folder. A file prints once, and again only if you change it.</div>`}
+        `<div class="muted">Nothing waiting. This week's reports in the Outbox print on their own (no folder needed), and so do PDF, Word or Excel files you put in this week's opponent folder. A file prints once, and again only if you change it. The 🖨 Print button on any Outbox file prints it right now.</div>`}
       ${ready && !p.paused ? `<div class="muted">${ready} ready to print.</div>` : ""}
       <div class="fbline" style="display:block"><b>Printed every week</b> <span class="muted">(whoever we play, once per game week)</span>
         ${(p.extras || []).map(n => `<div>📄 ${esc(n)} <button class="ghost" data-rmextra="${esc(n)}">Remove</button></div>`).join("") || `<div class="muted">Nothing yet.</div>`}

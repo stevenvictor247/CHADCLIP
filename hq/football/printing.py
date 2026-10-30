@@ -181,6 +181,16 @@ def waiting(now: float | None = None) -> list[dict]:
             sources += [(p, f"{folder.name}/{p.name}") for p in sorted(p for p in folder.iterdir() if p.is_file())]
         except OSError:
             pass
+    if opp:   # this week's reports can print straight from the Outbox, so no opponent folder is needed
+        from ..config import FOOTBALL_OUTBOX
+        have = {p.name.casefold() for p, _ in sources}   # a copy already sitting in the folder isn't printed twice
+        try:
+            box = sorted(p for p in FOOTBALL_OUTBOX.iterdir() if p.is_file())
+        except OSError:
+            box = []
+        sources += [(p, f"Outbox/{p.name}") for p in box
+                    if season.find_opponent(p.stem) == opp and p.name.casefold() not in have
+                    and p.suffix.lower() in PRINTABLE]
     if opp:   # the every-week sheets print once per game week, so the key carries the opponent
         sources += [(p, f"every week/{opp}/{p.name}") for p in extras()]
     for p, key in sources:
@@ -203,15 +213,34 @@ def waiting(now: float | None = None) -> list[dict]:
     return out
 
 
-def _send(path: Path) -> None:
-    """Send one file to the printer, raising with a plain reason if that didn't work."""
-    printer = FOOTBALL_PRINTER
-    if sys.platform.startswith("win"):
-        env = {**os.environ, "HQ_PRINT_FILE": str(path), "HQ_PRINT_PRINTER": printer}
-        cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS]
-    else:   # Mac/Linux: CUPS
-        env = dict(os.environ)
-        cmd = ["lp", *(["-d", printer] if printer else []), str(path)]
+SUMATRA_URL_ID = "SumatraPDF.SumatraPDF"
+
+
+def sumatra() -> str | None:
+    """SumatraPDF, the small free PDF viewer that can print silently, if it's installed (any usual place)."""
+    found = shutil.which("SumatraPDF") or shutil.which("SumatraPDF.exe")
+    if found:
+        return found
+    for base in (os.environ.get("LOCALAPPDATA"), os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        if base:
+            p = Path(base) / "SumatraPDF" / "SumatraPDF.exe"
+            if p.is_file():
+                return str(p)
+    return None
+
+
+def install_sumatra() -> str | None:
+    """Windows can't print a PDF without a PDF app, so install SumatraPDF for this user (winget, no admin needed)."""
+    try:
+        subprocess.run(["winget", "install", "--id", SUMATRA_URL_ID, "-e", "--silent", "--scope", "user",
+                        "--accept-package-agreements", "--accept-source-agreements"],
+                       capture_output=True, text=True, timeout=600)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return sumatra()
+
+
+def _run(cmd: list[str], env: dict | None = None) -> None:
     try:
         r = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=PRINT_TIMEOUT)
     except subprocess.TimeoutExpired:
@@ -223,13 +252,32 @@ def _send(path: Path) -> None:
         raise RuntimeError(msg[0][:200] if msg else "Windows couldn't print it")
 
 
+def _send(path: Path) -> None:
+    """Send one file to the printer, raising with a plain reason if that didn't work."""
+    printer = FOOTBALL_PRINTER
+    if sys.platform.startswith("win"):
+        if path.suffix.lower() == ".pdf":   # Windows has no print action for PDFs unless a PDF app is installed
+            exe = sumatra() or install_sumatra()
+            if not exe:
+                raise RuntimeError("Windows has no PDF printing app and I couldn't install one. Install SumatraPDF "
+                                   "(winget install SumatraPDF.SumatraPDF), then try again")
+            _run([exe, *(["-print-to", printer] if printer else ["-print-to-default"]), "-silent", str(path)])
+            return
+        env = {**os.environ, "HQ_PRINT_FILE": str(path), "HQ_PRINT_PRINTER": printer}
+        _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS], env)
+    else:   # Mac/Linux: CUPS
+        _run(["lp", *(["-d", printer] if printer else []), str(path)], dict(os.environ))
+
+
 def print_now(reason: str = "Print now") -> str:
     """Print everything waiting. Returns the one-line summary (also logged and sent to your phone by the caller)."""
+    opp = week_opponent()
+    if opp and folder_for(opp) is None:
+        ensure_folders()   # a missing opponent folder never blocks printing: make it
     files = waiting()
     ready = [f for f in files if not f["problem"]]
-    opp = week_opponent()
     if not files and opp and folder_for(opp) is None:
-        msg = f"There's no {opp} folder in {FOOTBALL_PRINT_DIR.name} yet, so nothing printed."
+        msg = f"Couldn't make the {opp} folder in {FOOTBALL_PRINT_DIR} (is the folder there?), and nothing was waiting in the Outbox."
         _log(msg)
         return msg
     notes = [f"{f['name']}: {f['problem']}" for f in files if f["problem"]]
@@ -303,8 +351,10 @@ def run_if_due(now: datetime | None = None) -> str | None:
         _log(msg)
         relay.notify(msg)
         return msg
+    opp = week_opponent()
+    if opp and folder_for(opp) is None:
+        ensure_folders()
     if not waiting():
-        opp = week_opponent()
         msg = ("Thursday print: " + (f"nothing in the {opp} folder, so nothing printed." if opp and folder_for(opp)
                                     else f"no folder for {opp} yet, so nothing printed." if opp else "no game this week."))
         _log(msg)

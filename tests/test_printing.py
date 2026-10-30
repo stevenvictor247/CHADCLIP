@@ -12,6 +12,8 @@ from hq import db, relay, worker
 from hq.agents.football.clock import Clock
 from hq.football import printing, season, tagrules, tagsheet
 
+REAL_SEND = printing._send   # the fixture below replaces _send; the Windows test needs the real one
+
 # 2026-10-22 is a Thursday
 THU_8PM = datetime(2026, 10, 22, 20, 0)
 
@@ -21,6 +23,9 @@ def _setup(monkeypatch):
     db.init()
     db.execute("DELETE FROM tasks")
     shutil.rmtree(printing.FOOTBALL_PRINT_DIR, ignore_errors=True)
+    from hq.config import FOOTBALL_OUTBOX
+    shutil.rmtree(FOOTBALL_OUTBOX, ignore_errors=True)
+    shutil.rmtree(printing.EXTRAS_DIR, ignore_errors=True)
     (printing.FOOTBALL_PRINT_DIR / "Northern Michigan").mkdir(parents=True)
     printing.STATE_PATH.unlink(missing_ok=True)
     tagsheet.clear()
@@ -142,12 +147,59 @@ def test_a_folder_with_a_nickname_still_counts(_setup):
     assert _setup["printed"] == ["a.pdf"]
 
 
-def test_missing_opponent_folder_says_so(_setup):
+def test_a_missing_opponent_folder_is_made_and_never_blocks_printing(_setup):
     shutil.rmtree(WEEK)
-    assert "no Northern Michigan folder" in printing.print_now().replace("There's ", "no ").replace("There", "no")
+    assert printing.print_now() == "Nothing to print."
+    assert WEEK.is_dir()   # made for you
+    shutil.rmtree(WEEK)
     printing.run_if_due(THU_8PM)
-    assert "no folder for Northern Michigan" in printing.run_if_due(THU_8PM + timedelta(days=7))
-    assert any("no folder" in m for m in _setup["sent"])
+    assert "nothing in the Northern Michigan folder" in printing.run_if_due(THU_8PM + timedelta(days=7))
+    assert WEEK.is_dir()
+
+
+def test_this_weeks_outbox_reports_print_straight_from_the_outbox(_setup):
+    from hq.config import FOOTBALL_OUTBOX
+    FOOTBALL_OUTBOX.mkdir(parents=True, exist_ok=True)
+    for n in ("Northern Michigan offensive personnel 2026-10-26.pdf", "Ferris State scouting report.pdf", "Notes.pdf"):
+        p = FOOTBALL_OUTBOX / n
+        p.write_bytes(b"%PDF-1.4")
+        t = time.time() - 3600
+        os.utime(p, (t, t))
+    shutil.rmtree(WEEK)   # no folder at all
+    printing.print_now()
+    printing.print_now()
+    assert _setup["printed"] == ["Northern Michigan offensive personnel 2026-10-26.pdf"]   # this opponent, once
+    # a copy that already sits in the folder isn't printed twice
+    put("Northern Michigan scouting report.pdf", age=3600)
+    (FOOTBALL_OUTBOX / "Northern Michigan scouting report.pdf").write_bytes(b"%PDF-1.4")
+    os.utime(FOOTBALL_OUTBOX / "Northern Michigan scouting report.pdf", (time.time() - 3600,) * 2)
+    printing.print_now()
+    assert _setup["printed"].count("Northern Michigan scouting report.pdf") == 1
+
+
+def test_windows_prints_pdfs_with_sumatra_and_installs_it_when_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(printing.sys, "platform", "win32")
+    calls = []
+    monkeypatch.setattr(printing, "_run", lambda cmd, env=None: calls.append(cmd))
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF")
+    monkeypatch.setattr(printing, "sumatra", lambda: r"C:\S\SumatraPDF.exe")
+    monkeypatch.setattr(printing, "FOOTBALL_PRINTER", "")
+    REAL_SEND(pdf)
+    assert calls[-1] == [r"C:\S\SumatraPDF.exe", "-print-to-default", "-silent", str(pdf)]
+    monkeypatch.setattr(printing, "FOOTBALL_PRINTER", "HP ENVY 6000 series")
+    REAL_SEND(pdf)
+    assert calls[-1][:3] == [r"C:\S\SumatraPDF.exe", "-print-to", "HP ENVY 6000 series"]
+    # not installed: tries to install it, and says plainly if it can't
+    monkeypatch.setattr(printing, "sumatra", lambda: None)
+    monkeypatch.setattr(printing, "install_sumatra", lambda: None)
+    with pytest.raises(RuntimeError, match="PDF printing app"):
+        REAL_SEND(pdf)
+    # Word and Excel still go through Windows' own print action
+    doc = tmp_path / "a.docx"
+    doc.write_bytes(b"x")
+    REAL_SEND(doc)
+    assert calls[-1][0] == "powershell"
 
 
 def test_folders_are_made_for_every_opponent_once():
