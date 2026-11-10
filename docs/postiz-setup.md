@@ -13,6 +13,20 @@ Nothing changes until you do all of this. Clips still need your Approve tap befo
    `http://localhost:5000` (with `/api` on the backend one, as their guide shows), then run `docker compose up -d`.
 3. Open http://localhost:5000 and create your account.
 
+### Important for TikTok: Postiz needs a public home for the videos
+TikTok fetches each video from a web address that Postiz gives it, and that address must be public HTTPS. With the
+setup above, Postiz keeps uploads on your PC (`http://localhost:5000/uploads/...`), which TikTok can't reach, so every
+TikTok post fails inside Postiz even though HQ handed it over fine. Before connecting TikTok, either:
+
+- point Postiz's storage at **Cloudflare R2** (free up to 10 GB): in its compose file set `STORAGE_PROVIDER=cloudflare`
+  and fill the `CLOUDFLARE_*` lines from Postiz's R2 guide (https://docs.postiz.com/configuration/r2), then verify the bucket's public web address
+  in your TikTok developer app (URL properties); or
+- skip Postiz for TikTok and keep using HQ's own `tiktok_main` account, which uploads the file straight from your PC.
+
+HQ now asks Postiz every 12 hours (when Tally runs) how each post really went. A post Postiz marked as an error turns
+into a failed post with Postiz's reason, and the clip gets the usual **Try posting again** button. Published posts get
+their link.
+
 ## 2. Connect TikTok inside Postiz
 Postiz needs its own TikTok developer app keys (`TIKTOK_CLIENT_ID` and `TIKTOK_CLIENT_SECRET` in its compose file).
 TikTok's audit rules still apply: until TikTok approves the app, posts only reach the inbox as drafts. In Postiz press

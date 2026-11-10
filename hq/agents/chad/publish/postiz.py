@@ -54,9 +54,24 @@ def provider_settings(account: dict, clip: dict) -> dict:
     if kind == "instagram":
         return {"__type": "instagram", "post_type": "post", "is_trial_reel": False, "collaborators": []}
     if kind == "youtube":
-        return {"__type": "youtube", "title": (clip.get("title") or "Clip")[:100], "type": account.get("privacy", "public"),
-                "tags": []}
+        # Postiz rejects YouTube posts without selfDeclaredMadeForKids, and the title must be 2-100 characters.
+        title = (clip.get("title") or "").strip()
+        return {"__type": "youtube", "title": (title if len(title) >= 2 else "Clip")[:100],
+                "type": account.get("privacy", "public"), "selfDeclaredMadeForKids": "no", "tags": []}
     return {"__type": kind}
+
+
+def list_posts(start: datetime, end: datetime) -> list[dict]:
+    """What Postiz did with its posts between two times: [{id, state, error, releaseURL, ...}]. state is QUEUE,
+    PUBLISHED, ERROR or DRAFT. A "now" post is only queued when publish() returns, so this is how HQ learns whether
+    TikTok really took it."""
+    fmt = lambda t: t.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")  # noqa: E731
+    r = requests.get(f"{base()}/posts", headers=_headers(), params={"startDate": fmt(start), "endDate": fmt(end)},
+                     timeout=60)
+    if r.status_code != 200:
+        raise RuntimeError(f"Postiz said {r.status_code}: {r.text[:200]}")
+    data = r.json()
+    return data.get("posts", []) if isinstance(data, dict) else data if isinstance(data, list) else []
 
 
 def publish(clip: dict, account: dict) -> tuple[str, str | None]:
