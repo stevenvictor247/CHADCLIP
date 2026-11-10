@@ -8,7 +8,7 @@ import time
 import traceback
 from datetime import datetime, timedelta, timezone
 
-from . import agents, boss, budgets, db, ledger, llm
+from . import agents, away, boss, budgets, db, ledger, llm
 from .agents.chad.publish import publish_approved
 from .config import DATA_DIR, FOOTBALL_REMINDER_HOUR, REQUIRE_APPROVAL
 
@@ -124,6 +124,8 @@ def queue_scheduled(state: dict):
             continue  # that village's Claude budget is spent: nothing new starts on its own there until tomorrow
         if budgets.is_paused(agent.name):
             continue  # this agent used its own daily budget (HQ_AGENT_BUDGETS)
+        if away.skips(agent):
+            continue  # Steven has been away for days: don't make drafts that would go stale before he sees them
         for every_hours, instructions, params in agent.schedule:
             key = f"sched:{agent.name}:{instructions}"
             waited = now - state.get(key, 0)
@@ -269,6 +271,7 @@ def slow_loop(interval: float = 15):
 def loop(interval: float = 15):
     db.init()
     recover_interrupted()
+    away.ensure_started()
     threading.Thread(target=slow_loop, args=(interval,), daemon=True, name="video-lane").start()
     print("[worker] running. Ctrl+C to stop.")
     while True:

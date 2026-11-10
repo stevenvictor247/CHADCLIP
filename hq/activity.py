@@ -185,6 +185,10 @@ def _why(agent) -> dict | None:
     from .agents.chad.publish import paused
     if paused():
         return {"why": "HQ is paused (Pause All).", "unlock": "Press Resume in the top bar.", "link": ""}
+    from . import away
+    if agent.schedule and away.skips(agent):
+        return {"why": "Resting in away mode: you haven't been in HQ for a few days, so it isn't making drafts that "
+                       "would go stale.", "unlock": "Open HQ or message the bot. It starts again right away.", "link": ""}
     if not agent.free and agent.schedule and ledger.over_budget(agent.village):
         return {"why": "Today's Claude budget is spent. It starts again tomorrow.", "unlock": "", "link": ""}
     check = REASONS.get(agent.name.lower())

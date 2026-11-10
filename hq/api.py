@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import os
+import traceback
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -10,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import activity, agents, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
+from . import activity, agents, away, approvals, boss, campaigns, connections, creators, db, discovery, football, instagram_auth, ledger, money, settings, setup_check, tiktok_auth, update, youtube_auth
 from . import etsy, etsy_api, lens_api, muse_api, nudge_api, queue_api, recruiter_api, rerun_api, sweep_api, trim_api
 from .config import CLIPS_DIR, FOOTBALL_DATA, FOOTBALL_OUTBOX, HAS_LLM, PASSWORD, SOURCES_DIR, village_of
 
@@ -63,13 +64,24 @@ async def guard(request: Request, call_next):
     return await call_next(request)
 
 
+def _note_steven(request: Request) -> None:
+    """Away mode: opening the dashboard or pressing something in it means Steven is here. Background refreshes don't."""
+    path = request.url.path
+    if (request.method == "GET" and path == "/") or (request.method in CHANGES and path.startswith("/api/")):
+        try:
+            away.seen()
+        except Exception:
+            traceback.print_exc()   # never let this bookkeeping block a page
+
+
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     """With HQ_PASSWORD set, every page except the login page needs the session cookie."""
     # /sample/<secret> is the private link in a pitch email: the unguessable token is the key, so streamers need no login.
-    if not PASSWORD or request.url.path in ("/login", "/logout") or request.url.path.startswith("/sample/"):
+    if request.url.path in ("/login", "/logout") or request.url.path.startswith("/sample/"):
         return await call_next(request)
-    if hmac.compare_digest(request.cookies.get(SESSION_COOKIE, ""), _session_token()):
+    if not PASSWORD or hmac.compare_digest(request.cookies.get(SESSION_COOKIE, ""), _session_token()):
+        _note_steven(request)
         return await call_next(request)
     if request.url.path.startswith("/api/"):
         return JSONResponse({"detail": "Log in first"}, status_code=401)
