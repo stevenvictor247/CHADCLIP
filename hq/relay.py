@@ -81,6 +81,8 @@ DECIDERS["clip"] = _decide_clip
 def handle_callback(cb: dict) -> None:
     if cb["from"]["id"] != owner_id():
         return
+    from . import away
+    away.seen()
     try:
         kind, decision, ref = cb["data"].split(":")
         done = DECIDERS[kind](int(ref), decision)
@@ -100,6 +102,8 @@ def handle_callback(cb: dict) -> None:
 def handle_message(m: dict) -> None:
     if m.get("from", {}).get("id") != owner_id():
         return  # anyone else is ignored completely
+    from . import away
+    away.seen()
     text = (m.get("text") or "").strip()
     if not text:
         return
