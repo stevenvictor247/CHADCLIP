@@ -42,3 +42,18 @@ def test_other_names_allowed_with_password(monkeypatch):
     c = _client(base_url="http://my-pc.tailnet.ts.net")
     assert c.get("/login").status_code == 200         # Tailscale address reaches the login page
     assert c.get("/api/state").status_code == 401     # and still needs the password
+
+
+def test_wrong_passwords_are_slowed_down(monkeypatch):
+    monkeypatch.setattr(hq.api, "PASSWORD", "s3cret")
+    hq.api._login_fails.clear()
+    c = _client(base_url="http://my-pc.tailnet.ts.net", follow_redirects=False)
+    for _ in range(hq.api.LOGIN_TRIES):
+        assert c.post("/login", data={"password": "guess"}).headers["location"] == "/login?wrong=1"
+    locked = c.post("/login", data={"password": "s3cret"})   # even the right one waits during the lockout
+    assert locked.status_code == 429 and "hq_session" not in locked.cookies
+    # once the wrong tries are old enough, the right password works again
+    hq.api._login_fails.update({k: [t - hq.api.LOGIN_WINDOW - 1 for t in v] for k, v in hq.api._login_fails.items()})
+    ok = c.post("/login", data={"password": "s3cret"})
+    assert ok.status_code == 303 and ok.headers["location"] == "/" and "hq_session" in ok.cookies
+    assert not hq.api._login_fails

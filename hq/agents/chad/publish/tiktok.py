@@ -11,6 +11,7 @@ import time
 import requests
 
 from .... import tiktok_auth
+from .errors import NotReady
 
 API = "https://open.tiktokapis.com/v2"
 MIN_CHUNK, MAX_CHUNK = 5 * 1024 * 1024, 64 * 1024 * 1024
@@ -26,7 +27,12 @@ def _chunks(size: int) -> tuple[int, int]:
 
 def publish(clip: dict, account: dict) -> tuple[str, str | None]:
     # A connected TikTok (Settings page) renews itself; a token pasted into the account's field is used as before.
-    token = tiktok_auth.access_token() or os.environ[account["access_token_env"]]
+    try:
+        token = tiktok_auth.access_token() or os.environ.get(account.get("access_token_env") or "", "")
+    except Exception as e:   # the saved sign-in couldn't renew itself
+        raise NotReady(f"the TikTok sign-in isn't working ({str(e)[:120]}). Press Connect TikTok on the Settings page.") from e
+    if not token:
+        raise NotReady("TikTok isn't connected yet. Press Connect TikTok on the Settings page.")
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8"}
     path = clip["path"]
     size = os.path.getsize(path)

@@ -3,8 +3,9 @@
 from datetime import datetime, timezone
 
 from . import db
-from .config import (DAILY_BUDGET, ETSY_AGENTS, ETSY_DAILY_BUDGET, ETSY_MONTHLY_BUDGET, FOOTBALL_AGENTS,
-                     FOOTBALL_DAILY_BUDGET, PRICES, UNKNOWN_PRICE)
+from .config import (CACHE_READ_PRICES, DAILY_BUDGET, ETSY_AGENTS, ETSY_DAILY_BUDGET, ETSY_MONTHLY_BUDGET,
+                     FOOTBALL_AGENTS, FOOTBALL_DAILY_BUDGET, LONG_PROMPT_PRICES, LONG_PROMPT_TOKENS, PRICES,
+                     UNKNOWN_PRICE)
 
 
 WEB_SEARCH_FEE = 0.01  # dollars per web search the API runs for us ($10 per 1,000)
@@ -12,7 +13,11 @@ WEB_SEARCH_FEE = 0.01  # dollars per web search the API runs for us ($10 per 1,0
 
 def cost_of(model: str, input_tokens: int, output_tokens: int, cache_read: int = 0, cache_write: int = 0) -> float:
     price_in, price_out = PRICES.get(model, UNKNOWN_PRICE)
-    return (input_tokens * price_in + cache_read * price_in * 0.1 + cache_write * price_in * 1.25
+    read_price = CACHE_READ_PRICES.get(model, price_in * 0.1)
+    if model in LONG_PROMPT_PRICES and input_tokens + cache_read + cache_write > LONG_PROMPT_TOKENS:
+        price_in, price_out = LONG_PROMPT_PRICES[model]   # the whole request is billed at the long-prompt price
+        read_price = price_in * 0.1
+    return (input_tokens * price_in + cache_read * read_price + cache_write * price_in * 1.25
             + output_tokens * price_out) / 1_000_000
 
 

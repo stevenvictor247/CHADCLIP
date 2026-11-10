@@ -18,18 +18,20 @@ from datetime import datetime, timezone
 
 import requests
 
+from .errors import NotReady
+
 
 def base() -> str:
     url = (os.getenv("POSTIZ_URL") or "").strip().rstrip("/")
     if not url:
-        raise RuntimeError("Set the Postiz address (POSTIZ_URL) in Settings first.")
+        raise NotReady("Set the Postiz address (POSTIZ_URL) in Settings first.")
     return url if url.endswith("/api/public/v1") else url + "/api/public/v1"
 
 
 def _headers() -> dict:
     key = (os.getenv("POSTIZ_API_KEY") or "").strip()
     if not key:
-        raise RuntimeError("Set the Postiz API key (POSTIZ_API_KEY) in Settings first.")
+        raise NotReady("Set the Postiz API key (POSTIZ_API_KEY) in Settings first.")
     return {"Authorization": key}
 
 
