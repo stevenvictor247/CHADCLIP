@@ -7,6 +7,7 @@ That opens a Google sign-in and saves a token file, so later uploads run unatten
 from pathlib import Path
 
 from ....config import ROOT
+from .errors import NotReady
 
 # upload: post Shorts. readonly: read your own videos' view counts (Tally). Asked together so you sign in once.
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
@@ -39,7 +40,13 @@ def publish(clip: dict, account: dict) -> tuple[str, str]:
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
 
-    youtube = build("youtube", "v3", credentials=_credentials(account))
+    try:
+        creds = _credentials(account)
+    except Exception as e:   # an ended sign-in is found before anything uploads, so the clip can simply wait
+        raise NotReady(f"the YouTube sign-in for {account['name']} isn't working ({str(e)[:120]}). Press Open Google "
+                       "sign-in under Connect YouTube on the Settings page. Google ends sign-ins after 7 days while "
+                       "your Google app is in Testing: press Publish app on its OAuth consent screen to stop that.") from e
+    youtube = build("youtube", "v3", credentials=creds)
     title = clip["title"][:90]
     if "#shorts" not in title.lower():
         title += " #Shorts"

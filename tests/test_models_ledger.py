@@ -30,9 +30,27 @@ def test_cost_math():
     # 1M in + 1M out on Opus 5.5 is $4 + $20
     assert ledger.cost_of("claude-opus-5-5", 1_000_000, 1_000_000) == pytest.approx(24.0)
     # cached reads cost a tenth of input, writes 1.25x
-    assert ledger.cost_of("claude-haiku-5-5", 0, 0, cache_read=1_000_000, cache_write=1_000_000) == pytest.approx(0.01 + 0.125)
+    assert ledger.cost_of("claude-opus-5", 0, 0, cache_read=1_000_000, cache_write=1_000_000) == pytest.approx(0.5 + 6.25)
     # unknown models are priced high so the meter never under-reports
     assert ledger.cost_of("mystery", 1_000_000, 0) == pytest.approx(5.0)
+
+
+def test_haiku_long_prompts_cost_five_times_as_much():
+    # up to 100,000 prompt tokens: $0.10 / $0.50 per million
+    assert ledger.cost_of("claude-haiku-5-5", 100_000, 10_000) == pytest.approx(0.01 + 0.005)
+    # a longer prompt (a long VOD transcript) bills the whole request at $0.50 / $2.50
+    assert ledger.cost_of("claude-haiku-5-5", 200_000, 10_000) == pytest.approx(0.10 + 0.025)
+    # cached tokens count toward the prompt's length
+    assert ledger.cost_of("claude-haiku-5-5", 50_000, 0, cache_read=60_000) == pytest.approx(0.025 + 0.003)
+    # other models have one price whatever the length
+    assert ledger.cost_of("claude-sonnet-5-5", 200_000, 0) == pytest.approx(0.40)
+
+
+def test_newer_models_have_their_own_prices():
+    assert ledger.cost_of("claude-fable-5-2", 1_000_000, 1_000_000) == pytest.approx(48.0)
+    # Opus 5.5 and Sonnet 5.5 read cached tokens at $0.20 and $0.10 per million, not a tenth of input
+    assert ledger.cost_of("claude-opus-5-5", 0, 0, cache_read=1_000_000) == pytest.approx(0.20)
+    assert ledger.cost_of("claude-sonnet-5-5", 0, 0, cache_read=1_000_000) == pytest.approx(0.10)
 
 
 def test_only_models_that_support_fallback_get_it():

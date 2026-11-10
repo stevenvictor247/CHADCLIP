@@ -445,8 +445,9 @@ def check_boss() -> list[dict]:
                          ("fresh_boss_chat", "Start a fresh Boss chat")))
     tokens = _boss_chat_tokens()
     if tokens >= BOSS_CHAT_LONG_TOKENS and not tips:
-        from .config import PRICES, UNKNOWN_PRICE, model_for
-        per = tokens * PRICES.get(model_for("boss"), UNKNOWN_PRICE)[0] / 1e6 * 0.1   # cached reads cost a tenth
+        from .config import model_for
+        from .ledger import cost_of
+        per = cost_of(model_for("boss"), 0, 0, cache_read=tokens)   # every message re-reads the chat from the cache
         tips.append(_tip("boss_chat_long", "efficiency", "low",
                          f"The Boss chat is long (about {tokens // 1000}k tokens)",
                          f"All of it is sent again with every message. Even cached that's about {_usd(per)} a message, "

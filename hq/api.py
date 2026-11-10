@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import os
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -171,10 +172,24 @@ def login_page():
     return FileResponse(STATIC / "login.html")
 
 
+LOGIN_TRIES, LOGIN_WINDOW = 5, 5 * 60   # wrong passwords allowed from one address, and how long they count (seconds)
+_login_fails: dict[str, list[float]] = {}
+
+
 @app.post("/login")
-def login(password: str = Form("")):
+def login(request: Request, password: str = Form("")):
+    # Slow down password guessing: after 5 wrong tries, that address waits until they're 5 minutes old.
+    who, now = (request.client.host if request.client else "?"), time.time()
+    recent = [t for t in _login_fails.get(who, []) if now - t < LOGIN_WINDOW]
+    if len(recent) >= LOGIN_TRIES:
+        return Response("Too many wrong passwords. Wait 5 minutes and try again.", status_code=429,
+                        media_type="text/plain", headers={"Retry-After": str(LOGIN_WINDOW)})
     if not PASSWORD or not hmac.compare_digest(password.encode(), PASSWORD.encode()):
+        if len(_login_fails) > 1000:   # never let a flood of addresses grow this without limit
+            _login_fails.clear()
+        _login_fails[who] = recent + [now]
         return RedirectResponse("/login?wrong=1", status_code=303)
+    _login_fails.pop(who, None)
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(SESSION_COOKIE, _session_token(), max_age=60 * 60 * 24 * 30, httponly=True, samesite="lax")
     return response
