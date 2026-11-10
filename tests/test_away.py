@@ -81,3 +81,14 @@ def test_dashboard_visit_counts_but_background_refresh_does_not(clean):
     assert away.is_away()
     client.get("/")
     assert not away.is_away() and len(clean) == 1
+
+
+def test_boss_weekly_orders_wait_while_away(clean, monkeypatch):
+    from hq import agents, boss
+    a = Drafter(name="AwayWeekly", role="t")
+    monkeypatch.setattr(boss, "WEEKLY_ORDERS", [("AwayWeekly", "Weekly round", {})])
+    monkeypatch.setattr(agents, "get", lambda name: a if name == "AwayWeekly" else None)
+    _seen_days_ago(5)
+    assert boss.send_weekly_orders({}) == []
+    away.seen()
+    assert len(boss.send_weekly_orders({})) == 1
