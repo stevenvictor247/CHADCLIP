@@ -1,9 +1,10 @@
 """The dashboard and its API. Run with: python -m hq serve"""
 
+import time
+
 import hashlib
 import hmac
 import os
-import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
