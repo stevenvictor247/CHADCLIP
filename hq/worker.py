@@ -154,6 +154,8 @@ REPORT_MIN_GAP_HOURS = 20  # however the state file behaves, the Boss report nev
 def daily_report(state: dict):
     if not llm.HAS_LLM:
         return
+    if away.is_away():
+        return   # a paid report nobody reads; the free welcome-back catch-up covers the gap
     now = time.time()
     today = datetime.now().strftime("%Y-%m-%d")
     if datetime.now().hour < REPORT_HOUR or state.get("last_report") == today:

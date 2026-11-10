@@ -92,3 +92,16 @@ def test_boss_weekly_orders_wait_while_away(clean, monkeypatch):
     assert boss.send_weekly_orders({}) == []
     away.seen()
     assert len(boss.send_weekly_orders({})) == 1
+
+
+def test_paid_daily_report_waits_while_away(clean, monkeypatch):
+    from hq import boss, llm
+    calls = []
+    monkeypatch.setattr(llm, "HAS_LLM", True)
+    monkeypatch.setattr(boss, "report", lambda: calls.append(1) or "report")
+    monkeypatch.setattr(worker, "REPORT_HOUR", 0)
+    monkeypatch.setattr(worker, "_save_state", lambda s: None)
+    _seen_days_ago(5)
+    state = {}
+    worker.daily_report(state)
+    assert calls == [] and "last_report" not in state
