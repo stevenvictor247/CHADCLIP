@@ -40,8 +40,16 @@ def publish(clip: dict, account: dict) -> tuple[str, str | None]:
     source = {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk_size, "total_chunk_count": count}
 
     if account.get("mode", "inbox") == "direct":
-        body = {"post_info": {"title": clip["post_text"][:2200], "privacy_level": account.get("privacy", "PUBLIC_TO_EVERYONE"),
-                              "disable_duet": False, "disable_comment": False, "disable_stitch": False},
+        privacy = account.get("privacy", "PUBLIC_TO_EVERYONE")
+        # A clip made for a paid campaign is branded content: TikTok requires the disclosure toggle, and branded
+        # content can't be private (https://www.tiktok.com/legal/page/global/bc-policy/en).
+        paid = bool(clip.get("campaign_id"))
+        if paid and privacy == "SELF_ONLY":
+            raise RuntimeError("This clip is for a paid campaign, and TikTok doesn't allow paid (branded) posts to be "
+                               "private. Post it from the TikTok inbox instead (set this account to mode: inbox).")
+        body = {"post_info": {"title": clip["post_text"][:2200], "privacy_level": privacy,
+                              "disable_duet": False, "disable_comment": False, "disable_stitch": False,
+                              "brand_content_toggle": paid, "brand_organic_toggle": False},
                 "source_info": source}
         url = f"{API}/post/publish/video/init/"
     else:

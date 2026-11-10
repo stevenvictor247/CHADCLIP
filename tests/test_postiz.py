@@ -203,6 +203,30 @@ def test_settings_api_saves_account_edits(monkeypatch, tmp_path):
                   headers={"X-HQ": "1"}).status_code == 400
 
 
+def test_paid_campaign_clips_turn_on_tiktok_branded_content():
+    assert postiz.provider_settings(ACCOUNT, {"campaign_id": 3})["brand_content_toggle"] is True
+    assert postiz.provider_settings(ACCOUNT, {})["brand_content_toggle"] is False
+
+
+def test_tiktok_direct_post_discloses_paid_clips_and_refuses_private(tmp_path, monkeypatch):
+    from hq.agents.chad.publish import tiktok
+    video = tmp_path / "c.mp4"
+    video.write_bytes(b"x")
+    monkeypatch.setattr(tiktok.tiktok_auth, "access_token", lambda: "tok")
+    bodies = []
+
+    def fake_post(url, **kw):
+        bodies.append(kw.get("json"))
+        raise RuntimeError("stop after init")
+
+    monkeypatch.setattr(tiktok.requests, "post", fake_post)
+    with pytest.raises(RuntimeError, match="stop after init"):
+        tiktok.publish({"path": str(video), "post_text": "x", "campaign_id": 3}, {"mode": "direct"})
+    assert bodies[0]["post_info"]["brand_content_toggle"] is True
+    with pytest.raises(RuntimeError, match="can't|doesn't allow"):
+        tiktok.publish({"path": str(video), "post_text": "x", "campaign_id": 3}, {"mode": "direct", "privacy": "SELF_ONLY"})
+
+
 def test_youtube_settings_include_what_postiz_requires():
     got = postiz.provider_settings({"provider": "youtube"}, {"title": "x"})
     assert got["selfDeclaredMadeForKids"] == "no" and got["type"] == "public" and got["title"] == "Clip"
