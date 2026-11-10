@@ -234,3 +234,23 @@ def test_connect_instagram_explains_problems(monkeypatch):
     monkeypatch.delenv("IG_APP_ID")
     with pytest.raises(ia.InstagramError, match="IG_APP_ID"):
         ia.connect("s" * 30)
+
+
+def test_paid_campaign_clip_in_the_inbox_reminds_steven_to_disclose(board, monkeypatch):
+    pinged = []
+    monkeypatch.setattr(publish.relay, "notify", pinged.append)
+    paid, plain = board.clip(), board.clip()
+    db.execute("UPDATE clips SET campaign_id = 7 WHERE id = ?", paid)
+    out = publish.publish_approved()
+    assert any(f"#{paid}" in line and "Branded content" in line for line in out)
+    assert not any(f"#{plain}" in line and "Branded content" in line for line in out)
+    assert len(pinged) == 1 and f"#{paid}" in pinged[0]
+
+
+def test_direct_mode_and_postiz_set_the_disclosure_switch_themselves():
+    clip = {"campaign_id": 7}
+    assert not publish.needs_disclosure_tap(clip, {"platform": "tiktok", "mode": "direct"})
+    assert publish.needs_disclosure_tap(clip, {"platform": "tiktok"})
+    assert publish.needs_disclosure_tap(clip, {"platform": "postiz", "mode": "inbox"})
+    assert not publish.needs_disclosure_tap(clip, {"platform": "postiz"})
+    assert not publish.needs_disclosure_tap({}, {"platform": "tiktok"})

@@ -46,7 +46,9 @@ def provider_settings(account: dict, clip: dict) -> dict:
     kind = account.get("provider", "tiktok")
     if kind == "tiktok":
         return {"__type": "tiktok", "privacy_level": account.get("privacy", "PUBLIC_TO_EVERYONE"), "duet": False,
-                "stitch": False, "comment": True, "autoAddMusic": "no", "brand_content_toggle": False,
+                "stitch": False, "comment": True, "autoAddMusic": "no",
+                # Paid campaign clips are branded content: TikTok requires the disclosure toggle on them.
+                "brand_content_toggle": bool(clip.get("campaign_id")),
                 "brand_organic_toggle": False,
                 "content_posting_method": "UPLOAD" if account.get("mode") == "inbox" else "DIRECT_POST"}
     if kind == "instagram":

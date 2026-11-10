@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import yaml
 
-from .... import db
+from .... import db, relay
 from ....config import CONFIG_DIR
 from ..sources import find_creator
 from . import instagram, postiz, practice, tiktok, youtube
@@ -121,6 +121,20 @@ def wait_reason(account: dict) -> str | None:
     return None
 
 
+DISCLOSE = ("This clip is for a paid campaign. Before you press Post in TikTok, turn on More options > "
+            "Content disclosure > Branded content. TikTok requires it on paid posts and can remove posts without it.")
+
+
+def needs_disclosure_tap(clip: dict, account: dict) -> bool:
+    """A paid campaign clip that lands in the TikTok inbox: HQ can't flip the disclosure switch, Steven must."""
+    if not clip.get("campaign_id"):
+        return False
+    tiktok_inbox = account["platform"] == "tiktok" and account.get("mode", "inbox") != "direct"
+    postiz_inbox = (account["platform"] == "postiz" and account.get("provider", "tiktok") == "tiktok"
+                    and account.get("mode") == "inbox")
+    return tiktok_inbox or postiz_inbox
+
+
 def publish_approved() -> list[str]:
     """Post every approved clip that hasn't gone out yet, within the seatbelts. Returns a line per attempt."""
     if paused():
@@ -171,6 +185,9 @@ def publish_approved() -> list[str]:
                            ext_id, url, db.now())
                 tried[key] = "posted"
                 msg = f"Clip #{clip['id']} posted to {account['platform']} ({account['name']})"
+                if needs_disclosure_tap(clip, account):
+                    msg += f". {DISCLOSE}"
+                    relay.notify(f"🎬 Chad\nClip #{clip['id']} is in your TikTok inbox. {DISCLOSE}")
             except Exception as e:
                 db.execute("INSERT INTO posts (clip_id, platform, account, status, error, created_at) "
                            "VALUES (?, ?, ?, 'failed', ?, ?)", clip["id"], account["platform"], account["name"],
