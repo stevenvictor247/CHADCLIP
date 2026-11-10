@@ -4,7 +4,8 @@ Once or twice a day Tally reads each posted clip's view count from the platform,
 that clip's campaign submission (views only go up, and the pay you typed is never touched), and writes a short note of
 the clips that did best. Chad reads that note when he picks moments. Tally never calls Claude, so it costs nothing.
 
-Platforms so far: YouTube (the sign-in from Settings can read your own videos' views). TikTok inbox uploads have no
+Platforms so far: YouTube (the sign-in from Settings can read your own videos' views). Postiz posts get a delivery
+check (posted or failed, and the link) but no views yet. TikTok inbox uploads have no
 video id until you post them in the app, so they're counted once TikTok's video list is connected (later).
 """
 
@@ -63,7 +64,38 @@ def fetch_youtube() -> tuple[int, list[str]]:
     return counted, problems
 
 
-FETCHERS = {"youtube": fetch_youtube}
+def check_postiz() -> tuple[int, list[str]]:
+    """Postiz only queues a post when HQ hands it over; TikTok can still turn it down minutes later (expired sign-in,
+    a video it can't fetch). Ask Postiz how each post really went: a published one gets its link, and one Postiz
+    marked ERROR becomes a failed post with Postiz's reason, so the clip shows "Try posting again" instead of
+    looking posted. Postiz has no per-post view counts in its public API, so this counts no views."""
+    from .agents.chad.publish import postiz
+    mine = _posts("postiz")
+    try:
+        found = {str(p.get("id")): p for p in postiz.list_posts(datetime.now(timezone.utc) - timedelta(days=LOOK_BACK_DAYS),
+                                                                 datetime.now(timezone.utc) + timedelta(days=1))}
+    except Exception as e:
+        return 0, [f"Postiz: {str(e)[:160]}"]
+    problems = []
+    for p in mine:
+        theirs = found.get(str(p["external_id"]))
+        if not theirs:
+            continue
+        state = (theirs.get("state") or "").upper()
+        if state == "PUBLISHED" and theirs.get("releaseURL"):
+            db.execute("UPDATE posts SET url = ? WHERE id = ? AND url IS NULL", theirs["releaseURL"], p["id"])
+        elif state == "ERROR":
+            why = (theirs.get("error") or "no reason given")[:900]
+            db.execute("UPDATE posts SET status = 'failed', error = ? WHERE id = ?", f"Postiz: {why}", p["id"])
+            if not db.rows("SELECT 1 FROM posts WHERE clip_id = ? AND status = 'posted'", p["clip_id"]):
+                db.execute("UPDATE clips SET status = 'failed' WHERE id = ? AND status = 'posted'", p["clip_id"])
+            msg = f"Clip #{p['clip_id']} did not go out on {p['account']}: Postiz says {why[:160]}"
+            db.log("Chad", msg)
+            problems.append(msg)
+    return 0, problems
+
+
+FETCHERS = {"youtube": fetch_youtube, "postiz": check_postiz}
 
 
 def sync_submissions() -> int:

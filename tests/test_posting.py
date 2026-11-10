@@ -13,6 +13,8 @@ def board(monkeypatch, tmp_path):
     db.init()
     db.execute("UPDATE clips SET status = 'rejected' WHERE status = 'approved'")  # leftovers from other tests
     db.execute("DELETE FROM posts WHERE account IN ('main', 'other')")
+    publish._held.clear()
+    publish._told.clear()
     sent = []
 
     def fake_publish(clip, account):
@@ -63,6 +65,50 @@ def test_a_failed_post_is_not_retried_by_itself(board):
     publish.publish_approved()
     assert _status(a) == "failed"
     assert len(db.rows("SELECT 1 FROM posts WHERE clip_id = ?", a)) == 1   # one attempt, never a double post
+
+
+def test_an_ended_sign_in_keeps_clips_waiting_instead_of_failing_them(board, monkeypatch):
+    """A sign-in that ended while Steven was away must not burn the whole approved backlog one clip at a time."""
+    told, calls = [], []
+    monkeypatch.setattr(publish.relay, "notify", told.append)
+
+    def signed_out(clip, account):
+        calls.append(clip["id"])
+        raise publish.NotReady("the sign-in ended. Reconnect on the Settings page.")
+    monkeypatch.setitem(publish.PLATFORMS, "tiktok", SimpleNamespace(publish=signed_out))
+    a, b = board.clip(), board.clip()
+    report = publish.publish_approved()
+    publish.publish_approved()
+    assert _status(a) == "approved" and _status(b) == "approved"          # still approved, nothing lost
+    assert not db.rows("SELECT 1 FROM posts WHERE clip_id IN (?, ?)", a, b)  # no failed posts to retry by hand
+    assert len(calls) == 1          # the account is left alone for a while, not asked for every clip every round
+    assert len(told) == 1 and "Reconnect" in told[0]                       # and Steven hears about it once
+    assert any("waits" in line for line in report)
+    # once the sign-in works again and the hold has passed, the same clips go out by themselves
+    publish._held.clear()
+    monkeypatch.setitem(publish.PLATFORMS, "tiktok", SimpleNamespace(publish=lambda c, acc: (f"ext-{c['id']}", None)))
+    publish.publish_approved()
+    assert _status(a) == "posted" and _status(b) == "posted"
+
+
+def test_missing_tiktok_token_is_not_ready(monkeypatch, tmp_path):
+    from hq.agents.chad.publish import tiktok
+    monkeypatch.setattr(tiktok.tiktok_auth, "access_token", lambda: None)
+    monkeypatch.delenv("TIKTOK_ACCESS_TOKEN_MAIN", raising=False)
+    video = tmp_path / "c.mp4"
+    video.write_bytes(b"x")
+    with pytest.raises(publish.NotReady, match="Connect TikTok"):
+        tiktok.publish({"path": str(video), "post_text": "t"}, {"name": "tiktok_main", "access_token_env": "TIKTOK_ACCESS_TOKEN_MAIN"})
+
+
+def test_ended_youtube_sign_in_is_not_ready(monkeypatch):
+    from hq.agents.chad.publish import youtube
+
+    def ended(account, interactive=False):
+        raise RuntimeError("invalid_grant: Token has been expired or revoked.")
+    monkeypatch.setattr(youtube, "_credentials", ended)
+    with pytest.raises(publish.NotReady, match="Connect YouTube"):
+        youtube.publish({"path": "x.mp4", "title": "t", "post_text": "t", "hashtags": []}, {"name": "youtube_main"})
 
 
 def test_practice_account_has_no_limits(board):

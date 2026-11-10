@@ -71,8 +71,14 @@ AGENT_MODEL = model_for("chad")
 PRICES = {
     "claude-opus-5-5": (4.00, 20.00), "claude-opus-5": (5.00, 25.00),
     "claude-sonnet-5-5": (2.00, 10.00), "claude-sonnet-5": (2.00, 10.00),
-    "claude-haiku-5-5": (0.10, 0.50), "claude-fable-5-1": (10.00, 50.00), "claude-fable-5": (10.00, 50.00),
+    "claude-haiku-5-5": (0.10, 0.50), "claude-fable-5-2": (8.00, 40.00), "claude-fable-5-1": (10.00, 50.00),
+    "claude-fable-5": (10.00, 50.00),
 }
+# Haiku 5.5 costs five times as much on a request whose prompt is over 100,000 tokens (a long VOD transcript can be).
+LONG_PROMPT_TOKENS = 100_000
+LONG_PROMPT_PRICES = {"claude-haiku-5-5": (0.50, 2.50)}
+# USD per million cached tokens read, where the price list gives one. Other models: a tenth of the input price.
+CACHE_READ_PRICES = {"claude-opus-5-5": 0.20, "claude-sonnet-5-5": 0.10, "claude-fable-5-2": 0.20}
 UNKNOWN_PRICE = (5.00, 25.00)  # for a model not listed above, assume a pricey one so the meter never under-reports
 
 # Stop scheduled work for the rest of the day once Claude spending reaches this many US dollars. 0 means no limit.

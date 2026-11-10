@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import yaml
@@ -10,6 +11,7 @@ from .... import db, relay
 from ....config import CONFIG_DIR
 from ..sources import find_creator
 from . import instagram, postiz, practice, tiktok, youtube
+from .errors import NotReady
 
 PLATFORMS = {"tiktok": tiktok, "youtube": youtube, "instagram": instagram, "postiz": postiz, "practice": practice}
 # TikTok first: it's the top priority.
@@ -103,11 +105,32 @@ def pick_from_pool(pool: list[dict]) -> tuple[dict | None, str]:
     return (best[1], "") if best else (None, "; ".join(reasons))
 
 
+HOLD_MINUTES = 10      # after an account turns out not to be ready, leave it alone this long before asking again
+TELL_EVERY_HOURS = 24  # and message Steven about it at most this often
+_held: dict[tuple, tuple[float, str]] = {}   # (platform, name) -> (held until, why)
+_told: dict[tuple, float] = {}               # (platform, name) -> when Steven was last told
+
+
+def hold(account: dict, why: str) -> None:
+    """An account's sign-in ended or a key is missing: its clips wait (still approved) instead of each being marked
+    failed, which used to leave a whole backlog needing "Try posting again" one clip at a time."""
+    key = (account["platform"], account["name"])
+    _held[key] = (time.time() + HOLD_MINUTES * 60, why)
+    if time.time() - _told.get(key, 0) >= TELL_EVERY_HOURS * 3600:
+        _told[key] = time.time()
+        msg = f"Posting to {account['platform']} ({account['name']}) is waiting: {why} Approved clips are kept and go out once it's fixed."
+        db.log("Chad", msg)
+        relay.notify(f"🎬 Chad\n{msg}")
+
+
 def wait_reason(account: dict) -> str | None:
     """Posting seatbelts: why this account shouldn't post right now, or None if it can.
     Bursts of posts look like spam to TikTok, YouTube and Instagram and get new accounts limited or banned."""
     if account["platform"] == "practice":
         return None
+    held = _held.get((account["platform"], account["name"]))
+    if held and time.time() < held[0]:
+        return f"not ready ({held[1]})"
     cap = account_cap(account)
     gap = _number("HQ_POST_GAP_MINUTES", 60)
     recent = _recent(account)
@@ -188,6 +211,12 @@ def publish_approved() -> list[str]:
                 if needs_disclosure_tap(clip, account):
                     msg += f". {DISCLOSE}"
                     relay.notify(f"🎬 Chad\nClip #{clip['id']} is in your TikTok inbox. {DISCLOSE}")
+            except NotReady as e:
+                why = str(e)[0].upper() + str(e)[1:]
+                hold(account, why)
+                waiting += 1
+                report.append(f"Clip #{clip['id']} waits for {account['platform']} ({account['name']}): {why}")
+                continue
             except Exception as e:
                 db.execute("INSERT INTO posts (clip_id, platform, account, status, error, created_at) "
                            "VALUES (?, ?, ?, 'failed', ?, ?)", clip["id"], account["platform"], account["name"],

@@ -225,3 +225,66 @@ def test_tiktok_direct_post_discloses_paid_clips_and_refuses_private(tmp_path, m
     assert bodies[0]["post_info"]["brand_content_toggle"] is True
     with pytest.raises(RuntimeError, match="can't|doesn't allow"):
         tiktok.publish({"path": str(video), "post_text": "x", "campaign_id": 3}, {"mode": "direct", "privacy": "SELF_ONLY"})
+
+
+def test_youtube_settings_include_what_postiz_requires():
+    got = postiz.provider_settings({"provider": "youtube"}, {"title": "x"})
+    assert got["selfDeclaredMadeForKids"] == "no" and got["type"] == "public" and got["title"] == "Clip"
+    assert postiz.provider_settings({"provider": "youtube"}, {"title": "A" * 150})["title"] == "A" * 100
+
+
+def test_list_posts_asks_for_a_date_range(monkeypatch):
+    seen = {}
+
+    def fake_get(url, **kw):
+        seen.update(url=url, **kw)
+        return Resp(status_code=200, data={"posts": [{"id": "p9", "state": "PUBLISHED"}]})
+
+    monkeypatch.setattr(postiz.requests, "get", fake_get)
+    from datetime import datetime, timezone
+    got = postiz.list_posts(datetime(2026, 11, 1, tzinfo=timezone.utc), datetime(2026, 11, 2, tzinfo=timezone.utc))
+    assert got == [{"id": "p9", "state": "PUBLISHED"}]
+    assert seen["url"] == "http://localhost:5000/api/public/v1/posts"
+    assert seen["params"] == {"startDate": "2026-11-01T00:00:00Z", "endDate": "2026-11-02T00:00:00Z"}
+
+
+def test_tally_marks_postiz_errors_failed_and_saves_links(monkeypatch):
+    from hq import db, tally
+    db.init()
+    db.execute("UPDATE posts SET status = 'skipped' WHERE status = 'posted'")
+
+    def posted(ext):
+        cid = db.execute("INSERT INTO clips (creator, start_s, end_s, path, title, status, created_at) "
+                         "VALUES ('Kai', 0, 30, 'x.mp4', 't', 'posted', ?)", db.now())
+        pid = db.execute("INSERT INTO posts (clip_id, platform, account, status, external_id, created_at) "
+                         "VALUES (?, 'postiz', 'postiz_tiktok', 'posted', ?, ?)", cid, ext, db.now())
+        return cid, pid
+
+    ok_clip, ok_post = posted("good1")
+    bad_clip, bad_post = posted("bad1")
+    _, queued_post = posted("wait1")
+    monkeypatch.setattr(postiz, "list_posts", lambda start, end: [
+        {"id": "good1", "state": "PUBLISHED", "releaseURL": "https://tiktok.com/@chad/video/1"},
+        {"id": "bad1", "state": "ERROR", "error": "access token expired"},
+        {"id": "wait1", "state": "QUEUE"}])
+
+    n, problems = tally.check_postiz()
+    assert n == 0 and len(problems) == 1 and "access token expired" in problems[0]
+    post = lambda pid: db.rows("SELECT status, url, error FROM posts WHERE id = ?", pid)[0]  # noqa: E731
+    assert post(ok_post)["url"] == "https://tiktok.com/@chad/video/1" and post(ok_post)["status"] == "posted"
+    assert post(bad_post)["status"] == "failed" and post(bad_post)["error"] == "Postiz: access token expired"
+    assert post(queued_post)["status"] == "posted"
+    assert db.rows("SELECT status FROM clips WHERE id = ?", bad_clip)[0]["status"] == "failed"
+    assert db.rows("SELECT status FROM clips WHERE id = ?", ok_clip)[0]["status"] == "posted"
+    # the failed clip can now be sent again with the existing button
+    from hq.agents.chad.publish import retry
+    assert "posted again" in retry(bad_clip)
+
+
+def test_tally_reports_when_postiz_cant_be_reached(monkeypatch):
+    from hq import tally
+
+    def down(start, end):
+        raise RuntimeError("connection refused")
+    monkeypatch.setattr(postiz, "list_posts", down)
+    assert tally.check_postiz() == (0, ["Postiz: connection refused"])

@@ -105,6 +105,9 @@ def send_weekly_orders(state: dict) -> list[int]:
         a = agents.get(name)
         if not a or (ledger.over_budget(a.village) and not a.free):
             continue
+        from . import away
+        if away.skips(a):
+            continue   # Steven is away: the weekly round waits with the rest (see hq/away.py)
         if db.rows("SELECT 1 FROM tasks WHERE agent = ? AND instructions = ? AND status IN ('queued', 'running') "
                    "LIMIT 1", a.name, instructions):
             continue
